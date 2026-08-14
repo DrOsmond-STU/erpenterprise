@@ -1056,8 +1056,129 @@ svg { display: block; }
   }
 }
 
+/* ====================================================================== */
+/* CRM pipeline                                                            */
+/* ====================================================================== */
+.crm-card { cursor: pointer; }
+.crm-card-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); margin-top: var(--sp-2);
+}
+.icon-inline { display: inline-block; vertical-align: -2px; width: 14px; height: 14px; }
+
+/* ====================================================================== */
+/* Project timeline / Gantt                                                */
+/* ====================================================================== */
+.project-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-4); padding: var(--sp-4) var(--sp-5) 0;
+}
+.gantt { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--sp-5) var(--sp-4); }
+.gantt-row { display: flex; align-items: center; gap: var(--sp-3); }
+.gantt-label {
+  flex: 0 0 160px; font-size: var(--fs-cap); color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gantt-track {
+  flex: 1; height: 10px; background: var(--ink-5); border-radius: 5px;
+  position: relative; overflow: hidden;
+}
+.gantt-bar {
+  position: absolute; top: 0; height: 100%; border-radius: 5px;
+  background: var(--ink-4); overflow: hidden;
+}
+.gantt-fill {
+  display: block; height: 100%; border-radius: 5px;
+  background: var(--brand);
+}
+.gantt-fill[data-tone="ok"] { background: var(--tone-ok); }
+.gantt-fill[data-tone="accent"] { background: var(--brand); }
+@media (max-width: 960px) { .gantt-label { flex: 0 0 100px; } }
+@media (max-width: 640px) { .gantt-label { flex: 0 0 70px; font-size: 11px; } }
+
+/* ====================================================================== */
+/* Budget variance bars                                                    */
+/* ====================================================================== */
+.budget-bar { display: flex; align-items: center; gap: var(--sp-2); min-width: 120px; }
+.budget-bar-track {
+  flex: 1; height: 10px; background: var(--ink-5); border-radius: 5px;
+  position: relative; overflow: hidden;
+}
+.budget-bar-actual {
+  position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px 0 0 5px;
+  background: var(--brand);
+}
+.budget-bar-actual[data-tone="warn"] { background: var(--tone-warn); }
+.budget-bar-actual[data-tone="danger"] { background: var(--tone-danger); }
+.budget-bar-commit {
+  position: absolute; top: 0; height: 100%;
+  background: var(--brand); opacity: .35;
+}
+
+/* ====================================================================== */
+/* POS table compact helper                                                */
+/* ====================================================================== */
+.tbl-sm th, .tbl-sm td { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-cap); }
+
+/* ====================================================================== */
+/* AI Copilot floating panel                                               */
+/* ====================================================================== */
+.ai-fab {
+  position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 900;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--brand); color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.22);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.ai-fab:hover { transform: scale(1.08); box-shadow: 0 4px 14px rgba(0,0,0,.28); }
+.ai-fab svg { stroke: #fff; width: 22px; height: 22px; }
+
+.ai-panel {
+  position: fixed; bottom: 72px; right: var(--sp-5); z-index: 901;
+  width: 380px; max-height: 520px; display: flex; flex-direction: column;
+  background: var(--surf-1); border: 1px solid var(--ink-5);
+  border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+.ai-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--ink-5);
+  background: var(--surf-0);
+}
+.ai-panel-title {
+  font-weight: 600; font-size: var(--fs-sm);
+  display: flex; align-items: center; gap: var(--sp-2);
+}
+.ai-panel-body {
+  flex: 1; overflow-y: auto; padding: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.ai-msg { display: flex; }
+.ai-msg-user { justify-content: flex-end; }
+.ai-msg-bubble {
+  max-width: 88%; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md); font-size: var(--fs-sm); line-height: 1.5;
+}
+.ai-msg-assistant .ai-msg-bubble {
+  background: var(--surf-2); color: var(--ink-1);
+}
+.ai-msg-user .ai-msg-bubble {
+  background: var(--brand); color: #fff;
+}
+.ai-panel-input {
+  display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--ink-5); background: var(--surf-0);
+}
+.ai-panel-input .input { flex: 1; }
+
+@media (max-width: 640px) {
+  .ai-panel { width: calc(100vw - 2 * var(--sp-3)); right: var(--sp-3); bottom: 64px; }
+  .ai-fab { bottom: var(--sp-3); right: var(--sp-3); width: 42px; height: 42px; }
+}
+
 @media print {
-  .rail, .topbar, .toasts, .page-actions, .toolbar { display: none; }
+  .rail, .topbar, .toasts, .page-actions, .toolbar, .ai-fab, .ai-panel { display: none; }
   .content { padding: 0; }
   .card { break-inside: avoid; }
 }

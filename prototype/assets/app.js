@@ -57,6 +57,20 @@
     eye: '<path d="M1.2 8S3.8 3.6 8 3.6 14.8 8 14.8 8 12.2 12.4 8 12.4 1.2 8 1.2 8z"/><circle cx="8" cy="8" r="1.9"/>',
     external: '<path d="M9.2 2.4h4.4v4.4"/><path d="M13.6 2.4 7.2 8.8"/><path d="M12 9.6v3.4a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1V5.4a1 1 0 0 1 1-1h3.4"/>',
     logout: '<path d="M6.2 2.4H3.4a1 1 0 0 0-1 1v9.2a1 1 0 0 0 1 1h2.8"/><path d="M10 5 13 8l-3 3"/><path d="M13 8H6.4"/>',
+    /* Ikon baru untuk modul tambahan */
+    target: '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.6"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/>',
+    quote: '<path d="M3 4.6h10a1 1 0 0 1 1 1v6.8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1z"/><path d="M5 2v2.6M11 2v2.6M5 8.4h6M5 10.8h3"/>',
+    barcode: '<path d="M2 3.4v9.2M5 3.4v9.2M7 3.4v9.2M8.6 3.4v9.2M11 3.4v9.2M14 3.4v9.2M3.4 3.4v9.2" stroke-width="0.9"/>',
+    clipboard: '<path d="M5.6 2.4h4.8v2H5.6z"/><path d="M4.2 3.4H3.4a1 1 0 0 0-1 1v9.2a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1V4.4a1 1 0 0 0-1-1h-.8"/><path d="M5.6 8h4.8M5.6 10.6h3"/>',
+    gantt: '<path d="M2 3.2h12M2 8h12M2 12.8h12"/><rect x="4" y="4.4" width="5" height="2.4" rx=".6"/><rect x="6" y="9.2" width="5.5" height="2.4" rx=".6"/>',
+    piechart: '<path d="M8 2.4A5.6 5.6 0 1 1 2.4 8H8V2.4z"/><path d="M10 1.8a5.6 5.6 0 0 1 4.2 5.4H10V1.8z"/>',
+    banknote: '<rect x="1.5" y="4" width="13" height="8" rx="1.4"/><circle cx="8" cy="8" r="2"/><path d="M4.2 4v8M11.8 4v8"/>',
+    landmark: '<path d="M2 13.6h12M3.4 6.2h9.2L8 2.2z"/><path d="M4.2 6.2v5.6M7 6.2v5.6M9 6.2v5.6M11.8 6.2v5.6"/><path d="M2.6 11.8h10.8"/>',
+    wrench: '<path d="M4.2 10.8 10.8 4.2a2.6 2.6 0 0 1 3.5.1l-2 2 .5 1.4 1.4.5 2-.1a2.6 2.6 0 0 1-.1 2.3l-6.6 6.6a2 2 0 0 1-2.8 0l-2.5-2.5a2 2 0 0 1 0-2.8z" d="M5.2 11.4l-2.8 2.8"/>',
+    folder: '<path d="M2 4.6V12a1.4 1.4 0 0 0 1.4 1.4h9.2A1.4 1.4 0 0 0 14 12V6.8a1.4 1.4 0 0 0-1.4-1.4H8L6.4 3.6H3.4A1.4 1.4 0 0 0 2 5z"/>',
+    scroll: '<path d="M12 2.4H5.6A1.6 1.6 0 0 0 4 4v8a1.6 1.6 0 0 0 1.6 1.6h8V4a1.6 1.6 0 0 0-1.6-1.6z"/><path d="M4 12a1.6 1.6 0 0 1-1.6-1.6V4.8"/><path d="M7 6h3.6M7 8.4h3.6M7 10.8h2"/>',
+    sparkle: '<path d="M8 1.4l1.2 4.2L13.4 6.8 9.2 8l-1.2 4.2L6.8 8 2.6 6.8l4.2-1.2z"/><path d="M12 11l.5 1.6 1.5.4-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.4z"/>',
+    send: '<path d="M14.4 1.6 6.6 9.4"/><path d="M14.4 1.6l-4.4 12.8-2.6-6.2-6.2-2.6z"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -96,6 +110,26 @@
     aman: { label: 'Aman', tone: 'ok' },
     menipis: { label: 'Menipis', tone: 'warn' },
     habis: { label: 'Habis', tone: 'danger' },
+    /* Status modul baru */
+    terkirim: { label: 'Terkirim', tone: 'info' },
+    diterima: { label: 'Diterima', tone: 'ok' },
+    kedaluwarsa: { label: 'Kedaluwarsa', tone: 'danger' },
+    tinggi: { label: 'Tinggi', tone: 'danger' },
+    sedang: { label: 'Sedang', tone: 'warn' },
+    rendah: { label: 'Rendah' },
+    dijadwalkan: { label: 'Dijadwalkan', tone: 'info' },
+    berlaku: { label: 'Berlaku', tone: 'ok' },
+    dibayar: { label: 'Dibayar', tone: 'ok' },
+    diproses: { label: 'Diproses', tone: 'info' },
+    dihapuskan: { label: 'Dihapuskan' },
+    berjalan: { label: 'Berjalan', tone: 'accent' },
+    perencanaan: { label: 'Perencanaan' },
+    hijau: { label: 'Hijau', tone: 'ok' },
+    kuning: { label: 'Kuning', tone: 'warn' },
+    merah: { label: 'Merah', tone: 'danger' },
+    void: { label: 'Void', tone: 'danger' },
+    preventif: { label: 'Preventif', tone: 'info' },
+    korektif: { label: 'Korektif', tone: 'warn' },
   };
 
   /** Status selalu ikon + teks — tidak pernah warna saja. */
@@ -120,6 +154,7 @@
     overlay: null,      // {kind, ...}
     lastFocus: null,
     toastSeq: 0,
+    aiCopilotOpen: false,
   };
 
   const regState = (id) => (state.reg[id] ||= {
@@ -369,6 +404,158 @@
         { key: 'status', label: 'Status', render: (r) => pill(r.status) },
       ],
     },
+    /* ------------------------------------------------------------------ */
+    /* Register baru dari blueprint                                       */
+    /* ------------------------------------------------------------------ */
+
+    penawaran: {
+      title: 'Penawaran',
+      sub: 'Daftar quotation beserta status pengiriman dan masa berlaku.',
+      rows: () => DATA.quotations,
+      key: 'id',
+      search: ['id', 'customer', 'pic', 'opp'],
+      statusKey: 'status',
+      statuses: ['draf', 'terkirim', 'diterima', 'ditolak'],
+      selectable: true,
+      primary: { label: 'Penawaran baru', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'customer', label: 'Pelanggan', cls: 'cell-strong' },
+        { key: 'amount', label: 'Nilai', align: 'r', render: (r) => money(r.amount) },
+        { key: 'validity', label: 'Berlaku s/d', render: (r) => `<span class="num">${FMT.date(r.validity)}</span>` },
+        { key: 'pic', label: 'Penanggung jawab' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    'permintaan-pembelian': {
+      title: 'Permintaan Pembelian',
+      sub: 'Permintaan pengadaan internal dari unit kerja.',
+      rows: () => DATA.purchaseRequests,
+      key: 'id',
+      search: ['id', 'requestor', 'dept', 'desc'],
+      statusKey: 'status',
+      statuses: ['menunggu', 'disetujui', 'selesai', 'ditolak'],
+      selectable: true,
+      primary: { label: 'Permintaan baru', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'requestor', label: 'Pemohon', render: (r) => `<span class="cell-strong">${esc(r.requestor)}</span><span class="cell-sub">${esc(r.dept)}</span>` },
+        { key: 'desc', label: 'Keterangan' },
+        { key: 'amount', label: 'Perkiraan nilai', align: 'r', render: (r) => money(r.amount) },
+        { key: 'priority', label: 'Prioritas', value: (r) => ({ tinggi: 0, sedang: 1, rendah: 2 }[r.priority]), render: (r) => pill(r.priority) },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    penggajian: {
+      title: 'Penggajian',
+      sub: 'Slip gaji karyawan periode berjalan.',
+      rows: () => DATA.payroll,
+      key: 'id',
+      search: ['id', 'name', 'dept', 'employeeId'],
+      statusKey: 'status',
+      statuses: ['dibayar', 'diproses', 'draf'],
+      primary: { label: 'Proses penggajian', action: 'demo' },
+      sort: { key: 'name', dir: 'asc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code' },
+        { key: 'name', label: 'Karyawan', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub code">${esc(r.employeeId)} · ${esc(r.dept)}</span>` },
+        { key: 'basic', label: 'Gaji pokok', align: 'r', render: (r) => money(r.basic) },
+        { key: 'allowance', label: 'Tunjangan', align: 'r', render: (r) => money(r.allowance) },
+        { key: 'deduction', label: 'Potongan', align: 'r', render: (r) => `<span class="num neg">${FMT.rpCompact(r.deduction)}</span>` },
+        { key: 'netPay', label: 'Gaji bersih', align: 'r', render: (r) => `<b class="num">${FMT.rpCompact(r.netPay)}</b>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    aset: {
+      title: 'Daftar Aset',
+      sub: 'Aset tetap beserta nilai buku dan penyusutan bulanan.',
+      rows: () => DATA.assets,
+      key: 'id',
+      search: ['id', 'name', 'category', 'location'],
+      statusKey: 'status',
+      statuses: ['aktif', 'dihapuskan'],
+      primary: { label: 'Tambah aset', action: 'demo' },
+      sort: { key: 'bookValue', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama aset', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.category)} · ${esc(r.location)}</span>` },
+        { key: 'acquisitionDate', label: 'Tgl perolehan', render: (r) => `<span class="num">${FMT.date(r.acquisitionDate)}</span>` },
+        { key: 'acquisitionCost', label: 'Nilai perolehan', align: 'r', render: (r) => money(r.acquisitionCost) },
+        { key: 'bookValue', label: 'Nilai buku', align: 'r', render: (r) => money(r.bookValue) },
+        { key: 'monthlyDepr', label: 'Penyusutan/bln', align: 'r', render: (r) => r.monthlyDepr ? money(r.monthlyDepr) : '<span class="muted">—</span>' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    pemeliharaan: {
+      title: 'Pemeliharaan',
+      sub: 'Jadwal dan riwayat perawatan aset, preventif maupun korektif.',
+      rows: () => DATA.maintenanceOrders,
+      key: 'id',
+      search: ['id', 'asset', 'assignee', 'desc'],
+      statusKey: 'status',
+      statuses: ['dijadwalkan', 'berjalan', 'selesai'],
+      selectable: true,
+      primary: { label: 'Jadwalkan perawatan', action: 'demo' },
+      sort: { key: 'scheduledDate', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'asset', label: 'Aset', render: (r) => `<span class="cell-strong">${esc(r.asset)}</span><span class="cell-sub code">${esc(r.assetId)}</span>` },
+        { key: 'type', label: 'Jenis' },
+        { key: 'priority', label: 'Prioritas', value: (r) => ({ tinggi: 0, sedang: 1, rendah: 2 }[r.priority]), render: (r) => pill(r.priority) },
+        { key: 'assignee', label: 'Penanggung jawab' },
+        { key: 'scheduledDate', label: 'Jadwal', render: (r) => `<span class="num">${FMT.date(r.scheduledDate)}</span>` },
+        { key: 'cost', label: 'Biaya', align: 'r', render: (r) => money(r.cost) },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    dokumen: {
+      title: 'Repositori Dokumen',
+      sub: 'Dokumen perusahaan — kontrak, SOP, sertifikat, dan kebijakan.',
+      rows: () => DATA.documents,
+      key: 'id',
+      search: ['id', 'name', 'type', 'folder', 'owner'],
+      statusKey: 'status',
+      statuses: ['berlaku', 'draf', 'kedaluwarsa'],
+      primary: { label: 'Unggah dokumen', action: 'demo' },
+      sort: { key: 'modified', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.folder)}</span>` },
+        { key: 'type', label: 'Jenis' },
+        { key: 'version', label: 'Versi', cls: 'num', render: (r) => `<span class="num">v${r.version}</span>` },
+        { key: 'owner', label: 'Pemilik' },
+        { key: 'modified', label: 'Diubah', render: (r) => `<span class="num">${FMT.date(r.modified)}</span>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    'jejak-audit': {
+      title: 'Jejak Audit',
+      sub: 'Catatan semua tindakan pengguna dan sistem di seluruh modul.',
+      rows: () => DATA.auditTrail,
+      key: 'id',
+      search: ['id', 'user', 'action', 'module', 'entity', 'detail'],
+      sort: { key: 'timestamp', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'ID', cls: 'code' },
+        { key: 'timestamp', label: 'Waktu', render: (r) => `<span class="num" style="font-size:var(--fs-cap)">${esc(r.timestamp)}</span>` },
+        { key: 'user', label: 'Pengguna', cls: 'cell-strong' },
+        { key: 'action', label: 'Tindakan' },
+        { key: 'module', label: 'Modul' },
+        { key: 'entity', label: 'Entitas', cls: 'code' },
+        { key: 'detail', label: 'Keterangan' },
+        { key: 'ip', label: 'IP', cls: 'code' },
+      ],
+    },
   };
 
   const PAGE_SIZE = 10;
@@ -385,6 +572,10 @@
       peran: { title: 'Peran & Izin', sub: 'Matriks hak akses tiap peran terhadap modul dan tindakan.' },
       pengaturan: { title: 'Pengaturan', sub: 'Profil perusahaan, kebijakan dokumen, dan preferensi tampilan.' },
       'sistem-desain': { title: 'Sistem Desain', sub: 'Token, tipografi, dan komponen yang menyusun purwarupa ini.' },
+      lead: { title: 'Pipeline CRM', sub: 'Peluang penjualan dari prospek hingga closing, beserta nilai dan probabilitasnya.' },
+      kasir: { title: 'Kasir (POS)', sub: 'Ikhtisar shift kasir, transaksi hari ini, dan pencapaian target penjualan toko.' },
+      proyek: { title: 'Manajemen Proyek', sub: 'Progres proyek, kesehatan anggaran, dan linimasa tugas utama.' },
+      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya.' },
     })[id] || { title: 'Halaman', sub: '' };
   }
 
@@ -1585,6 +1776,22 @@
       const items = DATA.stockItems.filter((r) => match(r.name) || match(r.sku)).slice(0, 4)
         .map((r) => ({ label: `${r.sku} — ${r.name}`, hint: `${FMT.int(r.onHand)} ${r.unit}`, icon: 'boxes', go: () => { setView('stok'); } }));
       if (items.length) groups.push({ label: 'Stok barang', items });
+
+      const leads = DATA.leads.filter((r) => match(r.name) || match(r.company) || match(r.id)).slice(0, 4)
+        .map((r) => ({ label: `${r.id} — ${r.company}`, hint: FMT.rpCompact(r.value), icon: 'target', go: () => setView('lead') }));
+      if (leads.length) groups.push({ label: 'Peluang CRM', items: leads });
+
+      const prj = DATA.projects.filter((r) => match(r.name) || match(r.id) || match(r.customer)).slice(0, 4)
+        .map((r) => ({ label: r.name, hint: `${r.progress}%`, icon: 'gantt', go: () => setView('proyek') }));
+      if (prj.length) groups.push({ label: 'Proyek', items: prj });
+
+      const ast = DATA.assets.filter((r) => match(r.name) || match(r.id) || match(r.category)).slice(0, 4)
+        .map((r) => ({ label: `${r.id} — ${r.name}`, hint: FMT.rpCompact(r.bookValue), icon: 'landmark', go: () => setView('aset') }));
+      if (ast.length) groups.push({ label: 'Aset', items: ast });
+
+      const docs = DATA.documents.filter((r) => match(r.name) || match(r.id) || match(r.type)).slice(0, 4)
+        .map((r) => ({ label: r.name, hint: r.type, icon: 'folder', go: () => setView('dokumen') }));
+      if (docs.length) groups.push({ label: 'Dokumen', items: docs });
     } else {
       groups.push({
         label: 'Tindakan cepat',
@@ -1732,8 +1939,331 @@
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
+  /* ====================================================================== */
+  /* CRM Pipeline Board                                                     */
+  /* ====================================================================== */
+  function renderCRMBoard() {
+    const activeStages = DATA.crmStages.filter((s) => s.id !== 'menang' && s.id !== 'kalah');
+    const wonLeads = DATA.leads.filter((l) => l.stage === 'menang');
+    const lostLeads = DATA.leads.filter((l) => l.stage === 'kalah');
+    const pipelineValue = DATA.leads.filter((l) => l.stage !== 'menang' && l.stage !== 'kalah')
+      .reduce((s, l) => s + l.value, 0);
+    const weightedValue = DATA.leads.filter((l) => l.stage !== 'menang' && l.stage !== 'kalah')
+      .reduce((s, l) => s + l.value * l.prob / 100, 0);
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Nilai Pipeline</span>
+          <span class="kpi-metric">${FMT.rpCompact(pipelineValue)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Tertimbang</span>
+          <span class="kpi-metric">${FMT.rpCompact(weightedValue)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Menang</span>
+          <span class="kpi-metric pos">${wonLeads.length} <small>peluang</small></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Kalah</span>
+          <span class="kpi-metric neg">${lostLeads.length} <small>peluang</small></span>
+        </div>
+      </div>`;
+
+    const cols = activeStages.map((stage) => {
+      const items = DATA.leads.filter((l) => l.stage === stage.id);
+      const stageVal = items.reduce((s, l) => s + l.value, 0);
+      return `
+        <div class="board-col">
+          <div class="board-col-head">
+            <span class="board-col-title">${esc(stage.label)}</span>
+            <span class="board-col-count">${items.length} · ${FMT.rpCompact(stageVal)}</span>
+          </div>
+          ${items.map((l) => `
+            <div class="board-card crm-card" data-lead="${esc(l.id)}">
+              <div class="board-card-head">
+                <span class="cell-strong" style="font-size:var(--fs-sm)">${esc(l.name)}</span>
+              </div>
+              <span class="cell-sub">${esc(l.company)}</span>
+              <div class="crm-card-meta">
+                <span class="num" style="font-weight:600">${FMT.rpCompact(l.value)}</span>
+                <span class="pill" data-tone="${l.prob >= 60 ? 'ok' : l.prob >= 30 ? 'warn' : ''}"><i class="pill-dot"></i>${l.prob}%</span>
+              </div>
+              <div class="cell-sub" style="margin-top:var(--sp-1)">
+                ${icon('users', 'icon-inline')} ${esc(l.assignee)} · ${esc(l.nextAction)}
+              </div>
+            </div>`).join('')}
+        </div>`;
+    }).join('');
+
+    return `${kpis}<div class="board">${cols}</div>`;
+  }
+
+  /* ====================================================================== */
+  /* POS / Kasir                                                             */
+  /* ====================================================================== */
+  function renderPOS() {
+    const k = DATA.posKpis;
+    const pct = Math.min(100, (k.todaySales / k.todayTarget) * 100);
+    const tone = pct >= 90 ? 'ok' : pct >= 60 ? 'warn' : 'danger';
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Penjualan Hari Ini</span>
+          <span class="kpi-metric">${FMT.rpCompact(k.todaySales)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" data-tone="${tone}" style="width:${pct}%"></span></span><span class="meter-val">${FMT.pct(pct, 0)} target</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Transaksi</span>
+          <span class="kpi-metric">${FMT.int(k.transactions)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Rata-rata Keranjang</span>
+          <span class="kpi-metric">${FMT.rpCompact(k.avgBasket)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Tingkat Refund</span>
+          <span class="kpi-metric${k.refundRate > 3 ? ' neg' : ''}">${FMT.pct(k.refundRate)}%</span>
+        </div>
+      </div>`;
+
+    const shifts = `
+      <section class="card" style="margin-bottom:var(--sp-5)">
+        <div class="card-head"><h3 class="card-title">${icon('users')} Shift Aktif</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>Shift</th><th>Kasir</th><th>Toko</th><th>Waktu</th><th class="r">Kas Awal</th><th class="r">Kas Saat Ini</th><th class="r">Transaksi</th><th class="r">Penjualan</th><th>Status</th></tr></thead>
+          <tbody>${DATA.posShifts.map((s) => `<tr>
+            <td class="code">${esc(s.id)}</td>
+            <td class="cell-strong">${esc(s.cashier)}</td>
+            <td>${esc(s.store)}</td>
+            <td class="num">${esc(s.startTime)}–${esc(s.endTime)}</td>
+            <td class="r num">${FMT.rpCompact(s.openingCash)}</td>
+            <td class="r num">${FMT.rpCompact(s.currentCash)}</td>
+            <td class="r num">${s.transactions}</td>
+            <td class="r num">${FMT.rpCompact(s.totalSales)}</td>
+            <td>${pill(s.status)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>`;
+
+    const txns = `
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('cart')} Transaksi Terakhir</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>No. Transaksi</th><th>Waktu</th><th>Kasir</th><th class="r">Item</th><th class="r">Total</th><th>Pembayaran</th><th>Status</th></tr></thead>
+          <tbody>${DATA.posTransactions.map((t) => `<tr>
+            <td class="code cell-strong">${esc(t.id)}</td>
+            <td class="num">${esc(t.time)}</td>
+            <td>${esc(t.cashier)}</td>
+            <td class="r num">${t.items}</td>
+            <td class="r num">${FMT.rpCompact(t.total)}</td>
+            <td>${esc(t.payment)}</td>
+            <td>${pill(t.status)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>`;
+
+    return kpis + shifts + txns;
+  }
+
+  /* ====================================================================== */
+  /* Manajemen Proyek                                                        */
+  /* ====================================================================== */
+  function renderProjects() {
+    const chips = ['semua', 'berjalan', 'perencanaan', 'selesai'];
+    const filter = state.boardFilter;
+    const filtered = filter === 'semua' ? DATA.projects : DATA.projects.filter((p) => p.status === filter);
+
+    const chipBar = `<div class="chip-bar" style="margin-bottom:var(--sp-4)">${chips.map((c) =>
+      `<button class="chip${c === filter ? ' on' : ''}" data-board-filter="${c}">${c === 'semua' ? 'Semua' : STATUS[c]?.label || c}</button>`
+    ).join('')}</div>`;
+
+    const cards = filtered.map((p) => {
+      const budgetPct = Math.min(100, (p.actual / p.budget) * 100);
+      const budgetTone = budgetPct > 90 ? 'danger' : budgetPct > 75 ? 'warn' : '';
+      const tasks = DATA.projectTasks[p.id] || [];
+      const ganttStart = new Date(p.startDate).getTime();
+      const ganttEnd = new Date(p.endDate).getTime();
+      const ganttSpan = ganttEnd - ganttStart || 1;
+
+      const ganttBars = tasks.length ? `
+        <div class="gantt" style="margin-top:var(--sp-3)">
+          ${tasks.map((t) => {
+            const tStart = Math.max(0, (new Date(t.start).getTime() - ganttStart) / ganttSpan * 100);
+            const tWidth = Math.max(2, Math.min(100 - tStart, (new Date(t.end).getTime() - new Date(t.start).getTime()) / ganttSpan * 100));
+            return `<div class="gantt-row">
+              <span class="gantt-label">${esc(t.name)}</span>
+              <span class="gantt-track">
+                <span class="gantt-bar" style="left:${tStart}%;width:${tWidth}%">
+                  <span class="gantt-fill" style="width:${t.progress}%" data-tone="${t.progress === 100 ? 'ok' : t.progress > 0 ? 'accent' : ''}"></span>
+                </span>
+              </span>
+            </div>`;
+          }).join('')}
+        </div>` : '';
+
+      return `
+        <section class="card project-card" style="margin-bottom:var(--sp-4)">
+          <div class="card-head" style="align-items:flex-start">
+            <div>
+              <h3 class="card-title">${esc(p.name)}</h3>
+              <span class="cell-sub"><span class="code">${esc(p.id)}</span> · ${esc(p.customer)} · PM: ${esc(p.pm)}</span>
+            </div>
+            <div style="display:flex;gap:var(--sp-2);align-items:center">
+              ${pill(p.health)}
+              ${pill(p.status)}
+            </div>
+          </div>
+          <div class="project-stats">
+            <div>
+              <span class="cell-sub">Progres</span>
+              <span class="meter"><span class="meter-track"><span class="meter-fill" data-tone="${p.progress === 100 ? 'ok' : 'accent'}" style="width:${p.progress}%"></span></span><span class="meter-val">${p.progress}%</span></span>
+            </div>
+            <div>
+              <span class="cell-sub">Anggaran</span>
+              <span class="meter"><span class="meter-track"><span class="meter-fill"${budgetTone ? ` data-tone="${budgetTone}"` : ''} style="width:${budgetPct}%"></span></span><span class="meter-val">${FMT.rpCompact(p.actual)} / ${FMT.rpCompact(p.budget)}</span></span>
+            </div>
+            <div>
+              <span class="cell-sub">Periode</span>
+              <span class="num">${FMT.date(p.startDate)} — ${FMT.date(p.endDate)}</span>
+            </div>
+          </div>
+          ${ganttBars}
+        </section>`;
+    }).join('');
+
+    return chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
+  }
+
+  /* ====================================================================== */
+  /* Anggaran & Pengendalian Biaya                                           */
+  /* ====================================================================== */
+  function renderBudget() {
+    const totalBudget = DATA.budgets.reduce((s, b) => s + b.budget, 0);
+    const totalActual = DATA.budgets.reduce((s, b) => s + b.actual, 0);
+    const totalForecast = DATA.budgets.reduce((s, b) => s + b.forecast, 0);
+    const overallPct = (totalActual / totalBudget * 100);
+    const overallTone = overallPct > 95 ? 'danger' : overallPct > 80 ? 'warn' : '';
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Total Anggaran</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalBudget)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Realisasi</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalActual)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${overallTone ? ` data-tone="${overallTone}"` : ''} style="width:${Math.min(100, overallPct)}%"></span></span><span class="meter-val">${FMT.pct(overallPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Prakiraan</span>
+          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ''}">${FMT.rpCompact(totalForecast)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Varians</span>
+          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ' pos'}">${totalForecast > totalBudget ? '+' : ''}${FMT.rpCompact(totalForecast - totalBudget)}</span>
+        </div>
+      </div>`;
+
+    const rows = DATA.budgets.map((b) => {
+      const usedPct = Math.min(100, b.actual / b.budget * 100);
+      const commitPct = Math.min(100 - usedPct, b.commitment / b.budget * 100);
+      const forecastOver = b.forecast > b.budget;
+      const tone = usedPct > 90 ? 'danger' : usedPct > 75 ? 'warn' : '';
+      return `<tr>
+        <td class="code">${esc(b.costCenter)}</td>
+        <td class="cell-strong">${esc(b.dept)}</td>
+        <td>${esc(b.type)}</td>
+        <td class="r num">${FMT.rpCompact(b.budget)}</td>
+        <td class="r num">${FMT.rpCompact(b.actual)}</td>
+        <td>
+          <span class="budget-bar">
+            <span class="budget-bar-track">
+              <span class="budget-bar-actual"${tone ? ` data-tone="${tone}"` : ''} style="width:${usedPct}%"></span>
+              <span class="budget-bar-commit" style="left:${usedPct}%;width:${commitPct}%"></span>
+            </span>
+            <span class="meter-val">${FMT.pct(usedPct, 0)}</span>
+          </span>
+        </td>
+        <td class="r num">${FMT.rpCompact(b.commitment)}</td>
+        <td class="r num${forecastOver ? ' neg' : ''}">${FMT.rpCompact(b.forecast)}</td>
+      </tr>`;
+    }).join('');
+
+    const table = `
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('piechart')} Realisasi per Pusat Biaya</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Unit Kerja</th><th>Tipe</th>
+            <th class="r">Anggaran</th><th class="r">Realisasi</th>
+            <th>Penyerapan</th><th class="r">Komitmen</th><th class="r">Prakiraan</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+
+    return kpis + table;
+  }
+
+  /* ====================================================================== */
+  /* AI Copilot floating panel                                               */
+  /* ====================================================================== */
+  function renderAICopilot() {
+    const open = state.aiCopilotOpen;
+    const messages = DATA.aiMessages || [];
+    const msgHtml = messages.map((m) => {
+      const cls = m.role === 'user' ? 'ai-msg ai-msg-user' : 'ai-msg ai-msg-assistant';
+      /* Simple markdown-ish: bold, line breaks */
+      let text = esc(m.text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+      /* Render simple tables in AI messages */
+      if (m.text.includes('|')) {
+        const lines = m.text.split('\n');
+        let inTable = false;
+        let tableHtml = '<div class="tbl-wrap" style="margin:var(--sp-2) 0"><table class="tbl tbl-sm">';
+        let outLines = [];
+        for (const line of lines) {
+          const stripped = line.trim();
+          if (stripped.startsWith('|') && stripped.endsWith('|')) {
+            const cells = stripped.split('|').filter(Boolean).map((c) => c.trim());
+            if (cells.every((c) => /^[-:]+$/.test(c))) continue; // separator
+            if (!inTable) { inTable = true; tableHtml += '<thead><tr>' + cells.map((c) => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>'; }
+            else tableHtml += '<tr>' + cells.map((c) => `<td>${esc(c)}</td>`).join('') + '</tr>';
+          } else {
+            if (inTable) { tableHtml += '</tbody></table></div>'; outLines.push(tableHtml); inTable = false; tableHtml = '<div class="tbl-wrap" style="margin:var(--sp-2) 0"><table class="tbl tbl-sm">'; }
+            outLines.push(esc(stripped).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'));
+          }
+        }
+        if (inTable) { tableHtml += '</tbody></table></div>'; outLines.push(tableHtml); }
+        text = outLines.join('<br>');
+      }
+      return `<div class="${cls}"><div class="ai-msg-bubble">${text}</div></div>`;
+    }).join('');
+
+    return `
+      <button class="ai-fab" data-action="toggle-copilot" title="AI Copilot" aria-label="AI Copilot">
+        ${icon('sparkle')}
+      </button>
+      ${open ? `
+      <aside class="ai-panel" role="complementary" aria-label="AI Copilot">
+        <div class="ai-panel-head">
+          <span class="ai-panel-title">${icon('sparkle')} AI Copilot</span>
+          <button class="btn-icon" data-action="toggle-copilot" title="Tutup">${icon('x')}</button>
+        </div>
+        <div class="ai-panel-body" id="ai-messages">${msgHtml}</div>
+        <div class="ai-panel-input">
+          <input type="text" class="input" placeholder="Tanyakan ke AI Copilot…" data-ai-input aria-label="Tanyakan ke AI Copilot">
+          <button class="btn btn-sm" data-action="ai-send" title="Kirim">${icon('send')}</button>
+        </div>
+      </aside>` : ''}`;
+  }
+
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
-    ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain'].includes(id);
+    ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
+     'lead', 'kasir', 'proyek', 'anggaran'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -1745,6 +2275,10 @@
       case 'peran': return renderRoles();
       case 'pengaturan': return renderSettings();
       case 'sistem-desain': return renderDesignSystem();
+      case 'lead': return renderCRMBoard();
+      case 'kasir': return renderPOS();
+      case 'proyek': return renderProjects();
+      case 'anggaran': return renderBudget();
       default: return renderDashboard();
     }
   }
@@ -1761,7 +2295,8 @@
         <main class="content" id="content">
           <div class="content-inner">${renderView()}</div>
         </main>
-      </div>`;
+      </div>
+      ${renderAICopilot()}`;
 
     const root = $('#content');
     if (state.view === 'dasbor') mountDashboard(root);
@@ -1833,6 +2368,29 @@
       const row = DATA.salesOrders.find((r) => r.id === approval.dataset.approval);
       if (row) { setView('pesanan-penjualan'); openDrawer(salesOrderDrawer(row)); }
       else toast('Belum tersedia di purwarupa', `Rekaman ${approval.dataset.approval} berada di modul lain.`, 'warn');
+      return;
+    }
+
+    const leadCard = t.closest('[data-lead]');
+    if (leadCard) {
+      const l = DATA.leads.find((x) => x.id === leadCard.dataset.lead);
+      if (l) {
+        openDrawer({
+          title: l.name, subtitle: `${l.id} · ${l.company}`,
+          status: l.stage === 'menang' ? 'diterima' : l.stage === 'kalah' ? 'ditolak' : 'berjalan',
+          sections: [
+            { label: 'Detail Peluang', pairs: [
+              ['Perusahaan', l.company], ['Nilai', FMT.rpCompact(l.value)],
+              ['Probabilitas', `${l.prob}%`], ['Sumber', l.source],
+              ['Penanggung jawab', l.assignee], ['Tahap', l.stage],
+            ]},
+            { label: 'Tindakan Selanjutnya', pairs: [
+              ['Aktivitas terakhir', FMT.date(l.lastActivity)],
+              ['Langkah berikut', l.nextAction],
+            ]},
+          ],
+        });
+      }
       return;
     }
 
@@ -1985,6 +2543,27 @@
       case 'switch-company': case 'switch-branch': case 'switch-period':
         toast('Pemilih konteks', 'Pada purwarupa ini konteks perusahaan, cabang, dan periode belum dapat diganti.', 'warn');
         break;
+
+      case 'toggle-copilot':
+        state.aiCopilotOpen = !state.aiCopilotOpen;
+        render();
+        if (state.aiCopilotOpen) {
+          const body = document.getElementById('ai-messages');
+          if (body) body.scrollTop = body.scrollHeight;
+        }
+        break;
+
+      case 'ai-send': {
+        const inp = $('[data-ai-input]');
+        if (inp && inp.value.trim()) {
+          DATA.aiMessages.push({ role: 'user', text: inp.value.trim() });
+          DATA.aiMessages.push({ role: 'assistant', text: 'Saya sedang menganalisis data Anda. Fitur ini tersedia pada versi produksi dengan koneksi ke AI backend.' });
+          render();
+          const body = document.getElementById('ai-messages');
+          if (body) body.scrollTop = body.scrollHeight;
+        }
+        break;
+      }
 
       case 'toggle': break;
 

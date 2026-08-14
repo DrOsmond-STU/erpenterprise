@@ -1348,8 +1348,129 @@ svg { display: block; }
   }
 }
 
+/* ====================================================================== */
+/* CRM pipeline                                                            */
+/* ====================================================================== */
+.crm-card { cursor: pointer; }
+.crm-card-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); margin-top: var(--sp-2);
+}
+.icon-inline { display: inline-block; vertical-align: -2px; width: 14px; height: 14px; }
+
+/* ====================================================================== */
+/* Project timeline / Gantt                                                */
+/* ====================================================================== */
+.project-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-4); padding: var(--sp-4) var(--sp-5) 0;
+}
+.gantt { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--sp-5) var(--sp-4); }
+.gantt-row { display: flex; align-items: center; gap: var(--sp-3); }
+.gantt-label {
+  flex: 0 0 160px; font-size: var(--fs-cap); color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gantt-track {
+  flex: 1; height: 10px; background: var(--ink-5); border-radius: 5px;
+  position: relative; overflow: hidden;
+}
+.gantt-bar {
+  position: absolute; top: 0; height: 100%; border-radius: 5px;
+  background: var(--ink-4); overflow: hidden;
+}
+.gantt-fill {
+  display: block; height: 100%; border-radius: 5px;
+  background: var(--brand);
+}
+.gantt-fill[data-tone="ok"] { background: var(--tone-ok); }
+.gantt-fill[data-tone="accent"] { background: var(--brand); }
+@media (max-width: 960px) { .gantt-label { flex: 0 0 100px; } }
+@media (max-width: 640px) { .gantt-label { flex: 0 0 70px; font-size: 11px; } }
+
+/* ====================================================================== */
+/* Budget variance bars                                                    */
+/* ====================================================================== */
+.budget-bar { display: flex; align-items: center; gap: var(--sp-2); min-width: 120px; }
+.budget-bar-track {
+  flex: 1; height: 10px; background: var(--ink-5); border-radius: 5px;
+  position: relative; overflow: hidden;
+}
+.budget-bar-actual {
+  position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px 0 0 5px;
+  background: var(--brand);
+}
+.budget-bar-actual[data-tone="warn"] { background: var(--tone-warn); }
+.budget-bar-actual[data-tone="danger"] { background: var(--tone-danger); }
+.budget-bar-commit {
+  position: absolute; top: 0; height: 100%;
+  background: var(--brand); opacity: .35;
+}
+
+/* ====================================================================== */
+/* POS table compact helper                                                */
+/* ====================================================================== */
+.tbl-sm th, .tbl-sm td { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-cap); }
+
+/* ====================================================================== */
+/* AI Copilot floating panel                                               */
+/* ====================================================================== */
+.ai-fab {
+  position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 900;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--brand); color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.22);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.ai-fab:hover { transform: scale(1.08); box-shadow: 0 4px 14px rgba(0,0,0,.28); }
+.ai-fab svg { stroke: #fff; width: 22px; height: 22px; }
+
+.ai-panel {
+  position: fixed; bottom: 72px; right: var(--sp-5); z-index: 901;
+  width: 380px; max-height: 520px; display: flex; flex-direction: column;
+  background: var(--surf-1); border: 1px solid var(--ink-5);
+  border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+.ai-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--ink-5);
+  background: var(--surf-0);
+}
+.ai-panel-title {
+  font-weight: 600; font-size: var(--fs-sm);
+  display: flex; align-items: center; gap: var(--sp-2);
+}
+.ai-panel-body {
+  flex: 1; overflow-y: auto; padding: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.ai-msg { display: flex; }
+.ai-msg-user { justify-content: flex-end; }
+.ai-msg-bubble {
+  max-width: 88%; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md); font-size: var(--fs-sm); line-height: 1.5;
+}
+.ai-msg-assistant .ai-msg-bubble {
+  background: var(--surf-2); color: var(--ink-1);
+}
+.ai-msg-user .ai-msg-bubble {
+  background: var(--brand); color: #fff;
+}
+.ai-panel-input {
+  display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--ink-5); background: var(--surf-0);
+}
+.ai-panel-input .input { flex: 1; }
+
+@media (max-width: 640px) {
+  .ai-panel { width: calc(100vw - 2 * var(--sp-3)); right: var(--sp-3); bottom: 64px; }
+  .ai-fab { bottom: var(--sp-3); right: var(--sp-3); width: 42px; height: 42px; }
+}
+
 @media print {
-  .rail, .topbar, .toasts, .page-actions, .toolbar { display: none; }
+  .rail, .topbar, .toasts, .page-actions, .toolbar, .ai-fab, .ai-panel { display: none; }
   .content { padding: 0; }
   .card { break-inside: avoid; }
 }
@@ -1381,23 +1502,37 @@ const DATA = (() => {
     user: { name: 'Osmond Pratama', initials: 'OP', role: 'Manajer Operasional', email: 'osmond@knm.co.id' },
   };
 
-  /* --- Struktur navigasi -------------------------------------------------- */
+  /* --- Struktur navigasi (diperluas sesuai blueprint) -------------------- */
   const nav = [
     {
       label: 'Ikhtisar',
       items: [{ id: 'dasbor', label: 'Dasbor', icon: 'grid' }],
     },
     {
+      label: 'CRM',
+      items: [
+        { id: 'lead', label: 'Lead & Peluang', icon: 'target', count: 24 },
+      ],
+    },
+    {
       label: 'Penjualan',
       items: [
+        { id: 'penawaran', label: 'Penawaran', icon: 'quote', count: 12 },
         { id: 'pesanan-penjualan', label: 'Pesanan Penjualan', icon: 'cart', count: 148 },
         { id: 'faktur', label: 'Faktur', icon: 'invoice', count: 62 },
         { id: 'pelanggan', label: 'Pelanggan', icon: 'building' },
       ],
     },
     {
+      label: 'POS / Kasir',
+      items: [
+        { id: 'kasir', label: 'Kasir', icon: 'barcode' },
+      ],
+    },
+    {
       label: 'Pembelian',
       items: [
+        { id: 'permintaan-pembelian', label: 'Permintaan Pembelian', icon: 'clipboard', count: 8 },
         { id: 'pesanan-pembelian', label: 'Pesanan Pembelian', icon: 'truck', count: 34 },
         { id: 'pemasok', label: 'Pemasok', icon: 'handshake' },
       ],
@@ -1414,29 +1549,51 @@ const DATA = (() => {
       items: [{ id: 'perintah-kerja', label: 'Perintah Kerja', icon: 'factory', count: 17 }],
     },
     {
+      label: 'Proyek',
+      items: [
+        { id: 'proyek', label: 'Daftar Proyek', icon: 'gantt', count: 5 },
+      ],
+    },
+    {
       label: 'Keuangan',
       items: [
         { id: 'piutang', label: 'Piutang Usaha', icon: 'wallet' },
         { id: 'jurnal', label: 'Jurnal Umum', icon: 'ledger' },
+        { id: 'anggaran', label: 'Anggaran', icon: 'piechart' },
       ],
     },
     {
       label: 'SDM',
-      items: [{ id: 'karyawan', label: 'Karyawan', icon: 'users' }],
+      items: [
+        { id: 'karyawan', label: 'Karyawan', icon: 'users' },
+        { id: 'penggajian', label: 'Penggajian', icon: 'banknote', count: 12 },
+      ],
+    },
+    {
+      label: 'Aset',
+      items: [
+        { id: 'aset', label: 'Daftar Aset', icon: 'landmark' },
+        { id: 'pemeliharaan', label: 'Pemeliharaan', icon: 'wrench', count: 6 },
+      ],
+    },
+    {
+      label: 'Dokumen',
+      items: [
+        { id: 'dokumen', label: 'Repositori', icon: 'folder', count: 156 },
+      ],
     },
     {
       label: 'Sistem',
       items: [
         { id: 'peran', label: 'Peran & Izin', icon: 'shield' },
+        { id: 'jejak-audit', label: 'Jejak Audit', icon: 'scroll' },
         { id: 'pengaturan', label: 'Pengaturan', icon: 'gear' },
         { id: 'sistem-desain', label: 'Sistem Desain', icon: 'palette' },
       ],
     },
   ];
 
-  /* --- Ubin KPI dasbor ----------------------------------------------------
-     `dir` menyatakan arah yang BAIK, sehingga naik-turun dapat diberi nada
-     yang benar (piutang jatuh tempo naik = buruk). */
+  /* --- Ubin KPI dasbor --------------------------------------------------- */
   const kpis = [
     {
       id: 'pendapatan', label: 'Pendapatan (bulan berjalan)', value: 4_823_400_000,
@@ -1444,14 +1601,14 @@ const DATA = (() => {
       spark: [3.1, 3.4, 3.2, 3.9, 4.1, 3.8, 4.4, 4.2, 4.6, 4.5, 4.7, 4.82],
     },
     {
-      id: 'pesanan', label: 'Pesanan terbuka', value: 148,
-      format: 'int', unit: 'pesanan', delta: 5.7, dir: 'up', foot: '23 menunggu persetujuan',
-      spark: [121, 128, 126, 133, 130, 137, 139, 136, 142, 140, 145, 148],
+      id: 'laba-kotor', label: 'Laba kotor', value: 1_687_200_000,
+      format: 'rp-compact', delta: 8.2, dir: 'up', foot: 'Margin 35,0% — target 36%',
+      spark: [1.1, 1.2, 1.15, 1.32, 1.38, 1.29, 1.48, 1.42, 1.55, 1.51, 1.6, 1.69],
     },
     {
-      id: 'persediaan', label: 'Nilai persediaan', value: 12_740_000_000,
-      format: 'rp-compact', delta: -3.1, dir: 'down', foot: 'Perputaran 5,8× per tahun',
-      spark: [14.2, 14.0, 13.8, 13.9, 13.5, 13.4, 13.1, 13.2, 12.9, 13.0, 12.9, 12.74],
+      id: 'arus-kas', label: 'Arus kas operasional', value: 892_500_000,
+      format: 'rp-compact', delta: -5.3, dir: 'up', foot: 'DSO 38 hari · DPO 42 hari',
+      spark: [1.02, 0.98, 1.05, 0.91, 0.88, 0.95, 1.01, 0.94, 0.87, 0.92, 0.96, 0.89],
     },
     {
       id: 'piutang', label: 'Piutang jatuh tempo', value: 1_942_800_000,
@@ -1460,14 +1617,13 @@ const DATA = (() => {
     },
   ];
 
-  /* --- Tren pendapatan vs target (12 bulan, miliar rupiah) ----------------- */
+  /* --- Tren pendapatan vs target (12 bulan, miliar rupiah) ---------------- */
   const revenueTrend = {
     labels: ['Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu'],
     actual: [3.12, 3.44, 3.21, 3.92, 4.08, 3.77, 4.41, 4.19, 4.63, 4.52, 4.71, 4.82],
     target: [3.30, 3.40, 3.50, 3.60, 3.80, 3.90, 4.10, 4.30, 4.40, 4.60, 4.80, 5.10],
   };
 
-  /* --- Pendapatan per lini produk (magnitudo satu ukuran -> satu rona) ----- */
   const revenueByLine = [
     { label: 'Komponen otomotif', value: 1_842_000_000 },
     { label: 'Suku cadang mesin', value: 1_216_500_000 },
@@ -1476,7 +1632,6 @@ const DATA = (() => {
     { label: 'Jasa purna jual', value: 327_500_000 },
   ];
 
-  /* --- Komposisi nilai persediaan (identitas -> palet kategorikal) --------- */
   const inventoryMix = [
     { label: 'Bahan baku', value: 4_712_000_000 },
     { label: 'Barang dalam proses', value: 3_128_000_000 },
@@ -1485,7 +1640,6 @@ const DATA = (() => {
     { label: 'Kemasan', value: 691_000_000 },
   ];
 
-  /* --- Umur piutang (ember ordinal -> ramp sekuensial satu rona) ---------- */
   const arAging = [
     { label: 'Belum jatuh tempo', short: 'Lancar', value: 3_284_000_000, count: 41 },
     { label: '1–30 hari', short: '1–30', value: 1_128_400_000, count: 19 },
@@ -1494,7 +1648,7 @@ const DATA = (() => {
     { label: 'Lebih dari 90 hari', short: '>90', value: 86_900_000, count: 2 },
   ];
 
-  /* --- Antrean persetujuan ------------------------------------------------- */
+  /* --- Antrean persetujuan ------------------------------------------------ */
   const approvals = [
     { id: 'SO-2026-0418', kind: 'Pesanan Penjualan', title: 'PT Sentosa Baja Perkasa', amount: 428_500_000, by: 'Rina Kusuma', ago: '18 menit lalu', tone: 'accent', icon: 'cart', reason: 'Melebihi plafon kredit pelanggan' },
     { id: 'PO-2026-0233', kind: 'Pesanan Pembelian', title: 'CV Logam Jaya Abadi', amount: 186_200_000, by: 'Bagus Hartono', ago: '52 menit lalu', tone: 'info', icon: 'truck', reason: 'Nilai di atas Rp 150 jt' },
@@ -1503,7 +1657,6 @@ const DATA = (() => {
     { id: 'SO-2026-0416', kind: 'Pesanan Penjualan', title: 'PT Mitra Teknik Utama', amount: 96_750_000, by: 'Rina Kusuma', ago: '5 jam lalu', tone: 'accent', icon: 'cart', reason: 'Diskon 12% di atas wewenang' },
   ];
 
-  /* --- Peringatan stok ------------------------------------------------------ */
   const stockAlerts = [
     { sku: 'BRG-1042', name: 'Pelat baja SPHC 3mm', onHand: 42, min: 250, unit: 'lbr', tone: 'danger', note: 'Habis dalam ±2 hari' },
     { sku: 'BRG-2217', name: 'Bearing 6204-2RS', onHand: 310, min: 500, unit: 'pcs', tone: 'warn', note: 'PO tiba 18 Agu' },
@@ -1511,7 +1664,6 @@ const DATA = (() => {
     { sku: 'BRG-3390', name: 'Kabel NYY 4×10mm', onHand: 640, min: 800, unit: 'm', tone: 'warn', note: 'PO tiba 21 Agu' },
   ];
 
-  /* --- Aktivitas terbaru ----------------------------------------------------- */
   const activity = [
     { who: 'Rina Kusuma', what: 'membuat pesanan', ref: 'SO-2026-0421', when: '09:42', tone: 'accent' },
     { who: 'Sistem', what: 'memposting faktur', ref: 'INV-2026-1188', when: '09:31', tone: 'ok' },
@@ -1521,7 +1673,6 @@ const DATA = (() => {
     { who: 'Sistem', what: 'menjalankan penilaian ulang stok', ref: 'BATCH-0088', when: '06:00', tone: 'info' },
   ];
 
-  /* --- Notifikasi ------------------------------------------------------------- */
   const notifications = [
     { title: '5 dokumen menunggu persetujuan Anda', note: 'Nilai total Rp 828,6 jt', when: '18 menit lalu', tone: 'accent', unread: true },
     { title: 'Stok Pelat baja SPHC 3mm kritis', note: 'Sisa 42 lbr dari minimum 250 lbr', when: '1 jam lalu', tone: 'danger', unread: true },
@@ -1529,7 +1680,33 @@ const DATA = (() => {
     { title: 'Tutup buku Juli 2026 selesai', note: 'Dikunci oleh Andi Firmansyah', when: 'Kemarin', tone: 'ok', unread: false },
   ];
 
-  /* --- Pesanan penjualan ------------------------------------------------------- */
+  /* --- AI Copilot: rangkaian pesan demo --------------------------------- */
+  const aiBriefing = `Selamat pagi, Osmond. Ringkasan hari ini:
+
+• **Pendapatan** bulan berjalan Rp 4,82 M (+12,4%), namun masih 5,5% di bawah target Rp 5,10 M. Perlu tambahan Rp 278 jt dalam 17 hari kerja tersisa.
+• **Piutang jatuh tempo** naik 18,6% — 3 faktur PT Bangun Sarana Teknik (total Rp 137,7 jt) sudah lewat 47–94 hari. Saya sarankan prioritaskan penagihan hari ini.
+• **Stok kritis**: Pelat baja SPHC 3mm tersisa 42 lbr (min 250), belum ada PO. Produksi lini 2 akan terganggu dalam 2 hari.
+• **Proyek** Jababeka Fase 2 menyerap 87% anggaran pada progres 72% — risiko *overrun* meningkat.
+• 5 dokumen menunggu persetujuan Anda senilai total Rp 828,6 jt.`;
+
+  const aiMessages = [
+    { role: 'assistant', text: aiBriefing },
+    { role: 'user', text: 'Supplier mana yang paling konsisten untuk pelat baja?' },
+    { role: 'assistant', text: `Berdasarkan data 12 bulan terakhir, **CV Logam Jaya Abadi** memiliki kinerja terbaik untuk kategori bahan baku logam:
+
+| Metrik | CV Logam Jaya | PT Baja Sentral |
+|--------|--------------|-----------------|
+| Tepat waktu | 96,2% | 88,7% |
+| Waktu tunggu | 8 hari | 14 hari |
+| Penolakan QC | 0,3% | 1,8% |
+| Harga rata-rata | Rp 486.000/lbr | Rp 478.000/lbr |
+
+CV Logam Jaya 1,7% lebih mahal, tetapi waktu tunggu 43% lebih cepat dan tingkat penolakan jauh lebih rendah. Untuk kebutuhan mendesak stok saat ini, saya **rekomendasikan PO ke CV Logam Jaya** dengan kuantitas minimal 250 lbr.
+
+Ingin saya buatkan draft permintaan pembelian?` },
+  ];
+
+  /* --- Pesanan penjualan ------------------------------------------------- */
   const salesOrders = [
     { id: 'SO-2026-0421', date: '2026-08-14', customer: 'PT Sinar Mas Otomotif', pic: 'Rina Kusuma', amount: 312_400_000, status: 'draf', due: '2026-08-28', channel: 'Distributor' },
     { id: 'SO-2026-0420', date: '2026-08-14', customer: 'PT Mitra Teknik Utama', pic: 'Rina Kusuma', amount: 148_900_000, status: 'menunggu', due: '2026-08-30', channel: 'Langsung' },
@@ -1551,7 +1728,6 @@ const DATA = (() => {
     { id: 'SO-2026-0404', date: '2026-08-05', customer: 'CV Sumber Logam', pic: 'Hendra Wijaya', amount: 29_850_000, status: 'selesai', due: '2026-08-17', channel: 'Distributor' },
   ];
 
-  /* Baris rincian per pesanan; pesanan tanpa entri memakai baris umum. */
   const salesOrderLines = {
     'SO-2026-0418': [
       { sku: 'BRG-1042', name: 'Pelat baja SPHC 3mm', qty: 480, unit: 'lbr', price: 512_000, disc: 5 },
@@ -1575,7 +1751,6 @@ const DATA = (() => {
     { sku: 'BRG-4501', name: 'Baut hex M12×60 galvanis', qty: 3200, unit: 'pcs', price: 4_250, disc: 0 },
   ];
 
-  /* --- Linimasa per pesanan --------------------------------------------------- */
   const orderTimeline = {
     'SO-2026-0418': [
       { title: '<b>Rina Kusuma</b> membuat pesanan', meta: '13 Agu 2026 · 14:22', tone: 'accent' },
@@ -1590,7 +1765,7 @@ const DATA = (() => {
     { title: 'Disetujui oleh <b>Osmond Pratama</b>', meta: '12 Agu 2026 · 11:02', tone: 'ok' },
   ];
 
-  /* --- Pelanggan ---------------------------------------------------------------- */
+  /* --- Pelanggan --------------------------------------------------------- */
   const customers = [
     { id: 'CUST-0012', name: 'PT Sentosa Baja Perkasa', segment: 'Kontrak', pic: 'Yusuf Maulana', city: 'Bekasi', limit: 1_500_000_000, used: 1_380_000_000, terms: 'Net 45', status: 'aktif' },
     { id: 'CUST-0004', name: 'PT Sinar Mas Otomotif', segment: 'Distributor', pic: 'Lina Marlina', city: 'Karawang', limit: 2_000_000_000, used: 842_000_000, terms: 'Net 30', status: 'aktif' },
@@ -1603,7 +1778,7 @@ const DATA = (() => {
     { id: 'CUST-0046', name: 'CV Sumber Logam', segment: 'Langsung', pic: 'Siti Rahayu', city: 'Bandung', limit: 200_000_000, used: 29_850_000, terms: 'Tunai', status: 'nonaktif' },
   ];
 
-  /* --- Faktur --------------------------------------------------------------------- */
+  /* --- Faktur ------------------------------------------------------------- */
   const invoices = [
     { id: 'INV-2026-1188', date: '2026-08-14', customer: 'PT Global Komponen Indo', amount: 519_800_000, paid: 0, dueDate: '2026-10-13', status: 'belum-dibayar', overdue: 0 },
     { id: 'INV-2026-1181', date: '2026-08-11', customer: 'PT Sinar Mas Otomotif', amount: 276_900_000, paid: 276_900_000, dueDate: '2026-09-10', status: 'lunas', overdue: 0 },
@@ -1617,7 +1792,7 @@ const DATA = (() => {
     { id: 'INV-2026-1077', date: '2026-05-28', customer: 'PT Bangun Sarana Teknik', amount: 41_300_000, paid: 0, dueDate: '2026-05-12', status: 'jatuh-tempo', overdue: 94 },
   ];
 
-  /* --- Pesanan pembelian ------------------------------------------------------------ */
+  /* --- Pesanan pembelian ------------------------------------------------- */
   const purchaseOrders = [
     { id: 'PO-2026-0233', date: '2026-08-14', supplier: 'CV Logam Jaya Abadi', amount: 186_200_000, eta: '2026-08-22', status: 'menunggu', buyer: 'Bagus Hartono' },
     { id: 'PO-2026-0232', date: '2026-08-13', supplier: 'PT Bearing Nusantara', amount: 94_600_000, eta: '2026-08-18', status: 'dikirim-pemasok', buyer: 'Bagus Hartono' },
@@ -1641,7 +1816,7 @@ const DATA = (() => {
     { id: 'SUP-0041', name: 'PT Kemasan Prima', category: 'Kemasan', city: 'Bogor', terms: 'Net 14', lead: 4, otd: 99.1, status: 'aktif' },
   ];
 
-  /* --- Stok barang ------------------------------------------------------------------- */
+  /* --- Stok --------------------------------------------------------------- */
   const stockItems = [
     { sku: 'BRG-1042', name: 'Pelat baja SPHC 3mm', category: 'Bahan baku', unit: 'lbr', onHand: 42, min: 250, max: 900, cost: 486_000, wh: 'Cikarang' },
     { sku: 'BRG-0885', name: 'Oli hidrolik ISO VG 46', category: 'Bahan penolong', unit: 'drum', onHand: 18, min: 60, max: 180, cost: 1_720_000, wh: 'Cikarang' },
@@ -1670,7 +1845,7 @@ const DATA = (() => {
     { id: 'MOV-2026-3277', date: '2026-08-09', sku: 'BRG-8302', name: 'Rantai transmisi 08B-1', type: 'Masuk — Penerimaan', qty: 300, ref: 'GR-2026-0508', wh: 'Cikarang' },
   ];
 
-  /* --- Perintah kerja (papan) ---------------------------------------------------------- */
+  /* --- Perintah kerja (papan) --------------------------------------------- */
   const workOrderColumns = [
     { id: 'antre', label: 'Antre' },
     { id: 'berjalan', label: 'Berjalan' },
@@ -1692,7 +1867,7 @@ const DATA = (() => {
     { id: 'WO-2026-0175', product: 'Pelat potong SPHC', qty: 240, unit: 'lbr', line: 'Lini 1 — Potong', due: '11 Agu', progress: 100, col: 'selesai', pic: 'Slamet Riyadi' },
   ];
 
-  /* --- Jurnal umum -------------------------------------------------------------------- */
+  /* --- Jurnal umum ------------------------------------------------------- */
   const journals = [
     { id: 'JV-2026-0778', date: '2026-08-14', desc: 'Pengakuan pendapatan penjualan Agu', account: '4-1000 Pendapatan Penjualan', debit: 0, credit: 519_800_000, status: 'diposting', by: 'Sistem' },
     { id: 'JV-2026-0777', date: '2026-08-14', desc: 'Harga pokok penjualan Agu', account: '5-1000 Harga Pokok Penjualan', debit: 341_600_000, credit: 0, status: 'diposting', by: 'Sistem' },
@@ -1706,7 +1881,7 @@ const DATA = (() => {
     { id: 'JV-2026-0769', date: '2026-08-07', desc: 'Beban listrik pabrik Jul 2026', account: '5-3100 Beban Utilitas', debit: 96_400_000, credit: 0, status: 'diposting', by: 'Andi Firmansyah' },
   ];
 
-  /* --- Karyawan ---------------------------------------------------------------------- */
+  /* --- Karyawan ---------------------------------------------------------- */
   const employees = [
     { id: 'EMP-0102', name: 'Rina Kusuma', dept: 'Penjualan', title: 'Account Executive', join: '2021-03-15', location: 'Jakarta', status: 'tetap' },
     { id: 'EMP-0118', name: 'Hendra Wijaya', dept: 'Penjualan', title: 'Account Executive', join: '2022-07-01', location: 'Surabaya', status: 'tetap' },
@@ -1722,7 +1897,7 @@ const DATA = (() => {
     { id: 'EMP-0159', name: 'Reza Alfarizi', dept: 'Gudang', title: 'Staf Gudang', join: '2025-02-03', location: 'Cikarang', status: 'magang' },
   ];
 
-  /* --- Peran & izin ------------------------------------------------------------------ */
+  /* --- Peran & izin ------------------------------------------------------ */
   const roles = [
     { id: 'admin', label: 'Admin Sistem', users: 2 },
     { id: 'manajer', label: 'Manajer Operasional', users: 4 },
@@ -1731,7 +1906,6 @@ const DATA = (() => {
     { id: 'keuangan', label: 'Staf Keuangan', users: 6 },
   ];
 
-  /* level: full = ubah & setujui, read = lihat saja, none = tanpa akses */
   const permissions = [
     {
       group: 'Penjualan',
@@ -1766,6 +1940,164 @@ const DATA = (() => {
     },
   ];
 
+  /* ====================================================================== */
+  /* Modul baru dari blueprint                                               */
+  /* ====================================================================== */
+
+  /* --- CRM: Lead & Peluang ----------------------------------------------- */
+  const crmStages = [
+    { id: 'prospek', label: 'Prospek' },
+    { id: 'kualifikasi', label: 'Kualifikasi' },
+    { id: 'penawaran', label: 'Penawaran' },
+    { id: 'negosiasi', label: 'Negosiasi' },
+    { id: 'menang', label: 'Menang' },
+    { id: 'kalah', label: 'Kalah' },
+  ];
+
+  const leads = [
+    { id: 'OPP-2026-0041', name: 'Kontrak tahunan komponen hidrolik', company: 'PT Astra Daihatsu Motor', value: 2_800_000_000, stage: 'negosiasi', prob: 75, source: 'Tender', assignee: 'Rina Kusuma', lastActivity: '2026-08-14', nextAction: 'Presentasi harga revisi' },
+    { id: 'OPP-2026-0039', name: 'Retrofit lini perakitan Karawang', company: 'PT Toyota Motor Mfg', value: 1_650_000_000, stage: 'penawaran', prob: 50, source: 'Referensi', assignee: 'Hendra Wijaya', lastActivity: '2026-08-13', nextAction: 'Kirim revisi quotation' },
+    { id: 'OPP-2026-0037', name: 'Spare part mesin stamping', company: 'PT Suzuki Indomobil Motor', value: 420_000_000, stage: 'kualifikasi', prob: 30, source: 'Website', assignee: 'Rina Kusuma', lastActivity: '2026-08-12', nextAction: 'Site visit 18 Agu' },
+    { id: 'OPP-2026-0035', name: 'Panel kendali gudang otomatis', company: 'PT Unilever Indonesia', value: 890_000_000, stage: 'penawaran', prob: 60, source: 'Langsung', assignee: 'Hendra Wijaya', lastActivity: '2026-08-11', nextAction: 'Menunggu keputusan klien' },
+    { id: 'OPP-2026-0033', name: 'Komponen braket motor listrik', company: 'PT Hyundai Motor Mfg', value: 3_200_000_000, stage: 'prospek', prob: 15, source: 'Pameran', assignee: 'Rina Kusuma', lastActivity: '2026-08-10', nextAction: 'Kirim company profile' },
+    { id: 'OPP-2026-0031', name: 'Jasa machining presisi batch', company: 'CV Teknik Mandiri', value: 185_000_000, stage: 'menang', prob: 100, source: 'Langsung', assignee: 'Hendra Wijaya', lastActivity: '2026-08-08', nextAction: 'Proses SO' },
+    { id: 'OPP-2026-0029', name: 'Supply rantai conveyor', company: 'PT Indofood CBP Sukses', value: 540_000_000, stage: 'negosiasi', prob: 65, source: 'Tender', assignee: 'Rina Kusuma', lastActivity: '2026-08-07', nextAction: 'Negosiasi termin bayar' },
+    { id: 'OPP-2026-0027', name: 'Overhaul mesin CNC', company: 'PT Komatsu Indonesia', value: 720_000_000, stage: 'kalah', prob: 0, source: 'Tender', assignee: 'Hendra Wijaya', lastActivity: '2026-08-05', nextAction: 'Evaluasi mengapa kalah' },
+  ];
+
+  /* --- Penawaran (Quotation) --------------------------------------------- */
+  const quotations = [
+    { id: 'QT-2026-0088', date: '2026-08-14', customer: 'PT Astra Daihatsu Motor', amount: 2_800_000_000, validity: '2026-09-14', status: 'draf', pic: 'Rina Kusuma', opp: 'OPP-2026-0041' },
+    { id: 'QT-2026-0087', date: '2026-08-12', customer: 'PT Toyota Motor Mfg', amount: 1_650_000_000, validity: '2026-09-12', status: 'terkirim', pic: 'Hendra Wijaya', opp: 'OPP-2026-0039' },
+    { id: 'QT-2026-0086', date: '2026-08-11', customer: 'PT Unilever Indonesia', amount: 890_000_000, validity: '2026-09-11', status: 'terkirim', pic: 'Hendra Wijaya', opp: 'OPP-2026-0035' },
+    { id: 'QT-2026-0085', date: '2026-08-08', customer: 'CV Teknik Mandiri', amount: 185_000_000, validity: '2026-09-08', status: 'diterima', pic: 'Hendra Wijaya', opp: 'OPP-2026-0031' },
+    { id: 'QT-2026-0084', date: '2026-08-07', customer: 'PT Indofood CBP Sukses', amount: 540_000_000, validity: '2026-09-07', status: 'terkirim', pic: 'Rina Kusuma', opp: 'OPP-2026-0029' },
+    { id: 'QT-2026-0083', date: '2026-08-05', customer: 'PT Komatsu Indonesia', amount: 720_000_000, validity: '2026-09-05', status: 'ditolak', pic: 'Hendra Wijaya', opp: 'OPP-2026-0027' },
+  ];
+
+  /* --- Permintaan Pembelian ---------------------------------------------- */
+  const purchaseRequests = [
+    { id: 'PR-2026-0093', date: '2026-08-14', requestor: 'Slamet Riyadi', dept: 'Produksi', desc: 'Pelat baja SPHC 3mm — stok kritis', amount: 121_500_000, status: 'menunggu', priority: 'tinggi' },
+    { id: 'PR-2026-0092', date: '2026-08-13', requestor: 'Yuni Astuti', dept: 'Produksi', desc: 'Komponen elektronik PCB batch #42', amount: 38_400_000, status: 'disetujui', priority: 'sedang' },
+    { id: 'PR-2026-0091', date: '2026-08-12', requestor: 'Dewi Anggraini', dept: 'Pengadaan', desc: 'Suku cadang mesin CNC untuk preventive maintenance', amount: 74_900_000, status: 'menunggu', priority: 'tinggi' },
+    { id: 'PR-2026-0090', date: '2026-08-11', requestor: 'Fitri Ramadhani', dept: 'Gudang', desc: 'Perlengkapan rak baru zona B3', amount: 26_800_000, status: 'disetujui', priority: 'rendah' },
+    { id: 'PR-2026-0089', date: '2026-08-10', requestor: 'Dedi Kurnia', dept: 'Produksi', desc: 'Oli mesin dan pelumas lini 2', amount: 15_200_000, status: 'selesai', priority: 'sedang' },
+    { id: 'PR-2026-0088', date: '2026-08-08', requestor: 'Reza Alfarizi', dept: 'Gudang', desc: 'Peti kayu ekspor tambahan Q3', amount: 52_250_000, status: 'ditolak', priority: 'rendah' },
+  ];
+
+  /* --- Proyek ------------------------------------------------------------ */
+  const projects = [
+    { id: 'PRJ-2026-005', name: 'Jababeka Industrial Park Fase 2', customer: 'PT Jababeka Tbk', pm: 'Osmond Pratama', budget: 4_200_000_000, actual: 3_654_000_000, startDate: '2026-03-01', endDate: '2026-11-30', status: 'berjalan', health: 'kuning', progress: 72 },
+    { id: 'PRJ-2026-004', name: 'Retrofit Lini Perakitan ADM', customer: 'PT Astra Daihatsu Motor', pm: 'Slamet Riyadi', budget: 1_850_000_000, actual: 824_000_000, startDate: '2026-06-15', endDate: '2026-12-31', status: 'berjalan', health: 'hijau', progress: 45 },
+    { id: 'PRJ-2026-003', name: 'Automation Panel Unilever', customer: 'PT Unilever Indonesia', pm: 'Yuni Astuti', budget: 890_000_000, actual: 0, startDate: '2026-09-01', endDate: '2027-02-28', status: 'perencanaan', health: 'hijau', progress: 0 },
+    { id: 'PRJ-2026-002', name: 'Conveyor System Indofood', customer: 'PT Indofood CBP Sukses', pm: 'Dedi Kurnia', budget: 540_000_000, actual: 162_000_000, startDate: '2026-07-01', endDate: '2026-10-31', status: 'berjalan', health: 'hijau', progress: 30 },
+    { id: 'PRJ-2026-001', name: 'Overhaul CNC Cikarang', customer: 'Internal', pm: 'Slamet Riyadi', budget: 320_000_000, actual: 310_000_000, startDate: '2026-01-15', endDate: '2026-06-30', status: 'selesai', health: 'hijau', progress: 100 },
+  ];
+
+  const projectTasks = {
+    'PRJ-2026-005': [
+      { id: 'T-001', name: 'Survey & design', start: '2026-03-01', end: '2026-04-15', progress: 100, assignee: 'Osmond Pratama' },
+      { id: 'T-002', name: 'Procurement material', start: '2026-04-01', end: '2026-06-30', progress: 100, assignee: 'Bagus Hartono' },
+      { id: 'T-003', name: 'Fabrikasi komponen', start: '2026-05-01', end: '2026-08-31', progress: 78, assignee: 'Slamet Riyadi' },
+      { id: 'T-004', name: 'Instalasi di lokasi', start: '2026-07-15', end: '2026-10-31', progress: 35, assignee: 'Dedi Kurnia' },
+      { id: 'T-005', name: 'Commissioning & testing', start: '2026-10-01', end: '2026-11-30', progress: 0, assignee: 'Yuni Astuti' },
+    ],
+  };
+
+  /* --- Anggaran (Budget & Cost Control) --------------------------------- */
+  const budgets = [
+    { id: 'BDG-001', costCenter: 'CC-PRD', dept: 'Produksi', type: 'OPEX', budget: 2_400_000_000, commitment: 312_000_000, actual: 1_824_000_000, forecast: 2_520_000_000 },
+    { id: 'BDG-002', costCenter: 'CC-SCM', dept: 'Pengadaan & Gudang', type: 'OPEX', budget: 860_000_000, commitment: 186_200_000, actual: 512_400_000, forecast: 840_000_000 },
+    { id: 'BDG-003', costCenter: 'CC-SAL', dept: 'Penjualan & CRM', type: 'OPEX', budget: 720_000_000, commitment: 48_000_000, actual: 486_200_000, forecast: 695_000_000 },
+    { id: 'BDG-004', costCenter: 'CC-FIN', dept: 'Keuangan & Akuntansi', type: 'OPEX', budget: 340_000_000, commitment: 12_000_000, actual: 218_600_000, forecast: 330_000_000 },
+    { id: 'BDG-005', costCenter: 'CC-HRD', dept: 'SDM & Umum', type: 'OPEX', budget: 480_000_000, commitment: 24_000_000, actual: 312_400_000, forecast: 465_000_000 },
+    { id: 'BDG-006', costCenter: 'CC-MNT', dept: 'Pemeliharaan', type: 'OPEX', budget: 360_000_000, commitment: 74_900_000, actual: 264_800_000, forecast: 385_000_000 },
+    { id: 'BDG-007', costCenter: 'CC-PRJ', dept: 'Proyek (CAPEX)', type: 'CAPEX', budget: 4_200_000_000, commitment: 546_000_000, actual: 3_654_000_000, forecast: 4_400_000_000 },
+    { id: 'BDG-008', costCenter: 'CC-IT', dept: 'Teknologi Informasi', type: 'OPEX', budget: 280_000_000, commitment: 35_000_000, actual: 168_400_000, forecast: 272_000_000 },
+  ];
+
+  /* --- Penggajian (Payroll) ---------------------------------------------- */
+  const payroll = [
+    { id: 'PAY-2026-08-001', employeeId: 'EMP-0071', name: 'Osmond Pratama', dept: 'Operasional', basic: 28_000_000, allowance: 8_500_000, deduction: 2_940_000, overtime: 0, netPay: 33_560_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-002', employeeId: 'EMP-0064', name: 'Andi Firmansyah', dept: 'Keuangan', basic: 22_000_000, allowance: 6_200_000, deduction: 2_352_000, overtime: 1_200_000, netPay: 27_048_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-003', employeeId: 'EMP-0102', name: 'Rina Kusuma', dept: 'Penjualan', basic: 18_000_000, allowance: 5_800_000, deduction: 1_892_000, overtime: 0, netPay: 21_908_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-004', employeeId: 'EMP-0087', name: 'Bagus Hartono', dept: 'Pengadaan', basic: 20_000_000, allowance: 5_400_000, deduction: 2_144_000, overtime: 800_000, netPay: 24_056_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-005', employeeId: 'EMP-0093', name: 'Slamet Riyadi', dept: 'Produksi', basic: 19_000_000, allowance: 5_600_000, deduction: 2_036_000, overtime: 2_400_000, netPay: 24_964_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-006', employeeId: 'EMP-0145', name: 'Sari Melati', dept: 'Keuangan', basic: 12_000_000, allowance: 3_200_000, deduction: 1_264_000, overtime: 600_000, netPay: 14_536_000, status: 'diproses', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-007', employeeId: 'EMP-0152', name: 'Yuni Astuti', dept: 'Produksi', basic: 11_000_000, allowance: 3_600_000, deduction: 1_164_000, overtime: 1_800_000, netPay: 15_236_000, status: 'diproses', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-008', employeeId: 'EMP-0159', name: 'Reza Alfarizi', dept: 'Gudang', basic: 5_500_000, allowance: 1_800_000, deduction: 384_000, overtime: 0, netPay: 6_916_000, status: 'draf', period: 'Agu 2026' },
+  ];
+
+  /* --- Daftar Aset ------------------------------------------------------- */
+  const assets = [
+    { id: 'AST-0014', name: 'Mesin CNC Milling Haas VF-2', category: 'Mesin produksi', location: 'Cikarang — Lini 3', acquisitionDate: '2022-04-18', acquisitionCost: 1_280_000_000, bookValue: 896_000_000, monthlyDepr: 21_333_333, status: 'aktif' },
+    { id: 'AST-0022', name: 'Hydraulic Press 200T Aida', category: 'Mesin produksi', location: 'Cikarang — Lini 2', acquisitionDate: '2020-08-05', acquisitionCost: 2_400_000_000, bookValue: 1_200_000_000, monthlyDepr: 40_000_000, status: 'aktif' },
+    { id: 'AST-0031', name: 'Forklift Toyota 8FD30', category: 'Kendaraan operasional', location: 'Cikarang — Gudang', acquisitionDate: '2023-11-20', acquisitionCost: 480_000_000, bookValue: 384_000_000, monthlyDepr: 8_000_000, status: 'aktif' },
+    { id: 'AST-0038', name: 'Genset Cummins 500 kVA', category: 'Instalasi listrik', location: 'Cikarang — Utilitas', acquisitionDate: '2021-02-14', acquisitionCost: 850_000_000, bookValue: 425_000_000, monthlyDepr: 14_166_667, status: 'aktif' },
+    { id: 'AST-0045', name: 'Mobil operasional Toyota Hilux', category: 'Kendaraan operasional', location: 'Jakarta — Pusat', acquisitionDate: '2024-06-10', acquisitionCost: 520_000_000, bookValue: 442_000_000, monthlyDepr: 6_500_000, status: 'aktif' },
+    { id: 'AST-0051', name: 'Server Dell PowerEdge R750', category: 'Perangkat TI', location: 'Jakarta — Pusat', acquisitionDate: '2025-01-08', acquisitionCost: 320_000_000, bookValue: 266_667_000, monthlyDepr: 8_888_889, status: 'aktif' },
+    { id: 'AST-0009', name: 'Mesin bubut konvensional Pinacho', category: 'Mesin produksi', location: 'Cikarang — Lini 1', acquisitionDate: '2016-03-12', acquisitionCost: 380_000_000, bookValue: 0, monthlyDepr: 0, status: 'dihapuskan' },
+    { id: 'AST-0056', name: 'Crane overhead 5T Konecranes', category: 'Peralatan material handling', location: 'Surabaya — Gudang', acquisitionDate: '2023-07-22', acquisitionCost: 680_000_000, bookValue: 510_000_000, monthlyDepr: 11_333_333, status: 'aktif' },
+  ];
+
+  /* --- Pemeliharaan ------------------------------------------------------ */
+  const maintenanceOrders = [
+    { id: 'MNT-2026-0212', asset: 'Hydraulic Press 200T Aida', assetId: 'AST-0022', type: 'Preventif', priority: 'tinggi', assignee: 'Dedi Kurnia', scheduledDate: '2026-08-18', status: 'dijadwalkan', cost: 12_400_000, desc: 'Penggantian oli hidrolik dan filter' },
+    { id: 'MNT-2026-0210', asset: 'Mesin CNC Milling Haas VF-2', assetId: 'AST-0014', type: 'Korektif', priority: 'tinggi', assignee: 'Slamet Riyadi', scheduledDate: '2026-08-15', status: 'berjalan', cost: 28_600_000, desc: 'Perbaikan spindle — getaran abnormal' },
+    { id: 'MNT-2026-0208', asset: 'Forklift Toyota 8FD30', assetId: 'AST-0031', type: 'Preventif', priority: 'sedang', assignee: 'Fitri Ramadhani', scheduledDate: '2026-08-20', status: 'dijadwalkan', cost: 4_800_000, desc: 'Servis berkala 2000 jam' },
+    { id: 'MNT-2026-0206', asset: 'Genset Cummins 500 kVA', assetId: 'AST-0038', type: 'Preventif', priority: 'sedang', assignee: 'Dedi Kurnia', scheduledDate: '2026-08-14', status: 'selesai', cost: 8_200_000, desc: 'Load test dan ganti bahan bakar' },
+    { id: 'MNT-2026-0203', asset: 'Hydraulic Press 200T Aida', assetId: 'AST-0022', type: 'Korektif', priority: 'tinggi', assignee: 'Slamet Riyadi', scheduledDate: '2026-08-10', status: 'selesai', cost: 18_400_000, desc: 'Kebocoran seal silinder — darurat' },
+    { id: 'MNT-2026-0201', asset: 'Crane overhead 5T Konecranes', assetId: 'AST-0056', type: 'Preventif', priority: 'rendah', assignee: 'Fitri Ramadhani', scheduledDate: '2026-08-25', status: 'dijadwalkan', cost: 6_100_000, desc: 'Inspeksi wire rope dan rem' },
+  ];
+
+  /* --- Repositori Dokumen ------------------------------------------------ */
+  const documents = [
+    { id: 'DOC-0421', name: 'Kontrak PT Astra Daihatsu Motor 2026', type: 'Kontrak', folder: 'Penjualan / Kontrak', owner: 'Rina Kusuma', size: '2,4 MB', modified: '2026-08-12', version: 3, status: 'berlaku', expiry: '2027-03-31' },
+    { id: 'DOC-0418', name: 'SOP Penerimaan Barang v4.1', type: 'SOP', folder: 'Operasional / SOP', owner: 'Fitri Ramadhani', size: '840 KB', modified: '2026-07-28', version: 4, status: 'berlaku', expiry: null },
+    { id: 'DOC-0415', name: 'Laporan Audit Internal Q2 2026', type: 'Laporan', folder: 'Kepatuhan / Audit', owner: 'Andi Firmansyah', size: '5,1 MB', modified: '2026-07-15', version: 1, status: 'berlaku', expiry: null },
+    { id: 'DOC-0412', name: 'Sertifikat ISO 9001:2015', type: 'Sertifikat', folder: 'Kepatuhan / Sertifikasi', owner: 'Osmond Pratama', size: '1,2 MB', modified: '2026-01-10', version: 1, status: 'berlaku', expiry: '2027-01-09' },
+    { id: 'DOC-0408', name: 'Kebijakan K3 Pabrik Cikarang', type: 'Kebijakan', folder: 'SDM / Kebijakan', owner: 'Osmond Pratama', size: '620 KB', modified: '2026-06-01', version: 2, status: 'berlaku', expiry: null },
+    { id: 'DOC-0394', name: 'Gambar teknis braket tipe B rev.C', type: 'Teknis', folder: 'Produksi / Gambar Teknis', owner: 'Slamet Riyadi', size: '14,8 MB', modified: '2026-05-22', version: 6, status: 'berlaku', expiry: null },
+    { id: 'DOC-0388', name: 'Perjanjian supplier CV Logam Jaya', type: 'Kontrak', folder: 'Pembelian / Kontrak', owner: 'Bagus Hartono', size: '1,8 MB', modified: '2025-12-15', version: 2, status: 'kedaluwarsa', expiry: '2026-06-30' },
+    { id: 'DOC-0401', name: 'Draft kebijakan WFH 2027', type: 'Kebijakan', folder: 'SDM / Kebijakan', owner: 'Osmond Pratama', size: '340 KB', modified: '2026-08-10', version: 1, status: 'draf', expiry: null },
+  ];
+
+  /* --- POS / Kasir: ikhtisar toko --------------------------------------- */
+  const posShifts = [
+    { id: 'SHF-0842', cashier: 'Anita Permata', store: 'Toko Cikarang', startTime: '08:00', endTime: '16:00', status: 'aktif', openingCash: 500_000, currentCash: 2_840_000, transactions: 28, totalSales: 18_420_000 },
+    { id: 'SHF-0841', cashier: 'Budi Santoso', store: 'Toko Cikarang', startTime: '08:00', endTime: '16:00', status: 'aktif', openingCash: 500_000, currentCash: 1_960_000, transactions: 22, totalSales: 14_680_000 },
+  ];
+
+  const posTransactions = [
+    { id: 'TRX-2026-14921', time: '14:32', cashier: 'Anita Permata', items: 4, total: 1_284_000, payment: 'QRIS', status: 'selesai' },
+    { id: 'TRX-2026-14920', time: '14:18', cashier: 'Budi Santoso', items: 2, total: 486_000, payment: 'Tunai', status: 'selesai' },
+    { id: 'TRX-2026-14919', time: '13:55', cashier: 'Anita Permata', items: 1, total: 96_500, payment: 'Debit', status: 'selesai' },
+    { id: 'TRX-2026-14918', time: '13:41', cashier: 'Budi Santoso', items: 6, total: 2_148_000, payment: 'Transfer', status: 'selesai' },
+    { id: 'TRX-2026-14917', time: '13:22', cashier: 'Anita Permata', items: 3, total: 764_500, payment: 'Tunai', status: 'void' },
+    { id: 'TRX-2026-14916', time: '12:58', cashier: 'Budi Santoso', items: 2, total: 385_000, payment: 'Kredit', status: 'selesai' },
+  ];
+
+  const posKpis = {
+    todaySales: 33_100_000, todayTarget: 40_000_000,
+    transactions: 50, avgBasket: 662_000,
+    topProduct: 'Braket dudukan mesin tipe B',
+    refundRate: 2.0,
+  };
+
+  /* --- Jejak Audit ------------------------------------------------------- */
+  const auditTrail = [
+    { id: 'AUD-9842', timestamp: '2026-08-14 14:23:01', user: 'Rina Kusuma', action: 'Buat', module: 'Pesanan Penjualan', entity: 'SO-2026-0421', detail: 'Pesanan baru untuk PT Sinar Mas Otomotif', ip: '10.10.2.45' },
+    { id: 'AUD-9841', timestamp: '2026-08-14 14:22:58', user: 'Sistem', action: 'Periksa', module: 'Kredit', entity: 'CUST-0004', detail: 'Pemeriksaan plafon kredit otomatis — lolos', ip: '—' },
+    { id: 'AUD-9839', timestamp: '2026-08-14 09:31:00', user: 'Sistem', action: 'Posting', module: 'Keuangan', entity: 'JV-2026-0778', detail: 'Pengakuan pendapatan otomatis dari INV-2026-1188', ip: '—' },
+    { id: 'AUD-9835', timestamp: '2026-08-13 14:23:15', user: 'Rina Kusuma', action: 'Buat', module: 'Pesanan Penjualan', entity: 'SO-2026-0418', detail: 'Pesanan untuk PT Sentosa Baja Perkasa — diteruskan ke approval', ip: '10.10.2.45' },
+    { id: 'AUD-9832', timestamp: '2026-08-13 08:57:22', user: 'Bagus Hartono', action: 'Terima', module: 'Penerimaan Barang', entity: 'GR-2026-0512', detail: 'Penerimaan PO-2026-0229 — 8000 pcs baut hex M12×60', ip: '10.10.3.12' },
+    { id: 'AUD-9828', timestamp: '2026-08-12 11:02:00', user: 'Osmond Pratama', action: 'Setujui', module: 'Pesanan Penjualan', entity: 'SO-2026-0419', detail: 'Persetujuan pesanan CV Karya Presisi', ip: '10.10.1.8' },
+    { id: 'AUD-9824', timestamp: '2026-08-11 16:45:30', user: 'Andi Firmansyah', action: 'Ubah', module: 'Jurnal', entity: 'JV-2026-0774', detail: 'Revisi nominal koreksi penyusutan Jul 2026: Rp 38,1 jt → Rp 42,3 jt', ip: '10.10.1.22' },
+    { id: 'AUD-9820', timestamp: '2026-08-10 07:58:44', user: 'Andi Firmansyah', action: 'Tolak', module: 'Jurnal', entity: 'JV-2026-0771', detail: 'Reklasifikasi biaya angkut ditolak — akun tujuan salah', ip: '10.10.1.22' },
+    { id: 'AUD-9815', timestamp: '2026-08-09 09:12:00', user: 'Osmond Pratama', action: 'Ubah', module: 'Peran', entity: 'ROLE-gudang', detail: 'Izin transfer antar gudang: lihat saja → ubah & setujui', ip: '10.10.1.8' },
+    { id: 'AUD-9810', timestamp: '2026-08-08 14:30:00', user: 'Dewi Anggraini', action: 'Buat', module: 'Permintaan Pembelian', entity: 'PR-2026-0088', detail: 'Peti kayu ekspor tambahan Q3 — Rp 52,3 jt', ip: '10.10.3.18' },
+  ];
+
   return {
     org, nav, kpis, revenueTrend, revenueByLine, inventoryMix, arAging,
     approvals, stockAlerts, activity, notifications,
@@ -1773,6 +2105,13 @@ const DATA = (() => {
     customers, invoices, purchaseOrders, suppliers,
     stockItems, stockMoves, workOrderColumns, workOrders,
     journals, employees, roles, permissions,
+    /* Modul baru */
+    aiBriefing, aiMessages,
+    crmStages, leads, quotations, purchaseRequests,
+    projects, projectTasks,
+    budgets, payroll, assets, maintenanceOrders,
+    documents, posShifts, posTransactions, posKpis,
+    auditTrail,
   };
 })();
 
@@ -2340,6 +2679,20 @@ const Charts = (() => {
     eye: '<path d="M1.2 8S3.8 3.6 8 3.6 14.8 8 14.8 8 12.2 12.4 8 12.4 1.2 8 1.2 8z"/><circle cx="8" cy="8" r="1.9"/>',
     external: '<path d="M9.2 2.4h4.4v4.4"/><path d="M13.6 2.4 7.2 8.8"/><path d="M12 9.6v3.4a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1V5.4a1 1 0 0 1 1-1h3.4"/>',
     logout: '<path d="M6.2 2.4H3.4a1 1 0 0 0-1 1v9.2a1 1 0 0 0 1 1h2.8"/><path d="M10 5 13 8l-3 3"/><path d="M13 8H6.4"/>',
+    /* Ikon baru untuk modul tambahan */
+    target: '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3.6"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/>',
+    quote: '<path d="M3 4.6h10a1 1 0 0 1 1 1v6.8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1z"/><path d="M5 2v2.6M11 2v2.6M5 8.4h6M5 10.8h3"/>',
+    barcode: '<path d="M2 3.4v9.2M5 3.4v9.2M7 3.4v9.2M8.6 3.4v9.2M11 3.4v9.2M14 3.4v9.2M3.4 3.4v9.2" stroke-width="0.9"/>',
+    clipboard: '<path d="M5.6 2.4h4.8v2H5.6z"/><path d="M4.2 3.4H3.4a1 1 0 0 0-1 1v9.2a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1V4.4a1 1 0 0 0-1-1h-.8"/><path d="M5.6 8h4.8M5.6 10.6h3"/>',
+    gantt: '<path d="M2 3.2h12M2 8h12M2 12.8h12"/><rect x="4" y="4.4" width="5" height="2.4" rx=".6"/><rect x="6" y="9.2" width="5.5" height="2.4" rx=".6"/>',
+    piechart: '<path d="M8 2.4A5.6 5.6 0 1 1 2.4 8H8V2.4z"/><path d="M10 1.8a5.6 5.6 0 0 1 4.2 5.4H10V1.8z"/>',
+    banknote: '<rect x="1.5" y="4" width="13" height="8" rx="1.4"/><circle cx="8" cy="8" r="2"/><path d="M4.2 4v8M11.8 4v8"/>',
+    landmark: '<path d="M2 13.6h12M3.4 6.2h9.2L8 2.2z"/><path d="M4.2 6.2v5.6M7 6.2v5.6M9 6.2v5.6M11.8 6.2v5.6"/><path d="M2.6 11.8h10.8"/>',
+    wrench: '<path d="M4.2 10.8 10.8 4.2a2.6 2.6 0 0 1 3.5.1l-2 2 .5 1.4 1.4.5 2-.1a2.6 2.6 0 0 1-.1 2.3l-6.6 6.6a2 2 0 0 1-2.8 0l-2.5-2.5a2 2 0 0 1 0-2.8z" d="M5.2 11.4l-2.8 2.8"/>',
+    folder: '<path d="M2 4.6V12a1.4 1.4 0 0 0 1.4 1.4h9.2A1.4 1.4 0 0 0 14 12V6.8a1.4 1.4 0 0 0-1.4-1.4H8L6.4 3.6H3.4A1.4 1.4 0 0 0 2 5z"/>',
+    scroll: '<path d="M12 2.4H5.6A1.6 1.6 0 0 0 4 4v8a1.6 1.6 0 0 0 1.6 1.6h8V4a1.6 1.6 0 0 0-1.6-1.6z"/><path d="M4 12a1.6 1.6 0 0 1-1.6-1.6V4.8"/><path d="M7 6h3.6M7 8.4h3.6M7 10.8h2"/>',
+    sparkle: '<path d="M8 1.4l1.2 4.2L13.4 6.8 9.2 8l-1.2 4.2L6.8 8 2.6 6.8l4.2-1.2z"/><path d="M12 11l.5 1.6 1.5.4-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.4z"/>',
+    send: '<path d="M14.4 1.6 6.6 9.4"/><path d="M14.4 1.6l-4.4 12.8-2.6-6.2-6.2-2.6z"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -2379,6 +2732,26 @@ const Charts = (() => {
     aman: { label: 'Aman', tone: 'ok' },
     menipis: { label: 'Menipis', tone: 'warn' },
     habis: { label: 'Habis', tone: 'danger' },
+    /* Status modul baru */
+    terkirim: { label: 'Terkirim', tone: 'info' },
+    diterima: { label: 'Diterima', tone: 'ok' },
+    kedaluwarsa: { label: 'Kedaluwarsa', tone: 'danger' },
+    tinggi: { label: 'Tinggi', tone: 'danger' },
+    sedang: { label: 'Sedang', tone: 'warn' },
+    rendah: { label: 'Rendah' },
+    dijadwalkan: { label: 'Dijadwalkan', tone: 'info' },
+    berlaku: { label: 'Berlaku', tone: 'ok' },
+    dibayar: { label: 'Dibayar', tone: 'ok' },
+    diproses: { label: 'Diproses', tone: 'info' },
+    dihapuskan: { label: 'Dihapuskan' },
+    berjalan: { label: 'Berjalan', tone: 'accent' },
+    perencanaan: { label: 'Perencanaan' },
+    hijau: { label: 'Hijau', tone: 'ok' },
+    kuning: { label: 'Kuning', tone: 'warn' },
+    merah: { label: 'Merah', tone: 'danger' },
+    void: { label: 'Void', tone: 'danger' },
+    preventif: { label: 'Preventif', tone: 'info' },
+    korektif: { label: 'Korektif', tone: 'warn' },
   };
 
   /** Status selalu ikon + teks — tidak pernah warna saja. */
@@ -2403,6 +2776,7 @@ const Charts = (() => {
     overlay: null,      // {kind, ...}
     lastFocus: null,
     toastSeq: 0,
+    aiCopilotOpen: false,
   };
 
   const regState = (id) => (state.reg[id] ||= {
@@ -2652,6 +3026,158 @@ const Charts = (() => {
         { key: 'status', label: 'Status', render: (r) => pill(r.status) },
       ],
     },
+    /* ------------------------------------------------------------------ */
+    /* Register baru dari blueprint                                       */
+    /* ------------------------------------------------------------------ */
+
+    penawaran: {
+      title: 'Penawaran',
+      sub: 'Daftar quotation beserta status pengiriman dan masa berlaku.',
+      rows: () => DATA.quotations,
+      key: 'id',
+      search: ['id', 'customer', 'pic', 'opp'],
+      statusKey: 'status',
+      statuses: ['draf', 'terkirim', 'diterima', 'ditolak'],
+      selectable: true,
+      primary: { label: 'Penawaran baru', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'customer', label: 'Pelanggan', cls: 'cell-strong' },
+        { key: 'amount', label: 'Nilai', align: 'r', render: (r) => money(r.amount) },
+        { key: 'validity', label: 'Berlaku s/d', render: (r) => `<span class="num">${FMT.date(r.validity)}</span>` },
+        { key: 'pic', label: 'Penanggung jawab' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    'permintaan-pembelian': {
+      title: 'Permintaan Pembelian',
+      sub: 'Permintaan pengadaan internal dari unit kerja.',
+      rows: () => DATA.purchaseRequests,
+      key: 'id',
+      search: ['id', 'requestor', 'dept', 'desc'],
+      statusKey: 'status',
+      statuses: ['menunggu', 'disetujui', 'selesai', 'ditolak'],
+      selectable: true,
+      primary: { label: 'Permintaan baru', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'requestor', label: 'Pemohon', render: (r) => `<span class="cell-strong">${esc(r.requestor)}</span><span class="cell-sub">${esc(r.dept)}</span>` },
+        { key: 'desc', label: 'Keterangan' },
+        { key: 'amount', label: 'Perkiraan nilai', align: 'r', render: (r) => money(r.amount) },
+        { key: 'priority', label: 'Prioritas', value: (r) => ({ tinggi: 0, sedang: 1, rendah: 2 }[r.priority]), render: (r) => pill(r.priority) },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    penggajian: {
+      title: 'Penggajian',
+      sub: 'Slip gaji karyawan periode berjalan.',
+      rows: () => DATA.payroll,
+      key: 'id',
+      search: ['id', 'name', 'dept', 'employeeId'],
+      statusKey: 'status',
+      statuses: ['dibayar', 'diproses', 'draf'],
+      primary: { label: 'Proses penggajian', action: 'demo' },
+      sort: { key: 'name', dir: 'asc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code' },
+        { key: 'name', label: 'Karyawan', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub code">${esc(r.employeeId)} · ${esc(r.dept)}</span>` },
+        { key: 'basic', label: 'Gaji pokok', align: 'r', render: (r) => money(r.basic) },
+        { key: 'allowance', label: 'Tunjangan', align: 'r', render: (r) => money(r.allowance) },
+        { key: 'deduction', label: 'Potongan', align: 'r', render: (r) => `<span class="num neg">${FMT.rpCompact(r.deduction)}</span>` },
+        { key: 'netPay', label: 'Gaji bersih', align: 'r', render: (r) => `<b class="num">${FMT.rpCompact(r.netPay)}</b>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    aset: {
+      title: 'Daftar Aset',
+      sub: 'Aset tetap beserta nilai buku dan penyusutan bulanan.',
+      rows: () => DATA.assets,
+      key: 'id',
+      search: ['id', 'name', 'category', 'location'],
+      statusKey: 'status',
+      statuses: ['aktif', 'dihapuskan'],
+      primary: { label: 'Tambah aset', action: 'demo' },
+      sort: { key: 'bookValue', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama aset', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.category)} · ${esc(r.location)}</span>` },
+        { key: 'acquisitionDate', label: 'Tgl perolehan', render: (r) => `<span class="num">${FMT.date(r.acquisitionDate)}</span>` },
+        { key: 'acquisitionCost', label: 'Nilai perolehan', align: 'r', render: (r) => money(r.acquisitionCost) },
+        { key: 'bookValue', label: 'Nilai buku', align: 'r', render: (r) => money(r.bookValue) },
+        { key: 'monthlyDepr', label: 'Penyusutan/bln', align: 'r', render: (r) => r.monthlyDepr ? money(r.monthlyDepr) : '<span class="muted">—</span>' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    pemeliharaan: {
+      title: 'Pemeliharaan',
+      sub: 'Jadwal dan riwayat perawatan aset, preventif maupun korektif.',
+      rows: () => DATA.maintenanceOrders,
+      key: 'id',
+      search: ['id', 'asset', 'assignee', 'desc'],
+      statusKey: 'status',
+      statuses: ['dijadwalkan', 'berjalan', 'selesai'],
+      selectable: true,
+      primary: { label: 'Jadwalkan perawatan', action: 'demo' },
+      sort: { key: 'scheduledDate', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'asset', label: 'Aset', render: (r) => `<span class="cell-strong">${esc(r.asset)}</span><span class="cell-sub code">${esc(r.assetId)}</span>` },
+        { key: 'type', label: 'Jenis' },
+        { key: 'priority', label: 'Prioritas', value: (r) => ({ tinggi: 0, sedang: 1, rendah: 2 }[r.priority]), render: (r) => pill(r.priority) },
+        { key: 'assignee', label: 'Penanggung jawab' },
+        { key: 'scheduledDate', label: 'Jadwal', render: (r) => `<span class="num">${FMT.date(r.scheduledDate)}</span>` },
+        { key: 'cost', label: 'Biaya', align: 'r', render: (r) => money(r.cost) },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    dokumen: {
+      title: 'Repositori Dokumen',
+      sub: 'Dokumen perusahaan — kontrak, SOP, sertifikat, dan kebijakan.',
+      rows: () => DATA.documents,
+      key: 'id',
+      search: ['id', 'name', 'type', 'folder', 'owner'],
+      statusKey: 'status',
+      statuses: ['berlaku', 'draf', 'kedaluwarsa'],
+      primary: { label: 'Unggah dokumen', action: 'demo' },
+      sort: { key: 'modified', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.folder)}</span>` },
+        { key: 'type', label: 'Jenis' },
+        { key: 'version', label: 'Versi', cls: 'num', render: (r) => `<span class="num">v${r.version}</span>` },
+        { key: 'owner', label: 'Pemilik' },
+        { key: 'modified', label: 'Diubah', render: (r) => `<span class="num">${FMT.date(r.modified)}</span>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    'jejak-audit': {
+      title: 'Jejak Audit',
+      sub: 'Catatan semua tindakan pengguna dan sistem di seluruh modul.',
+      rows: () => DATA.auditTrail,
+      key: 'id',
+      search: ['id', 'user', 'action', 'module', 'entity', 'detail'],
+      sort: { key: 'timestamp', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'ID', cls: 'code' },
+        { key: 'timestamp', label: 'Waktu', render: (r) => `<span class="num" style="font-size:var(--fs-cap)">${esc(r.timestamp)}</span>` },
+        { key: 'user', label: 'Pengguna', cls: 'cell-strong' },
+        { key: 'action', label: 'Tindakan' },
+        { key: 'module', label: 'Modul' },
+        { key: 'entity', label: 'Entitas', cls: 'code' },
+        { key: 'detail', label: 'Keterangan' },
+        { key: 'ip', label: 'IP', cls: 'code' },
+      ],
+    },
   };
 
   const PAGE_SIZE = 10;
@@ -2668,6 +3194,10 @@ const Charts = (() => {
       peran: { title: 'Peran & Izin', sub: 'Matriks hak akses tiap peran terhadap modul dan tindakan.' },
       pengaturan: { title: 'Pengaturan', sub: 'Profil perusahaan, kebijakan dokumen, dan preferensi tampilan.' },
       'sistem-desain': { title: 'Sistem Desain', sub: 'Token, tipografi, dan komponen yang menyusun purwarupa ini.' },
+      lead: { title: 'Pipeline CRM', sub: 'Peluang penjualan dari prospek hingga closing, beserta nilai dan probabilitasnya.' },
+      kasir: { title: 'Kasir (POS)', sub: 'Ikhtisar shift kasir, transaksi hari ini, dan pencapaian target penjualan toko.' },
+      proyek: { title: 'Manajemen Proyek', sub: 'Progres proyek, kesehatan anggaran, dan linimasa tugas utama.' },
+      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya.' },
     })[id] || { title: 'Halaman', sub: '' };
   }
 
@@ -3868,6 +4398,22 @@ const Charts = (() => {
       const items = DATA.stockItems.filter((r) => match(r.name) || match(r.sku)).slice(0, 4)
         .map((r) => ({ label: `${r.sku} — ${r.name}`, hint: `${FMT.int(r.onHand)} ${r.unit}`, icon: 'boxes', go: () => { setView('stok'); } }));
       if (items.length) groups.push({ label: 'Stok barang', items });
+
+      const leads = DATA.leads.filter((r) => match(r.name) || match(r.company) || match(r.id)).slice(0, 4)
+        .map((r) => ({ label: `${r.id} — ${r.company}`, hint: FMT.rpCompact(r.value), icon: 'target', go: () => setView('lead') }));
+      if (leads.length) groups.push({ label: 'Peluang CRM', items: leads });
+
+      const prj = DATA.projects.filter((r) => match(r.name) || match(r.id) || match(r.customer)).slice(0, 4)
+        .map((r) => ({ label: r.name, hint: `${r.progress}%`, icon: 'gantt', go: () => setView('proyek') }));
+      if (prj.length) groups.push({ label: 'Proyek', items: prj });
+
+      const ast = DATA.assets.filter((r) => match(r.name) || match(r.id) || match(r.category)).slice(0, 4)
+        .map((r) => ({ label: `${r.id} — ${r.name}`, hint: FMT.rpCompact(r.bookValue), icon: 'landmark', go: () => setView('aset') }));
+      if (ast.length) groups.push({ label: 'Aset', items: ast });
+
+      const docs = DATA.documents.filter((r) => match(r.name) || match(r.id) || match(r.type)).slice(0, 4)
+        .map((r) => ({ label: r.name, hint: r.type, icon: 'folder', go: () => setView('dokumen') }));
+      if (docs.length) groups.push({ label: 'Dokumen', items: docs });
     } else {
       groups.push({
         label: 'Tindakan cepat',
@@ -4015,8 +4561,331 @@ const Charts = (() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
+  /* ====================================================================== */
+  /* CRM Pipeline Board                                                     */
+  /* ====================================================================== */
+  function renderCRMBoard() {
+    const activeStages = DATA.crmStages.filter((s) => s.id !== 'menang' && s.id !== 'kalah');
+    const wonLeads = DATA.leads.filter((l) => l.stage === 'menang');
+    const lostLeads = DATA.leads.filter((l) => l.stage === 'kalah');
+    const pipelineValue = DATA.leads.filter((l) => l.stage !== 'menang' && l.stage !== 'kalah')
+      .reduce((s, l) => s + l.value, 0);
+    const weightedValue = DATA.leads.filter((l) => l.stage !== 'menang' && l.stage !== 'kalah')
+      .reduce((s, l) => s + l.value * l.prob / 100, 0);
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Nilai Pipeline</span>
+          <span class="kpi-metric">${FMT.rpCompact(pipelineValue)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Tertimbang</span>
+          <span class="kpi-metric">${FMT.rpCompact(weightedValue)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Menang</span>
+          <span class="kpi-metric pos">${wonLeads.length} <small>peluang</small></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Kalah</span>
+          <span class="kpi-metric neg">${lostLeads.length} <small>peluang</small></span>
+        </div>
+      </div>`;
+
+    const cols = activeStages.map((stage) => {
+      const items = DATA.leads.filter((l) => l.stage === stage.id);
+      const stageVal = items.reduce((s, l) => s + l.value, 0);
+      return `
+        <div class="board-col">
+          <div class="board-col-head">
+            <span class="board-col-title">${esc(stage.label)}</span>
+            <span class="board-col-count">${items.length} · ${FMT.rpCompact(stageVal)}</span>
+          </div>
+          ${items.map((l) => `
+            <div class="board-card crm-card" data-lead="${esc(l.id)}">
+              <div class="board-card-head">
+                <span class="cell-strong" style="font-size:var(--fs-sm)">${esc(l.name)}</span>
+              </div>
+              <span class="cell-sub">${esc(l.company)}</span>
+              <div class="crm-card-meta">
+                <span class="num" style="font-weight:600">${FMT.rpCompact(l.value)}</span>
+                <span class="pill" data-tone="${l.prob >= 60 ? 'ok' : l.prob >= 30 ? 'warn' : ''}"><i class="pill-dot"></i>${l.prob}%</span>
+              </div>
+              <div class="cell-sub" style="margin-top:var(--sp-1)">
+                ${icon('users', 'icon-inline')} ${esc(l.assignee)} · ${esc(l.nextAction)}
+              </div>
+            </div>`).join('')}
+        </div>`;
+    }).join('');
+
+    return `${kpis}<div class="board">${cols}</div>`;
+  }
+
+  /* ====================================================================== */
+  /* POS / Kasir                                                             */
+  /* ====================================================================== */
+  function renderPOS() {
+    const k = DATA.posKpis;
+    const pct = Math.min(100, (k.todaySales / k.todayTarget) * 100);
+    const tone = pct >= 90 ? 'ok' : pct >= 60 ? 'warn' : 'danger';
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Penjualan Hari Ini</span>
+          <span class="kpi-metric">${FMT.rpCompact(k.todaySales)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" data-tone="${tone}" style="width:${pct}%"></span></span><span class="meter-val">${FMT.pct(pct, 0)} target</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Transaksi</span>
+          <span class="kpi-metric">${FMT.int(k.transactions)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Rata-rata Keranjang</span>
+          <span class="kpi-metric">${FMT.rpCompact(k.avgBasket)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Tingkat Refund</span>
+          <span class="kpi-metric${k.refundRate > 3 ? ' neg' : ''}">${FMT.pct(k.refundRate)}%</span>
+        </div>
+      </div>`;
+
+    const shifts = `
+      <section class="card" style="margin-bottom:var(--sp-5)">
+        <div class="card-head"><h3 class="card-title">${icon('users')} Shift Aktif</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>Shift</th><th>Kasir</th><th>Toko</th><th>Waktu</th><th class="r">Kas Awal</th><th class="r">Kas Saat Ini</th><th class="r">Transaksi</th><th class="r">Penjualan</th><th>Status</th></tr></thead>
+          <tbody>${DATA.posShifts.map((s) => `<tr>
+            <td class="code">${esc(s.id)}</td>
+            <td class="cell-strong">${esc(s.cashier)}</td>
+            <td>${esc(s.store)}</td>
+            <td class="num">${esc(s.startTime)}–${esc(s.endTime)}</td>
+            <td class="r num">${FMT.rpCompact(s.openingCash)}</td>
+            <td class="r num">${FMT.rpCompact(s.currentCash)}</td>
+            <td class="r num">${s.transactions}</td>
+            <td class="r num">${FMT.rpCompact(s.totalSales)}</td>
+            <td>${pill(s.status)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>`;
+
+    const txns = `
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('cart')} Transaksi Terakhir</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>No. Transaksi</th><th>Waktu</th><th>Kasir</th><th class="r">Item</th><th class="r">Total</th><th>Pembayaran</th><th>Status</th></tr></thead>
+          <tbody>${DATA.posTransactions.map((t) => `<tr>
+            <td class="code cell-strong">${esc(t.id)}</td>
+            <td class="num">${esc(t.time)}</td>
+            <td>${esc(t.cashier)}</td>
+            <td class="r num">${t.items}</td>
+            <td class="r num">${FMT.rpCompact(t.total)}</td>
+            <td>${esc(t.payment)}</td>
+            <td>${pill(t.status)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>`;
+
+    return kpis + shifts + txns;
+  }
+
+  /* ====================================================================== */
+  /* Manajemen Proyek                                                        */
+  /* ====================================================================== */
+  function renderProjects() {
+    const chips = ['semua', 'berjalan', 'perencanaan', 'selesai'];
+    const filter = state.boardFilter;
+    const filtered = filter === 'semua' ? DATA.projects : DATA.projects.filter((p) => p.status === filter);
+
+    const chipBar = `<div class="chip-bar" style="margin-bottom:var(--sp-4)">${chips.map((c) =>
+      `<button class="chip${c === filter ? ' on' : ''}" data-board-filter="${c}">${c === 'semua' ? 'Semua' : STATUS[c]?.label || c}</button>`
+    ).join('')}</div>`;
+
+    const cards = filtered.map((p) => {
+      const budgetPct = Math.min(100, (p.actual / p.budget) * 100);
+      const budgetTone = budgetPct > 90 ? 'danger' : budgetPct > 75 ? 'warn' : '';
+      const tasks = DATA.projectTasks[p.id] || [];
+      const ganttStart = new Date(p.startDate).getTime();
+      const ganttEnd = new Date(p.endDate).getTime();
+      const ganttSpan = ganttEnd - ganttStart || 1;
+
+      const ganttBars = tasks.length ? `
+        <div class="gantt" style="margin-top:var(--sp-3)">
+          ${tasks.map((t) => {
+            const tStart = Math.max(0, (new Date(t.start).getTime() - ganttStart) / ganttSpan * 100);
+            const tWidth = Math.max(2, Math.min(100 - tStart, (new Date(t.end).getTime() - new Date(t.start).getTime()) / ganttSpan * 100));
+            return `<div class="gantt-row">
+              <span class="gantt-label">${esc(t.name)}</span>
+              <span class="gantt-track">
+                <span class="gantt-bar" style="left:${tStart}%;width:${tWidth}%">
+                  <span class="gantt-fill" style="width:${t.progress}%" data-tone="${t.progress === 100 ? 'ok' : t.progress > 0 ? 'accent' : ''}"></span>
+                </span>
+              </span>
+            </div>`;
+          }).join('')}
+        </div>` : '';
+
+      return `
+        <section class="card project-card" style="margin-bottom:var(--sp-4)">
+          <div class="card-head" style="align-items:flex-start">
+            <div>
+              <h3 class="card-title">${esc(p.name)}</h3>
+              <span class="cell-sub"><span class="code">${esc(p.id)}</span> · ${esc(p.customer)} · PM: ${esc(p.pm)}</span>
+            </div>
+            <div style="display:flex;gap:var(--sp-2);align-items:center">
+              ${pill(p.health)}
+              ${pill(p.status)}
+            </div>
+          </div>
+          <div class="project-stats">
+            <div>
+              <span class="cell-sub">Progres</span>
+              <span class="meter"><span class="meter-track"><span class="meter-fill" data-tone="${p.progress === 100 ? 'ok' : 'accent'}" style="width:${p.progress}%"></span></span><span class="meter-val">${p.progress}%</span></span>
+            </div>
+            <div>
+              <span class="cell-sub">Anggaran</span>
+              <span class="meter"><span class="meter-track"><span class="meter-fill"${budgetTone ? ` data-tone="${budgetTone}"` : ''} style="width:${budgetPct}%"></span></span><span class="meter-val">${FMT.rpCompact(p.actual)} / ${FMT.rpCompact(p.budget)}</span></span>
+            </div>
+            <div>
+              <span class="cell-sub">Periode</span>
+              <span class="num">${FMT.date(p.startDate)} — ${FMT.date(p.endDate)}</span>
+            </div>
+          </div>
+          ${ganttBars}
+        </section>`;
+    }).join('');
+
+    return chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
+  }
+
+  /* ====================================================================== */
+  /* Anggaran & Pengendalian Biaya                                           */
+  /* ====================================================================== */
+  function renderBudget() {
+    const totalBudget = DATA.budgets.reduce((s, b) => s + b.budget, 0);
+    const totalActual = DATA.budgets.reduce((s, b) => s + b.actual, 0);
+    const totalForecast = DATA.budgets.reduce((s, b) => s + b.forecast, 0);
+    const overallPct = (totalActual / totalBudget * 100);
+    const overallTone = overallPct > 95 ? 'danger' : overallPct > 80 ? 'warn' : '';
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Total Anggaran</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalBudget)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Realisasi</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalActual)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${overallTone ? ` data-tone="${overallTone}"` : ''} style="width:${Math.min(100, overallPct)}%"></span></span><span class="meter-val">${FMT.pct(overallPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Prakiraan</span>
+          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ''}">${FMT.rpCompact(totalForecast)}</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Varians</span>
+          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ' pos'}">${totalForecast > totalBudget ? '+' : ''}${FMT.rpCompact(totalForecast - totalBudget)}</span>
+        </div>
+      </div>`;
+
+    const rows = DATA.budgets.map((b) => {
+      const usedPct = Math.min(100, b.actual / b.budget * 100);
+      const commitPct = Math.min(100 - usedPct, b.commitment / b.budget * 100);
+      const forecastOver = b.forecast > b.budget;
+      const tone = usedPct > 90 ? 'danger' : usedPct > 75 ? 'warn' : '';
+      return `<tr>
+        <td class="code">${esc(b.costCenter)}</td>
+        <td class="cell-strong">${esc(b.dept)}</td>
+        <td>${esc(b.type)}</td>
+        <td class="r num">${FMT.rpCompact(b.budget)}</td>
+        <td class="r num">${FMT.rpCompact(b.actual)}</td>
+        <td>
+          <span class="budget-bar">
+            <span class="budget-bar-track">
+              <span class="budget-bar-actual"${tone ? ` data-tone="${tone}"` : ''} style="width:${usedPct}%"></span>
+              <span class="budget-bar-commit" style="left:${usedPct}%;width:${commitPct}%"></span>
+            </span>
+            <span class="meter-val">${FMT.pct(usedPct, 0)}</span>
+          </span>
+        </td>
+        <td class="r num">${FMT.rpCompact(b.commitment)}</td>
+        <td class="r num${forecastOver ? ' neg' : ''}">${FMT.rpCompact(b.forecast)}</td>
+      </tr>`;
+    }).join('');
+
+    const table = `
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('piechart')} Realisasi per Pusat Biaya</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Unit Kerja</th><th>Tipe</th>
+            <th class="r">Anggaran</th><th class="r">Realisasi</th>
+            <th>Penyerapan</th><th class="r">Komitmen</th><th class="r">Prakiraan</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+
+    return kpis + table;
+  }
+
+  /* ====================================================================== */
+  /* AI Copilot floating panel                                               */
+  /* ====================================================================== */
+  function renderAICopilot() {
+    const open = state.aiCopilotOpen;
+    const messages = DATA.aiMessages || [];
+    const msgHtml = messages.map((m) => {
+      const cls = m.role === 'user' ? 'ai-msg ai-msg-user' : 'ai-msg ai-msg-assistant';
+      /* Simple markdown-ish: bold, line breaks */
+      let text = esc(m.text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+      /* Render simple tables in AI messages */
+      if (m.text.includes('|')) {
+        const lines = m.text.split('\n');
+        let inTable = false;
+        let tableHtml = '<div class="tbl-wrap" style="margin:var(--sp-2) 0"><table class="tbl tbl-sm">';
+        let outLines = [];
+        for (const line of lines) {
+          const stripped = line.trim();
+          if (stripped.startsWith('|') && stripped.endsWith('|')) {
+            const cells = stripped.split('|').filter(Boolean).map((c) => c.trim());
+            if (cells.every((c) => /^[-:]+$/.test(c))) continue; // separator
+            if (!inTable) { inTable = true; tableHtml += '<thead><tr>' + cells.map((c) => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>'; }
+            else tableHtml += '<tr>' + cells.map((c) => `<td>${esc(c)}</td>`).join('') + '</tr>';
+          } else {
+            if (inTable) { tableHtml += '</tbody></table></div>'; outLines.push(tableHtml); inTable = false; tableHtml = '<div class="tbl-wrap" style="margin:var(--sp-2) 0"><table class="tbl tbl-sm">'; }
+            outLines.push(esc(stripped).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'));
+          }
+        }
+        if (inTable) { tableHtml += '</tbody></table></div>'; outLines.push(tableHtml); }
+        text = outLines.join('<br>');
+      }
+      return `<div class="${cls}"><div class="ai-msg-bubble">${text}</div></div>`;
+    }).join('');
+
+    return `
+      <button class="ai-fab" data-action="toggle-copilot" title="AI Copilot" aria-label="AI Copilot">
+        ${icon('sparkle')}
+      </button>
+      ${open ? `
+      <aside class="ai-panel" role="complementary" aria-label="AI Copilot">
+        <div class="ai-panel-head">
+          <span class="ai-panel-title">${icon('sparkle')} AI Copilot</span>
+          <button class="btn-icon" data-action="toggle-copilot" title="Tutup">${icon('x')}</button>
+        </div>
+        <div class="ai-panel-body" id="ai-messages">${msgHtml}</div>
+        <div class="ai-panel-input">
+          <input type="text" class="input" placeholder="Tanyakan ke AI Copilot…" data-ai-input aria-label="Tanyakan ke AI Copilot">
+          <button class="btn btn-sm" data-action="ai-send" title="Kirim">${icon('send')}</button>
+        </div>
+      </aside>` : ''}`;
+  }
+
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
-    ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain'].includes(id);
+    ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
+     'lead', 'kasir', 'proyek', 'anggaran'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -4028,6 +4897,10 @@ const Charts = (() => {
       case 'peran': return renderRoles();
       case 'pengaturan': return renderSettings();
       case 'sistem-desain': return renderDesignSystem();
+      case 'lead': return renderCRMBoard();
+      case 'kasir': return renderPOS();
+      case 'proyek': return renderProjects();
+      case 'anggaran': return renderBudget();
       default: return renderDashboard();
     }
   }
@@ -4044,7 +4917,8 @@ const Charts = (() => {
         <main class="content" id="content">
           <div class="content-inner">${renderView()}</div>
         </main>
-      </div>`;
+      </div>
+      ${renderAICopilot()}`;
 
     const root = $('#content');
     if (state.view === 'dasbor') mountDashboard(root);
@@ -4116,6 +4990,29 @@ const Charts = (() => {
       const row = DATA.salesOrders.find((r) => r.id === approval.dataset.approval);
       if (row) { setView('pesanan-penjualan'); openDrawer(salesOrderDrawer(row)); }
       else toast('Belum tersedia di purwarupa', `Rekaman ${approval.dataset.approval} berada di modul lain.`, 'warn');
+      return;
+    }
+
+    const leadCard = t.closest('[data-lead]');
+    if (leadCard) {
+      const l = DATA.leads.find((x) => x.id === leadCard.dataset.lead);
+      if (l) {
+        openDrawer({
+          title: l.name, subtitle: `${l.id} · ${l.company}`,
+          status: l.stage === 'menang' ? 'diterima' : l.stage === 'kalah' ? 'ditolak' : 'berjalan',
+          sections: [
+            { label: 'Detail Peluang', pairs: [
+              ['Perusahaan', l.company], ['Nilai', FMT.rpCompact(l.value)],
+              ['Probabilitas', `${l.prob}%`], ['Sumber', l.source],
+              ['Penanggung jawab', l.assignee], ['Tahap', l.stage],
+            ]},
+            { label: 'Tindakan Selanjutnya', pairs: [
+              ['Aktivitas terakhir', FMT.date(l.lastActivity)],
+              ['Langkah berikut', l.nextAction],
+            ]},
+          ],
+        });
+      }
       return;
     }
 
@@ -4268,6 +5165,27 @@ const Charts = (() => {
       case 'switch-company': case 'switch-branch': case 'switch-period':
         toast('Pemilih konteks', 'Pada purwarupa ini konteks perusahaan, cabang, dan periode belum dapat diganti.', 'warn');
         break;
+
+      case 'toggle-copilot':
+        state.aiCopilotOpen = !state.aiCopilotOpen;
+        render();
+        if (state.aiCopilotOpen) {
+          const body = document.getElementById('ai-messages');
+          if (body) body.scrollTop = body.scrollHeight;
+        }
+        break;
+
+      case 'ai-send': {
+        const inp = $('[data-ai-input]');
+        if (inp && inp.value.trim()) {
+          DATA.aiMessages.push({ role: 'user', text: inp.value.trim() });
+          DATA.aiMessages.push({ role: 'assistant', text: 'Saya sedang menganalisis data Anda. Fitur ini tersedia pada versi produksi dengan koneksi ke AI backend.' });
+          render();
+          const body = document.getElementById('ai-messages');
+          if (body) body.scrollTop = body.scrollHeight;
+        }
+        break;
+      }
 
       case 'toggle': break;
 

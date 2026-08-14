@@ -17,6 +17,8 @@ const VIEWS = [
   'dasbor', 'pesanan-penjualan', 'faktur', 'pelanggan', 'pesanan-pembelian',
   'pemasok', 'stok', 'mutasi', 'perintah-kerja', 'piutang', 'jurnal',
   'karyawan', 'peran', 'pengaturan', 'sistem-desain',
+  'lead', 'penawaran', 'kasir', 'permintaan-pembelian', 'proyek',
+  'anggaran', 'penggajian', 'aset', 'pemeliharaan', 'dokumen', 'jejak-audit',
 ];
 
 const problems = [];
