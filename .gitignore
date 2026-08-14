@@ -1,0 +1,7 @@
+node_modules/
+
+# Keluaran build yang tidak perlu diversikan.
+# dist/prototipe.html sengaja ikut diversikan agar purwarupa dapat dibuka
+# tanpa menjalankan build terlebih dahulu.
+dist/artifact.html
+dist/shots/

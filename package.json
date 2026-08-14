@@ -1,0 +1,19 @@
+{
+  "name": "erpenterprise",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Purwarupa UI/UX untuk aplikasi ERP Enterprise",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node tools/build.mjs && node tools/smoke.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrOsmond-STU/erpenterprise.git"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}
