@@ -21,7 +21,16 @@ const DATA = (() => {
   const nav = [
     {
       label: 'Ikhtisar',
-      items: [{ id: 'dasbor', label: 'Dasbor', icon: 'grid' }],
+      items: [
+        { id: 'dasbor', label: 'Dasbor', icon: 'grid' },
+        { id: 'persetujuan', label: 'Kotak Persetujuan', icon: 'inbox', count: 5 },
+      ],
+    },
+    {
+      label: 'Data Master',
+      items: [
+        { id: 'data-master', label: 'Produk & Layanan', icon: 'database' },
+      ],
     },
     {
       label: 'CRM',
@@ -48,15 +57,17 @@ const DATA = (() => {
       label: 'Pembelian',
       items: [
         { id: 'permintaan-pembelian', label: 'Permintaan Pembelian', icon: 'clipboard', count: 8 },
+        { id: 'rfq', label: 'RFQ & Vendor', icon: 'scale', count: 4 },
         { id: 'pesanan-pembelian', label: 'Pesanan Pembelian', icon: 'truck', count: 34 },
         { id: 'pemasok', label: 'Pemasok', icon: 'handshake' },
       ],
     },
     {
-      label: 'Inventaris',
+      label: 'Inventaris & Rantai Pasok',
       items: [
         { id: 'stok', label: 'Stok Barang', icon: 'boxes', count: 9 },
         { id: 'mutasi', label: 'Mutasi Stok', icon: 'transfer' },
+        { id: 'rantai-pasok', label: 'Rantai Pasok', icon: 'link' },
       ],
     },
     {
@@ -73,6 +84,8 @@ const DATA = (() => {
       label: 'Keuangan',
       items: [
         { id: 'piutang', label: 'Piutang Usaha', icon: 'wallet' },
+        { id: 'hutang', label: 'Hutang Usaha', icon: 'credit-card' },
+        { id: 'kas-bank', label: 'Kas & Bank', icon: 'vault' },
         { id: 'jurnal', label: 'Jurnal Umum', icon: 'ledger' },
         { id: 'anggaran', label: 'Anggaran', icon: 'piechart' },
       ],
@@ -81,6 +94,7 @@ const DATA = (() => {
       label: 'SDM',
       items: [
         { id: 'karyawan', label: 'Karyawan', icon: 'users' },
+        { id: 'kehadiran', label: 'Kehadiran & Cuti', icon: 'calendar' },
         { id: 'penggajian', label: 'Penggajian', icon: 'banknote', count: 12 },
       ],
     },
@@ -98,8 +112,21 @@ const DATA = (() => {
       ],
     },
     {
+      label: 'Alur Kerja',
+      items: [
+        { id: 'alur-kerja', label: 'Desainer Alur Kerja', icon: 'workflow' },
+      ],
+    },
+    {
+      label: 'Analitik',
+      items: [
+        { id: 'analitik', label: 'BI & Laporan', icon: 'bar-chart' },
+      ],
+    },
+    {
       label: 'Sistem',
       items: [
+        { id: 'kepatuhan', label: 'Kepatuhan & GRC', icon: 'file-check' },
         { id: 'peran', label: 'Peran & Izin', icon: 'shield' },
         { id: 'jejak-audit', label: 'Jejak Audit', icon: 'scroll' },
         { id: 'pengaturan', label: 'Pengaturan', icon: 'gear' },
@@ -613,6 +640,119 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'AUD-9810', timestamp: '2026-08-08 14:30:00', user: 'Dewi Anggraini', action: 'Buat', module: 'Permintaan Pembelian', entity: 'PR-2026-0088', detail: 'Peti kayu ekspor tambahan Q3 — Rp 52,3 jt', ip: '10.10.3.18' },
   ];
 
+  /* --- Data Master: Produk & Layanan ------------------------------------- */
+  const masterProducts = [
+    { id: 'PRD-0001', name: 'Braket Dudukan Mesin Tipe A', category: 'Barang Jadi', uom: 'pcs', salePrice: 425_000, costPrice: 264_000, weight: 2.4, sku: 'BRG-1107', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0002', name: 'Braket Dudukan Mesin Tipe B', category: 'Barang Jadi', uom: 'pcs', salePrice: 480_000, costPrice: 264_000, weight: 2.8, sku: 'BRG-1108', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0003', name: 'Rakitan Poros Transmisi', category: 'Barang Jadi', uom: 'pcs', salePrice: 1_250_000, costPrice: 780_000, weight: 5.6, sku: 'BRG-2100', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0004', name: 'Panel Kendali IP65', category: 'Barang Jadi', uom: 'unit', salePrice: 8_400_000, costPrice: 5_240_000, weight: 18.0, sku: 'BRG-9014', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0005', name: 'Motor Induksi 3 Fasa 5,5 kW', category: 'Barang Jadi', uom: 'unit', salePrice: 12_800_000, costPrice: 8_640_000, weight: 42.0, sku: 'BRG-7204', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0006', name: 'Pelat Baja SPHC 3mm', category: 'Bahan Baku', uom: 'lbr', salePrice: 0, costPrice: 486_000, weight: 35.0, sku: 'BRG-1042', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0007', name: 'Bearing 6204-2RS', category: 'Suku Cadang', uom: 'pcs', salePrice: 0, costPrice: 78_400, weight: 0.12, sku: 'BRG-2217', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0008', name: 'Jasa Pemasangan di Lokasi', category: 'Jasa', uom: 'paket', salePrice: 28_000_000, costPrice: 18_000_000, weight: 0, sku: 'JAS-0031', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0009', name: 'Jasa Machining Presisi', category: 'Jasa', uom: 'jam', salePrice: 650_000, costPrice: 420_000, weight: 0, sku: 'JAS-0045', taxCode: 'PPN 11%', status: 'aktif' },
+    { id: 'PRD-0010', name: 'Mesin Bubut Bekas Pinacho', category: 'Barang Jadi', uom: 'unit', salePrice: 120_000_000, costPrice: 0, weight: 2800, sku: 'BRG-0009', taxCode: 'PPN 11%', status: 'nonaktif' },
+  ];
+
+  /* --- RFQ / Perbandingan Vendor ----------------------------------------- */
+  const rfqs = [
+    { id: 'RFQ-2026-0041', date: '2026-08-14', title: 'Pelat baja SPHC 3mm (250 lbr)', requestor: 'Bagus Hartono', vendors: 3, deadline: '2026-08-18', bestPrice: 472_500_000, status: 'terbuka', prRef: 'PR-2026-0093' },
+    { id: 'RFQ-2026-0040', date: '2026-08-12', title: 'Suku cadang mesin CNC Haas', requestor: 'Dewi Anggraini', vendors: 2, deadline: '2026-08-16', bestPrice: 68_400_000, status: 'evaluasi', prRef: 'PR-2026-0091' },
+    { id: 'RFQ-2026-0039', date: '2026-08-10', title: 'Oli hidrolik ISO VG 46 (60 drum)', requestor: 'Bagus Hartono', vendors: 3, deadline: '2026-08-14', bestPrice: 98_400_000, status: 'selesai', prRef: 'PR-2026-0089' },
+    { id: 'RFQ-2026-0038', date: '2026-08-08', title: 'Kabel NYY 4×10mm (3000 m)', requestor: 'Dewi Anggraini', vendors: 4, deadline: '2026-08-12', bestPrice: 126_600_000, status: 'selesai', prRef: null },
+  ];
+
+  /* --- Hutang Usaha (Accounts Payable) ----------------------------------- */
+  const payables = [
+    { id: 'APV-2026-0412', date: '2026-08-14', supplier: 'CV Logam Jaya Abadi', poRef: 'PO-2026-0233', amount: 186_200_000, paid: 0, dueDate: '2026-09-13', status: 'belum-dibayar', matched: true },
+    { id: 'APV-2026-0408', date: '2026-08-11', supplier: 'PT Kabel Cipta Sarana', poRef: 'PO-2026-0230', amount: 132_800_000, paid: 0, dueDate: '2026-09-10', status: 'belum-dibayar', matched: true },
+    { id: 'APV-2026-0405', date: '2026-08-08', supplier: 'PT Bearing Nusantara', poRef: 'PO-2026-0226', amount: 61_450_000, paid: 61_450_000, dueDate: '2026-09-22', status: 'lunas', matched: true },
+    { id: 'APV-2026-0401', date: '2026-08-05', supplier: 'PT Kemasan Prima', poRef: 'PO-2026-0227', amount: 33_200_000, paid: 33_200_000, dueDate: '2026-08-19', status: 'lunas', matched: true },
+    { id: 'APV-2026-0398', date: '2026-08-01', supplier: 'PT Baja Sentral Indo', poRef: 'PO-2026-0225', amount: 402_700_000, paid: 200_000_000, dueDate: '2026-09-30', status: 'sebagian', matched: false },
+    { id: 'APV-2026-0392', date: '2026-07-28', supplier: 'PT Pelumas Andalan', poRef: 'PO-2026-0224', amount: 27_600_000, paid: 0, dueDate: '2026-08-27', status: 'belum-dibayar', matched: true },
+    { id: 'APV-2026-0385', date: '2026-07-22', supplier: 'PT Mesin Presisi Tama', poRef: 'PO-2026-0228', amount: 76_950_000, paid: 0, dueDate: '2026-09-05', status: 'belum-dibayar', matched: true },
+    { id: 'APV-2026-0378', date: '2026-07-14', supplier: 'CV Logam Jaya Abadi', poRef: 'PO-2026-0229', amount: 217_400_000, paid: 217_400_000, dueDate: '2026-08-13', status: 'lunas', matched: true },
+  ];
+
+  const apAging = [
+    { label: 'Belum jatuh tempo', short: 'Lancar', value: 921_650_000, count: 5 },
+    { label: '1–30 hari', short: '1–30', value: 27_600_000, count: 1 },
+    { label: '31–60 hari', short: '31–60', value: 0, count: 0 },
+    { label: '61–90 hari', short: '61–90', value: 0, count: 0 },
+    { label: 'Lebih dari 90 hari', short: '>90', value: 0, count: 0 },
+  ];
+
+  /* --- Kas & Bank -------------------------------------------------------- */
+  const bankAccounts = [
+    { id: 'BNK-001', name: 'BCA — Giro Operasional', bank: 'BCA', accountNo: '012-345-6789', currency: 'IDR', balance: 2_842_600_000, lastRecon: '2026-08-13', unrecon: 3, status: 'aktif' },
+    { id: 'BNK-002', name: 'Mandiri — Giro Gaji', bank: 'Mandiri', accountNo: '123-00-4567890', currency: 'IDR', balance: 486_200_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-003', name: 'BCA — Deposito 3 bln', bank: 'BCA', accountNo: '012-888-9012', currency: 'IDR', balance: 1_500_000_000, lastRecon: '2026-08-01', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-004', name: 'BNI — Giro USD', bank: 'BNI', accountNo: '789-012-3456', currency: 'USD', balance: 124_800, lastRecon: '2026-08-10', unrecon: 1, status: 'aktif' },
+    { id: 'BNK-005', name: 'Kas Kecil — Cikarang', bank: 'Kas', accountNo: '—', currency: 'IDR', balance: 8_400_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-006', name: 'Kas Kecil — Surabaya', bank: 'Kas', accountNo: '—', currency: 'IDR', balance: 4_200_000, lastRecon: '2026-08-12', unrecon: 0, status: 'aktif' },
+  ];
+
+  /* --- Kehadiran & Cuti -------------------------------------------------- */
+  const attendanceRecords = [
+    { id: 'ATT-2026-08-001', employeeId: 'EMP-0102', name: 'Rina Kusuma', date: '2026-08-14', shift: 'Reguler', clockIn: '07:58', clockOut: '17:05', overtime: 0, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-002', employeeId: 'EMP-0118', name: 'Hendra Wijaya', date: '2026-08-14', shift: 'Reguler', clockIn: '08:12', clockOut: '17:30', overtime: 0.5, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-003', employeeId: 'EMP-0087', name: 'Bagus Hartono', date: '2026-08-14', shift: 'Reguler', clockIn: '07:45', clockOut: '18:00', overtime: 1, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-004', employeeId: 'EMP-0131', name: 'Dewi Anggraini', date: '2026-08-14', shift: 'Reguler', clockIn: null, clockOut: null, overtime: 0, status: 'cuti', type: 'Cuti Tahunan' },
+    { id: 'ATT-2026-08-005', employeeId: 'EMP-0064', name: 'Andi Firmansyah', date: '2026-08-14', shift: 'Reguler', clockIn: '08:01', clockOut: '17:10', overtime: 0, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-006', employeeId: 'EMP-0093', name: 'Slamet Riyadi', date: '2026-08-14', shift: 'Shift 1', clockIn: '06:00', clockOut: '14:15', overtime: 0, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-007', employeeId: 'EMP-0110', name: 'Dedi Kurnia', date: '2026-08-14', shift: 'Shift 2', clockIn: '14:00', clockOut: null, overtime: 0, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-008', employeeId: 'EMP-0145', name: 'Sari Melati', date: '2026-08-14', shift: 'Reguler', clockIn: null, clockOut: null, overtime: 0, status: 'sakit', type: 'Sakit' },
+    { id: 'ATT-2026-08-009', employeeId: 'EMP-0152', name: 'Yuni Astuti', date: '2026-08-14', shift: 'Shift 1', clockIn: '06:05', clockOut: '15:30', overtime: 1.5, status: 'hadir', type: 'Kehadiran' },
+    { id: 'ATT-2026-08-010', employeeId: 'EMP-0159', name: 'Reza Alfarizi', date: '2026-08-14', shift: 'Reguler', clockIn: '08:30', clockOut: null, overtime: 0, status: 'terlambat', type: 'Kehadiran' },
+  ];
+
+  /* --- Alur Kerja (Workflow Templates) ----------------------------------- */
+  const workflows = [
+    { id: 'WFL-001', name: 'Persetujuan Pesanan Penjualan', trigger: 'SO dibuat', steps: 3, sla: '4 jam', activeInstances: 2, lastModified: '2026-07-15', status: 'aktif', owner: 'Admin Sistem' },
+    { id: 'WFL-002', name: 'Persetujuan Pesanan Pembelian', trigger: 'PO dibuat', steps: 2, sla: '8 jam', activeInstances: 1, lastModified: '2026-07-15', status: 'aktif', owner: 'Admin Sistem' },
+    { id: 'WFL-003', name: 'Persetujuan Permintaan Pembelian', trigger: 'PR dibuat', steps: 2, sla: '24 jam', activeInstances: 2, lastModified: '2026-06-20', status: 'aktif', owner: 'Admin Sistem' },
+    { id: 'WFL-004', name: 'Tutup Buku Periode', trigger: 'Manual', steps: 5, sla: '3 hari', activeInstances: 0, lastModified: '2026-06-01', status: 'aktif', owner: 'Andi Firmansyah' },
+    { id: 'WFL-005', name: 'Onboarding Karyawan Baru', trigger: 'Karyawan dibuat', steps: 8, sla: '7 hari', activeInstances: 1, lastModified: '2026-05-10', status: 'aktif', owner: 'Admin Sistem' },
+    { id: 'WFL-006', name: 'Persetujuan Jurnal Penyesuaian', trigger: 'JV manual dibuat', steps: 2, sla: '4 jam', activeInstances: 1, lastModified: '2026-08-01', status: 'aktif', owner: 'Andi Firmansyah' },
+    { id: 'WFL-007', name: 'Klaim Reimbursement', trigger: 'Klaim diajukan', steps: 3, sla: '48 jam', activeInstances: 0, lastModified: '2026-04-18', status: 'nonaktif', owner: 'Admin Sistem' },
+  ];
+
+  /* --- Analitik: Laporan tersedia ---------------------------------------- */
+  const reports = [
+    { id: 'RPT-001', name: 'Laporan Laba Rugi', module: 'Keuangan', type: 'Standar', lastRun: '2026-08-14', frequency: 'Bulanan', format: 'PDF', status: 'aktif' },
+    { id: 'RPT-002', name: 'Neraca', module: 'Keuangan', type: 'Standar', lastRun: '2026-08-01', frequency: 'Bulanan', format: 'PDF', status: 'aktif' },
+    { id: 'RPT-003', name: 'Arus Kas', module: 'Keuangan', type: 'Standar', lastRun: '2026-08-01', frequency: 'Bulanan', format: 'PDF', status: 'aktif' },
+    { id: 'RPT-004', name: 'Analisis Penjualan per Segmen', module: 'Penjualan', type: 'Analitik', lastRun: '2026-08-12', frequency: 'Mingguan', format: 'Excel', status: 'aktif' },
+    { id: 'RPT-005', name: 'Aging Piutang', module: 'Keuangan', type: 'Standar', lastRun: '2026-08-14', frequency: 'Harian', format: 'PDF', status: 'aktif' },
+    { id: 'RPT-006', name: 'Kinerja Pemasok', module: 'Pembelian', type: 'Analitik', lastRun: '2026-08-10', frequency: 'Bulanan', format: 'Excel', status: 'aktif' },
+    { id: 'RPT-007', name: 'Utilisasi Aset Produksi', module: 'Aset', type: 'Analitik', lastRun: '2026-08-08', frequency: 'Mingguan', format: 'Dasbor', status: 'aktif' },
+    { id: 'RPT-008', name: 'Laporan Kehadiran Bulanan', module: 'SDM', type: 'Standar', lastRun: '2026-08-01', frequency: 'Bulanan', format: 'Excel', status: 'aktif' },
+    { id: 'RPT-009', name: 'Pipeline CRM Forecast', module: 'CRM', type: 'Analitik', lastRun: '2026-08-13', frequency: 'Mingguan', format: 'Dasbor', status: 'aktif' },
+    { id: 'RPT-010', name: 'Variance Anggaran vs Aktual', module: 'Keuangan', type: 'Analitik', lastRun: '2026-08-05', frequency: 'Bulanan', format: 'Excel', status: 'nonaktif' },
+  ];
+
+  /* --- Kepatuhan & GRC --------------------------------------------------- */
+  const complianceItems = [
+    { id: 'CMP-001', title: 'ISO 9001:2015 — Quality Management', category: 'Sertifikasi', owner: 'Osmond Pratama', dueDate: '2027-01-09', lastReview: '2026-06-15', risk: 'rendah', status: 'patuh' },
+    { id: 'CMP-002', title: 'K3 — Keselamatan Kerja Pabrik', category: 'Regulasi', owner: 'Osmond Pratama', dueDate: null, lastReview: '2026-07-20', risk: 'sedang', status: 'patuh' },
+    { id: 'CMP-003', title: 'Pajak PPh 21 — Bulanan', category: 'Pajak', owner: 'Andi Firmansyah', dueDate: '2026-09-10', lastReview: '2026-08-10', risk: 'rendah', status: 'patuh' },
+    { id: 'CMP-004', title: 'PPN — Laporan Bulanan', category: 'Pajak', owner: 'Andi Firmansyah', dueDate: '2026-09-15', lastReview: '2026-08-14', risk: 'rendah', status: 'patuh' },
+    { id: 'CMP-005', title: 'Segregation of Duties — Keuangan', category: 'Tata Kelola', owner: 'Admin Sistem', dueDate: null, lastReview: '2026-05-22', risk: 'tinggi', status: 'peninjauan' },
+    { id: 'CMP-006', title: 'AMDAL — Limbah Industri Cikarang', category: 'Lingkungan', owner: 'Osmond Pratama', dueDate: '2027-03-31', lastReview: '2026-04-10', risk: 'sedang', status: 'patuh' },
+    { id: 'CMP-007', title: 'Audit Internal — Q3 2026', category: 'Audit', owner: 'Andi Firmansyah', dueDate: '2026-09-30', lastReview: null, risk: 'sedang', status: 'dijadwalkan' },
+    { id: 'CMP-008', title: 'Perlindungan Data Karyawan', category: 'Tata Kelola', owner: 'Admin Sistem', dueDate: null, lastReview: '2026-03-15', risk: 'tinggi', status: 'peninjauan' },
+  ];
+
+  /* --- Rantai Pasok (Supply Chain) --------------------------------------- */
+  const shipments = [
+    { id: 'SHP-2026-0188', date: '2026-08-14', origin: 'Cikarang — Pabrik', destination: 'PT Global Komponen Indo, Surabaya', carrier: 'JNE Trucking', ref: 'DO-2026-0908', weight: 2400, eta: '2026-08-17', status: 'transit' },
+    { id: 'SHP-2026-0186', date: '2026-08-13', origin: 'Cikarang — Pabrik', destination: 'PT Anugerah Mesin Jaya, Sidoarjo', carrier: 'SiCepat Cargo', ref: 'DO-2026-0905', weight: 860, eta: '2026-08-16', status: 'transit' },
+    { id: 'SHP-2026-0184', date: '2026-08-12', origin: 'CV Logam Jaya Abadi, Bekasi', destination: 'Cikarang — Pabrik', carrier: 'Self-pickup', ref: 'GR-2026-0512', weight: 3200, eta: '2026-08-12', status: 'diterima' },
+    { id: 'SHP-2026-0182', date: '2026-08-11', origin: 'Cikarang — Pabrik', destination: 'Surabaya — Gudang', carrier: 'Internal', ref: 'TRF-2026-0121', weight: 1800, eta: '2026-08-13', status: 'diterima' },
+    { id: 'SHP-2026-0180', date: '2026-08-10', origin: 'PT Bearing Nusantara, Jakarta', destination: 'Cikarang — Pabrik', carrier: 'Gosend Instant', ref: 'GR-2026-0508', weight: 48, eta: '2026-08-10', status: 'diterima' },
+    { id: 'SHP-2026-0178', date: '2026-08-08', origin: 'Cikarang — Pabrik', destination: 'CV Karya Presisi, Cikarang', carrier: 'Self-delivery', ref: 'DO-2026-0898', weight: 340, eta: '2026-08-08', status: 'diterima' },
+  ];
+
   return {
     org, nav, kpis, revenueTrend, revenueByLine, inventoryMix, arAging,
     approvals, stockAlerts, activity, notifications,
@@ -627,5 +767,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
     budgets, payroll, assets, maintenanceOrders,
     documents, posShifts, posTransactions, posKpis,
     auditTrail,
+    /* Modul tambahan */
+    masterProducts, rfqs, payables, apAging, bankAccounts,
+    attendanceRecords, workflows, reports, complianceItems, shipments,
   };
 })();

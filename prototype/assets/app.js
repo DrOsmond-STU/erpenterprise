@@ -71,6 +71,17 @@
     scroll: '<path d="M12 2.4H5.6A1.6 1.6 0 0 0 4 4v8a1.6 1.6 0 0 0 1.6 1.6h8V4a1.6 1.6 0 0 0-1.6-1.6z"/><path d="M4 12a1.6 1.6 0 0 1-1.6-1.6V4.8"/><path d="M7 6h3.6M7 8.4h3.6M7 10.8h2"/>',
     sparkle: '<path d="M8 1.4l1.2 4.2L13.4 6.8 9.2 8l-1.2 4.2L6.8 8 2.6 6.8l4.2-1.2z"/><path d="M12 11l.5 1.6 1.5.4-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.4z"/>',
     send: '<path d="M14.4 1.6 6.6 9.4"/><path d="M14.4 1.6l-4.4 12.8-2.6-6.2-6.2-2.6z"/>',
+    /* Ikon modul tambahan */
+    inbox: '<path d="M2.4 2.4h11.2v11.2H2.4z"/><path d="M2.4 9.6h3.6l1.2 2h1.6l1.2-2h3.6"/>',
+    database: '<ellipse cx="8" cy="4" rx="5.6" ry="2.2"/><path d="M2.4 4v8c0 1.2 2.5 2.2 5.6 2.2s5.6-1 5.6-2.2V4"/><path d="M13.6 8c0 1.2-2.5 2.2-5.6 2.2S2.4 9.2 2.4 8"/>',
+    scale: '<path d="M8 2v12M3 5l5-3 5 3"/><path d="M1.6 9.4 3 5l1.4 4.4a2.4 2.4 0 0 1-2.8 0z"/><path d="M11.6 9.4 13 5l1.4 4.4a2.4 2.4 0 0 1-2.8 0z"/>',
+    link: '<path d="M7.2 8.8a3.2 3.2 0 0 0 4.5.5l1.8-1.8a3.2 3.2 0 0 0-4.5-4.5L7.8 4.2"/><path d="M8.8 7.2a3.2 3.2 0 0 0-4.5-.5L2.5 8.5a3.2 3.2 0 0 0 4.5 4.5l1.2-1.2"/>',
+    'credit-card': '<rect x="1.5" y="3.4" width="13" height="9.2" rx="1.4"/><path d="M1.5 6.6h13M1.5 9h4"/>',
+    vault: '<rect x="2" y="2.4" width="12" height="11.2" rx="1.4"/><circle cx="8" cy="8" r="2.6"/><path d="M8 5.4v5.2M5.4 8h5.2"/><path d="M2 5.6h1M2 10.4h1M13 5.6h1M13 10.4h1"/>',
+    calendar: '<rect x="2.4" y="3" width="11.2" height="10.6" rx="1.4"/><path d="M5.2 1.4v3.2M10.8 1.4v3.2M2.4 6.6h11.2"/><path d="M5.2 9h1.4M9.4 9h1.4M5.2 11.4h1.4"/>',
+    workflow: '<circle cx="3.4" cy="4.4" r="1.8"/><circle cx="12.6" cy="4.4" r="1.8"/><circle cx="8" cy="12" r="1.8"/><path d="M5.2 4.4h5.6M4.4 6 8 10.2M11.6 6 8 10.2"/>',
+    'bar-chart': '<path d="M2 14h12"/><rect x="3.6" y="6" width="2" height="8" rx=".4"/><rect x="7" y="3" width="2" height="11" rx=".4"/><rect x="10.4" y="8" width="2" height="6" rx=".4"/>',
+    'file-check': '<path d="M4 1.6h5.6L13 5v8.4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"/><path d="M9.6 1.6V5H13"/><path d="M6.4 9.4l1.4 1.4 2.8-2.8"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -130,6 +141,18 @@
     void: { label: 'Void', tone: 'danger' },
     preventif: { label: 'Preventif', tone: 'info' },
     korektif: { label: 'Korektif', tone: 'warn' },
+    /* Status modul tambahan */
+    hadir: { label: 'Hadir', tone: 'ok' },
+    cuti: { label: 'Cuti', tone: 'info' },
+    sakit: { label: 'Sakit', tone: 'warn' },
+    terlambat: { label: 'Terlambat', tone: 'danger' },
+    alpha: { label: 'Alpha', tone: 'danger' },
+    terbuka: { label: 'Terbuka', tone: 'accent' },
+    evaluasi: { label: 'Evaluasi', tone: 'warn' },
+    transit: { label: 'Transit', tone: 'info' },
+    patuh: { label: 'Patuh', tone: 'ok' },
+    peninjauan: { label: 'Peninjauan', tone: 'warn' },
+    'tidak-patuh': { label: 'Tidak Patuh', tone: 'danger' },
   };
 
   /** Status selalu ikon + teks — tidak pernah warna saja. */
@@ -556,6 +579,160 @@
         { key: 'ip', label: 'IP', cls: 'code' },
       ],
     },
+
+    'data-master': {
+      title: 'Produk & Layanan',
+      sub: 'Katalog induk produk, bahan baku, dan jasa beserta harga pokok dan harga jual.',
+      rows: () => DATA.masterProducts,
+      key: 'id',
+      search: ['id', 'name', 'category', 'sku'],
+      statusKey: 'status',
+      statuses: ['aktif', 'nonaktif'],
+      primary: { label: 'Produk baru', action: 'demo' },
+      sort: { key: 'name', dir: 'asc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.category)} · ${esc(r.uom)}</span>` },
+        { key: 'sku', label: 'SKU', cls: 'code' },
+        { key: 'costPrice', label: 'Harga pokok', align: 'r', render: (r) => money(r.costPrice) },
+        { key: 'salePrice', label: 'Harga jual', align: 'r', render: (r) => r.salePrice ? money(r.salePrice) : '<span class="muted">—</span>' },
+        { key: 'taxCode', label: 'Pajak' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    rfq: {
+      title: 'RFQ & Perbandingan Vendor',
+      sub: 'Permintaan penawaran ke pemasok dan evaluasi harga terbaik.',
+      rows: () => DATA.rfqs,
+      key: 'id',
+      search: ['id', 'title', 'requestor', 'prRef'],
+      statusKey: 'status',
+      statuses: ['terbuka', 'evaluasi', 'selesai'],
+      selectable: true,
+      primary: { label: 'RFQ baru', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'title', label: 'Deskripsi', cls: 'cell-strong' },
+        { key: 'requestor', label: 'Pemohon' },
+        { key: 'vendors', label: 'Vendor', align: 'r', render: (r) => `<span class="num">${r.vendors}</span>` },
+        { key: 'deadline', label: 'Batas waktu', render: (r) => `<span class="num">${FMT.date(r.deadline)}</span>` },
+        { key: 'bestPrice', label: 'Harga terbaik', align: 'r', render: (r) => money(r.bestPrice) },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    hutang: {
+      title: 'Hutang Usaha',
+      sub: 'Faktur dari pemasok, pencocokan 3-arah, dan jadwal pembayaran.',
+      rows: () => DATA.payables,
+      key: 'id',
+      search: ['id', 'supplier', 'poRef'],
+      statusKey: 'status',
+      statuses: ['belum-dibayar', 'sebagian', 'lunas'],
+      selectable: true,
+      primary: { label: 'Catat hutang', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'supplier', label: 'Pemasok', cls: 'cell-strong' },
+        { key: 'poRef', label: 'Ref. PO', cls: 'code' },
+        { key: 'amount', label: 'Nilai', align: 'r', render: (r) => money(r.amount) },
+        { key: 'sisa', label: 'Sisa bayar', align: 'r', value: (r) => r.amount - r.paid, render: (r) => money(r.amount - r.paid) },
+        { key: 'dueDate', label: 'Jatuh tempo', render: (r) => `<span class="num">${FMT.date(r.dueDate)}</span>` },
+        { key: 'matched', label: '3-Way', render: (r) => r.matched ? `<span class="pill" data-tone="ok"><i class="pill-dot"></i>Cocok</span>` : `<span class="pill" data-tone="warn"><i class="pill-dot"></i>Belum</span>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    kehadiran: {
+      title: 'Kehadiran & Cuti',
+      sub: 'Rekap kehadiran harian, shift, lembur, dan pengajuan cuti.',
+      rows: () => DATA.attendanceRecords,
+      key: 'id',
+      search: ['id', 'name', 'employeeId', 'type'],
+      statusKey: 'status',
+      statuses: ['hadir', 'terlambat', 'cuti', 'sakit', 'alpha'],
+      primary: { label: 'Ajukan cuti', action: 'demo' },
+      sort: { key: 'date', dir: 'desc' },
+      columns: [
+        { key: 'name', label: 'Karyawan', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub code">${esc(r.employeeId)}</span>` },
+        { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
+        { key: 'shift', label: 'Shift' },
+        { key: 'clockIn', label: 'Masuk', render: (r) => r.clockIn ? `<span class="num">${r.clockIn}</span>` : '<span class="muted">—</span>' },
+        { key: 'clockOut', label: 'Keluar', render: (r) => r.clockOut ? `<span class="num">${r.clockOut}</span>` : '<span class="muted">—</span>' },
+        { key: 'overtime', label: 'Lembur (jam)', align: 'r', render: (r) => r.overtime ? `<span class="num">${r.overtime}</span>` : '<span class="muted">—</span>' },
+        { key: 'type', label: 'Keterangan' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    'alur-kerja': {
+      title: 'Desainer Alur Kerja',
+      sub: 'Template alur persetujuan, eskalasi, dan otomasi proses bisnis.',
+      rows: () => DATA.workflows,
+      key: 'id',
+      search: ['id', 'name', 'trigger', 'owner'],
+      statusKey: 'status',
+      statuses: ['aktif', 'nonaktif'],
+      primary: { label: 'Alur baru', action: 'demo' },
+      sort: { key: 'name', dir: 'asc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama Alur', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">Pemicu: ${esc(r.trigger)}</span>` },
+        { key: 'steps', label: 'Langkah', align: 'r', render: (r) => `<span class="num">${r.steps}</span>` },
+        { key: 'sla', label: 'SLA' },
+        { key: 'activeInstances', label: 'Aktif', align: 'r', render: (r) => r.activeInstances ? `<span class="num">${r.activeInstances}</span>` : '<span class="muted">0</span>' },
+        { key: 'owner', label: 'Pemilik' },
+        { key: 'lastModified', label: 'Diubah', render: (r) => `<span class="num">${FMT.date(r.lastModified)}</span>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    analitik: {
+      title: 'BI & Laporan',
+      sub: 'Daftar laporan standar dan analitik, frekuensi, dan terakhir dijalankan.',
+      rows: () => DATA.reports,
+      key: 'id',
+      search: ['id', 'name', 'module', 'type'],
+      statusKey: 'status',
+      statuses: ['aktif', 'nonaktif'],
+      primary: { label: 'Laporan baru', action: 'demo' },
+      sort: { key: 'lastRun', dir: 'desc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'name', label: 'Nama Laporan', render: (r) => `<span class="cell-strong">${esc(r.name)}</span><span class="cell-sub">${esc(r.module)}</span>` },
+        { key: 'type', label: 'Tipe' },
+        { key: 'frequency', label: 'Frekuensi' },
+        { key: 'format', label: 'Format' },
+        { key: 'lastRun', label: 'Terakhir', render: (r) => `<span class="num">${FMT.date(r.lastRun)}</span>` },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
+
+    kepatuhan: {
+      title: 'Kepatuhan & GRC',
+      sub: 'Register kepatuhan regulasi, sertifikasi, dan risiko tata kelola.',
+      rows: () => DATA.complianceItems,
+      key: 'id',
+      search: ['id', 'title', 'category', 'owner'],
+      statusKey: 'status',
+      statuses: ['patuh', 'peninjauan', 'dijadwalkan', 'tidak-patuh'],
+      primary: { label: 'Tambah item', action: 'demo' },
+      sort: { key: 'risk', dir: 'asc' },
+      columns: [
+        { key: 'id', label: 'Kode', cls: 'code' },
+        { key: 'title', label: 'Judul', render: (r) => `<span class="cell-strong">${esc(r.title)}</span><span class="cell-sub">${esc(r.category)}</span>` },
+        { key: 'owner', label: 'Penanggung jawab' },
+        { key: 'risk', label: 'Risiko', value: (r) => ({ tinggi: 0, sedang: 1, rendah: 2 }[r.risk]), render: (r) => pill(r.risk) },
+        { key: 'lastReview', label: 'Tinjauan terakhir', render: (r) => r.lastReview ? `<span class="num">${FMT.date(r.lastReview)}</span>` : '<span class="muted">—</span>' },
+        { key: 'dueDate', label: 'Tenggat', render: (r) => r.dueDate ? `<span class="num">${FMT.date(r.dueDate)}</span>` : '<span class="muted">—</span>' },
+        { key: 'status', label: 'Status', render: (r) => pill(r.status) },
+      ],
+    },
   };
 
   const PAGE_SIZE = 10;
@@ -576,6 +753,9 @@
       kasir: { title: 'Kasir (POS)', sub: 'Ikhtisar shift kasir, transaksi hari ini, dan pencapaian target penjualan toko.' },
       proyek: { title: 'Manajemen Proyek', sub: 'Progres proyek, kesehatan anggaran, dan linimasa tugas utama.' },
       anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya.' },
+      persetujuan: { title: 'Kotak Persetujuan', sub: 'Dokumen dan transaksi yang menunggu persetujuan Anda.' },
+      'kas-bank': { title: 'Kas & Bank', sub: 'Saldo rekening bank, kas kecil, dan status rekonsiliasi.' },
+      'rantai-pasok': { title: 'Rantai Pasok', sub: 'Pengiriman aktif, logistik, dan pelacakan barang.' },
     })[id] || { title: 'Halaman', sub: '' };
   }
 
@@ -2210,6 +2390,155 @@
   }
 
   /* ====================================================================== */
+  /* Kotak Persetujuan (Approval Inbox)                                      */
+  /* ====================================================================== */
+  function renderApprovalInbox() {
+    const items = DATA.approvals;
+    const cards = items.map((a) => `
+      <div class="card" style="cursor:pointer" data-approval="${a.id}">
+        <div style="display:flex;align-items:flex-start;gap:var(--sp-3)">
+          <span class="avatar" style="flex-shrink:0">${icon(a.icon)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1)">
+              <span class="pill" data-tone="${a.tone}"><i class="pill-dot"></i>${esc(a.kind)}</span>
+              <span class="muted" style="font-size:var(--fs-cap)">${esc(a.ago)}</span>
+            </div>
+            <div class="cell-strong">${esc(a.title)}</div>
+            <div class="muted" style="font-size:var(--fs-sm)">${esc(a.id)} · ${esc(a.reason)}</div>
+            <div style="margin-top:var(--sp-2);display:flex;align-items:center;gap:var(--sp-3)">
+              <span class="num" style="font-size:var(--fs-lead);font-weight:600">${FMT.rpCompact(a.amount)}</span>
+              <span class="muted" style="font-size:var(--fs-cap)">oleh ${esc(a.by)}</span>
+            </div>
+            <div style="margin-top:var(--sp-3);display:flex;gap:var(--sp-2)">
+              <button class="btn btn-sm" data-action="demo">${icon('check')} Setujui</button>
+              <button class="btn btn-sm btn-ghost" data-action="demo">${icon('x')} Tolak</button>
+              <button class="btn btn-sm btn-ghost" data-action="demo">${icon('eye')} Lihat</button>
+            </div>
+          </div>
+        </div>
+      </div>`).join('');
+
+    return `
+      <section>
+        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
+          <span class="kpi-icon" data-tone="accent">${icon('inbox')}</span>
+          <div>
+            <div style="font-size:var(--fs-h3);font-weight:600">${items.length} Dokumen Menunggu</div>
+            <div class="muted" style="font-size:var(--fs-sm)">Total nilai Rp ${FMT.rpCompact(items.reduce((s, a) => s + a.amount, 0))}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--sp-3)">${cards}</div>
+      </section>`;
+  }
+
+  /* ====================================================================== */
+  /* Kas & Bank                                                              */
+  /* ====================================================================== */
+  function renderCashBank() {
+    const accounts = DATA.bankAccounts;
+    const totalIDR = accounts.filter((a) => a.currency === 'IDR').reduce((s, a) => s + a.balance, 0);
+
+    const summary = `
+      <div class="kpi-row">
+        <div class="kpi-tile">
+          <div class="kpi-label">Total Saldo IDR</div>
+          <div class="kpi-value">${FMT.rpCompact(totalIDR)}</div>
+          <div class="kpi-foot">${accounts.filter((a) => a.currency === 'IDR').length} rekening aktif</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Belum Direkonsiliasi</div>
+          <div class="kpi-value">${accounts.reduce((s, a) => s + a.unrecon, 0)}</div>
+          <div class="kpi-foot">transaksi pending</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Kas Kecil</div>
+          <div class="kpi-value">${FMT.rpCompact(accounts.filter((a) => a.bank === 'Kas').reduce((s, a) => s + a.balance, 0))}</div>
+          <div class="kpi-foot">${accounts.filter((a) => a.bank === 'Kas').length} lokasi</div>
+        </div>
+      </div>`;
+
+    const rows = accounts.map((a) => `
+      <tr>
+        <td class="code">${esc(a.id)}</td>
+        <td><span class="cell-strong">${esc(a.name)}</span><span class="cell-sub">${esc(a.bank)} · ${esc(a.accountNo)}</span></td>
+        <td>${esc(a.currency)}</td>
+        <td class="r"><span class="num">${a.currency === 'IDR' ? FMT.rpCompact(a.balance) : 'USD ' + FMT.int(a.balance)}</span></td>
+        <td><span class="num">${FMT.date(a.lastRecon)}</span></td>
+        <td class="r">${a.unrecon ? `<span class="num neg">${a.unrecon}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${pill(a.status)}</td>
+      </tr>`).join('');
+
+    const table = `
+      <section>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Nama Rekening</th><th>Mata Uang</th>
+            <th class="r">Saldo</th><th>Rekonsiliasi Terakhir</th>
+            <th class="r">Unrecon</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+
+    return summary + table;
+  }
+
+  /* ====================================================================== */
+  /* Rantai Pasok (Supply Chain Overview)                                     */
+  /* ====================================================================== */
+  function renderSupplyChain() {
+    const shipments = DATA.shipments;
+    const inTransit = shipments.filter((s) => s.status === 'transit');
+    const delivered = shipments.filter((s) => s.status === 'diterima');
+
+    const summary = `
+      <div class="kpi-row">
+        <div class="kpi-tile">
+          <div class="kpi-label">Pengiriman Aktif</div>
+          <div class="kpi-value">${inTransit.length}</div>
+          <div class="kpi-foot">dalam perjalanan</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Total Berat Transit</div>
+          <div class="kpi-value">${FMT.int(inTransit.reduce((s, sh) => s + sh.weight, 0))} kg</div>
+          <div class="kpi-foot">estimasi tiba 2–3 hari</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Selesai Bulan Ini</div>
+          <div class="kpi-value">${delivered.length}</div>
+          <div class="kpi-foot">pengiriman diterima</div>
+        </div>
+      </div>`;
+
+    const rows = shipments.map((s) => `
+      <tr>
+        <td class="code cell-strong">${esc(s.id)}</td>
+        <td><span class="num">${FMT.date(s.date)}</span></td>
+        <td><span class="cell-strong">${esc(s.origin)}</span></td>
+        <td><span class="cell-strong">${esc(s.destination)}</span></td>
+        <td>${esc(s.carrier)}</td>
+        <td class="code">${esc(s.ref)}</td>
+        <td class="r"><span class="num">${FMT.int(s.weight)} kg</span></td>
+        <td><span class="num">${FMT.date(s.eta)}</span></td>
+        <td>${pill(s.status)}</td>
+      </tr>`).join('');
+
+    const table = `
+      <section>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Nomor</th><th>Tanggal</th><th>Asal</th><th>Tujuan</th>
+            <th>Kurir</th><th>Referensi</th><th class="r">Berat</th>
+            <th>ETA</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+
+    return summary + table;
+  }
+
+  /* ====================================================================== */
   /* AI Copilot floating panel                                               */
   /* ====================================================================== */
   function renderAICopilot() {
@@ -2263,7 +2592,7 @@
 
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
     ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
-     'lead', 'kasir', 'proyek', 'anggaran'].includes(id);
+     'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -2279,6 +2608,9 @@
       case 'kasir': return renderPOS();
       case 'proyek': return renderProjects();
       case 'anggaran': return renderBudget();
+      case 'persetujuan': return renderApprovalInbox();
+      case 'kas-bank': return renderCashBank();
+      case 'rantai-pasok': return renderSupplyChain();
       default: return renderDashboard();
     }
   }
