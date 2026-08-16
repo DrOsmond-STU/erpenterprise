@@ -1539,6 +1539,216 @@ svg { display: block; }
   .ai-fab { bottom: var(--sp-3); right: var(--sp-3); width: 42px; height: 42px; }
 }
 
+/* --- Dashboard widget grid -------------------------------------------------- */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--sp-3);
+  padding: 0;
+}
+.dash-widget {
+  position: relative;
+  min-height: 0;
+  transition: box-shadow var(--speed) var(--ease), transform 0.15s var(--ease);
+}
+.dash-widget.dragging {
+  opacity: 0.5;
+  z-index: 100;
+}
+.dash-widget.drag-over {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.dash-edit-bar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  margin-bottom: var(--sp-3);
+}
+.dash-edit-bar .btn { font-size: var(--fs-cap); }
+
+/* Widget resize handles */
+.widget-resize {
+  position: absolute; bottom: 0; right: 0;
+  width: 20px; height: 20px;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity var(--speed) var(--ease);
+  z-index: 5;
+}
+.widget-resize::after {
+  content: '';
+  position: absolute; bottom: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+}
+.dash-widget:hover .widget-resize,
+.dash-edit-mode .widget-resize {
+  opacity: 1;
+}
+.widget-remove {
+  position: absolute; top: var(--sp-1); right: var(--sp-1);
+  width: 22px; height: 22px;
+  display: none; align-items: center; justify-content: center;
+  background: var(--danger); color: #fff;
+  border: none; border-radius: var(--r-full);
+  cursor: pointer; z-index: 6;
+  font-size: var(--fs-cap); line-height: 1;
+}
+.dash-edit-mode .widget-remove { display: flex; }
+.widget-drag-handle {
+  cursor: grab; opacity: 0;
+  transition: opacity var(--speed) var(--ease);
+}
+.dash-edit-mode .widget-drag-handle,
+.dash-widget:hover .widget-drag-handle { opacity: 0.7; }
+.widget-drag-handle:active { cursor: grabbing; }
+
+/* Widget picker modal */
+.widget-picker-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.widget-picker {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card-hover);
+  width: 480px; max-width: calc(100vw - 2 * var(--sp-4));
+  max-height: 70vh;
+  display: flex; flex-direction: column;
+}
+.widget-picker-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line-faint);
+  font-weight: 650; font-size: var(--fs-sm);
+}
+.widget-picker-body {
+  padding: var(--sp-3) var(--sp-4);
+  overflow-y: auto;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3);
+}
+.widget-picker-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  background: var(--surface-2);
+  transition: border-color var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+.widget-picker-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.widget-picker-item svg { flex: 0 0 auto; color: var(--accent); }
+.widget-picker-item-text { display: flex; flex-direction: column; gap: 2px; }
+.widget-picker-item-title { font-weight: 600; font-size: var(--fs-sm); }
+.widget-picker-item-desc { font-size: var(--fs-cap); color: var(--ink-3); }
+
+/* --- BSC (Balanced Scorecard) ------------------------------------------------ */
+.bsc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-4);
+}
+.bsc-perspective {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-faint);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.bsc-perspective-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  font-weight: 650; font-size: var(--fs-sm);
+  color: var(--ink-on-brand);
+}
+.bsc-perspective[data-perspective="financial"] .bsc-perspective-head { background: linear-gradient(135deg, #1e40af, #3b82f6); }
+.bsc-perspective[data-perspective="customer"] .bsc-perspective-head { background: linear-gradient(135deg, #047857, #10b981); }
+.bsc-perspective[data-perspective="internal"] .bsc-perspective-head { background: linear-gradient(135deg, #b45309, #f59e0b); }
+.bsc-perspective[data-perspective="growth"] .bsc-perspective-head { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+.bsc-perspective-body { padding: var(--sp-3); }
+.bsc-metric {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line-faint);
+  font-size: var(--fs-sm);
+}
+.bsc-metric:last-child { border-bottom: none; }
+.bsc-metric-name { font-weight: 500; }
+.bsc-metric-vals {
+  display: flex; align-items: center; gap: var(--sp-3);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+.bsc-metric-actual { font-weight: 650; font-size: var(--fs-base); }
+.bsc-metric-target { color: var(--ink-3); font-size: var(--fs-cap); }
+.bsc-metric-target::before { content: '/ '; }
+.bsc-progress {
+  width: 80px; height: 6px;
+  background: var(--surface-3);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+.bsc-progress-fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  transition: width 0.3s var(--ease);
+}
+.bsc-progress-fill[data-tone="ok"] { background: var(--ok); }
+.bsc-progress-fill[data-tone="warn"] { background: var(--warning); }
+.bsc-progress-fill[data-tone="danger"] { background: var(--danger); }
+.bsc-sparkline { width: 56px; height: 20px; flex: 0 0 auto; }
+.bsc-score-summary {
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.bsc-score-ring {
+  width: 100px; height: 100px; flex: 0 0 auto;
+}
+.bsc-score-detail { flex: 1; display: flex; flex-direction: column; gap: var(--sp-2); }
+.bsc-score-title { font-size: var(--fs-lg); font-weight: 700; }
+.bsc-score-period { font-size: var(--fs-cap); color: var(--ink-3); }
+
+/* --- Analytics dashboard ----------------------------------------------------- */
+.analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+}
+.analytics-kpi-tile {
+  padding: var(--sp-3);
+  background: var(--grad-kpi), var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.analytics-kpi-tile .kpi-metric { font-size: var(--fs-lg); }
+.analytics-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+@media (max-width: 900px) {
+  .bsc-grid { grid-template-columns: 1fr; }
+  .analytics-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .analytics-charts-grid { grid-template-columns: 1fr; }
+  .widget-picker-body { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .dash-grid { grid-template-columns: repeat(6, 1fr); }
+  .analytics-kpi-grid { grid-template-columns: 1fr; }
+}
+
 @media print {
   .rail, .topbar, .toasts, .page-actions, .toolbar, .ai-fab, .ai-panel { display: none; }
   .content { padding: 0; }
@@ -1676,6 +1886,7 @@ const DATA = (() => {
       label: 'Analitik',
       items: [
         { id: 'analitik', label: 'BI & Laporan', icon: 'bar-chart' },
+        { id: 'bsc', label: 'Balanced Scorecard', icon: 'target' },
       ],
     },
     {
@@ -2298,6 +2509,47 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'CMP-008', title: 'Perlindungan Data Karyawan', category: 'Tata Kelola', owner: 'Admin Sistem', dueDate: null, lastReview: '2026-03-15', risk: 'tinggi', status: 'peninjauan' },
   ];
 
+  /* --- Balanced Scorecard ------------------------------------------------ */
+  const bscData = {
+    period: 'Agu 2026',
+    financial: [
+      { metric: 'Pertumbuhan Pendapatan', target: 15, actual: 12.4, unit: '%', trend: [8.2, 9.1, 10.3, 11.0, 11.8, 12.4] },
+      { metric: 'Margin Laba Kotor', target: 36, actual: 35.0, unit: '%', trend: [33.2, 33.8, 34.1, 34.5, 34.8, 35.0] },
+      { metric: 'Return on Investment', target: 18, actual: 16.2, unit: '%', trend: [14.1, 14.8, 15.2, 15.6, 15.9, 16.2] },
+      { metric: 'Arus Kas Operasional', target: 1.0, actual: 0.89, unit: 'M', trend: [0.72, 0.78, 0.82, 0.85, 0.87, 0.89] },
+    ],
+    customer: [
+      { metric: 'Indeks Kepuasan Pelanggan', target: 90, actual: 87, unit: '%', trend: [82, 83, 85, 85, 86, 87] },
+      { metric: 'Retensi Pelanggan', target: 95, actual: 93.2, unit: '%', trend: [91.0, 91.5, 92.0, 92.4, 92.8, 93.2] },
+      { metric: 'Pengiriman Tepat Waktu', target: 98, actual: 96.1, unit: '%', trend: [94.2, 94.8, 95.1, 95.5, 95.8, 96.1] },
+      { metric: 'Keluhan per 1000 Transaksi', target: 2, actual: 3.1, unit: '', trend: [4.2, 3.8, 3.6, 3.4, 3.2, 3.1] },
+    ],
+    internal: [
+      { metric: 'OEE (Overall Equipment Effectiveness)', target: 85, actual: 81.4, unit: '%', trend: [78.0, 79.2, 79.8, 80.2, 80.8, 81.4] },
+      { metric: 'Tingkat Cacat Produksi', target: 1.0, actual: 0.8, unit: '%', trend: [1.4, 1.2, 1.1, 1.0, 0.9, 0.8] },
+      { metric: 'Waktu Siklus Rata-rata', target: 4.0, actual: 4.2, unit: 'hari', trend: [5.0, 4.8, 4.6, 4.5, 4.3, 4.2] },
+      { metric: 'Perputaran Persediaan', target: 8, actual: 7.2, unit: 'x/thn', trend: [6.1, 6.4, 6.7, 6.9, 7.0, 7.2] },
+    ],
+    growth: [
+      { metric: 'Jam Pelatihan per Karyawan', target: 40, actual: 32, unit: 'jam', trend: [18, 22, 24, 26, 28, 32] },
+      { metric: 'Indeks Kepuasan Karyawan', target: 80, actual: 76, unit: '%', trend: [70, 72, 73, 74, 75, 76] },
+      { metric: 'Turnover Karyawan', target: 5, actual: 3.8, unit: '%', trend: [6.2, 5.8, 5.1, 4.6, 4.2, 3.8] },
+      { metric: 'Adopsi Sistem Digital', target: 90, actual: 82, unit: '%', trend: [62, 68, 72, 76, 79, 82] },
+    ],
+  };
+
+  /* --- Analitik: Ringkasan KPI ------------------------------------------- */
+  const analyticsKpis = [
+    { id: 'ax-revenue', label: 'Total Penjualan MTD', value: 4_823_400_000, delta: 12.4, format: 'rp', icon: 'cart' },
+    { id: 'ax-margin', label: 'Margin Laba Kotor', value: 35.0, delta: -1.0, format: 'pct', icon: 'piechart' },
+    { id: 'ax-pipeline', label: 'Pipeline CRM', value: 9_685_000_000, delta: 18.2, format: 'rp', icon: 'target' },
+    { id: 'ax-conversion', label: 'Konversi Pipeline', value: 32.5, delta: -2.1, format: 'pct', icon: 'check' },
+    { id: 'ax-oee', label: 'OEE Produksi', value: 81.4, delta: 1.8, format: 'pct', icon: 'factory' },
+    { id: 'ax-dso', label: 'DSO', value: 38, delta: 3, format: 'hari', icon: 'clock' },
+    { id: 'ax-stock', label: 'Stok Kritis', value: 4, delta: 1, format: 'item', icon: 'alert' },
+    { id: 'ax-satisfaction', label: 'Kepuasan Pelanggan', value: 87, delta: 2, format: 'pct', icon: 'users' },
+  ];
+
   /* --- Rantai Pasok (Supply Chain) --------------------------------------- */
   const shipments = [
     { id: 'SHP-2026-0188', date: '2026-08-14', origin: 'Cikarang — Pabrik', destination: 'PT Global Komponen Indo, Surabaya', carrier: 'JNE Trucking', ref: 'DO-2026-0908', weight: 2400, eta: '2026-08-17', status: 'transit' },
@@ -2325,6 +2577,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
     /* Modul tambahan */
     masterProducts, rfqs, payables, apAging, bankAccounts,
     attendanceRecords, workflows, reports, complianceItems, shipments,
+    /* Dashboard */
+    bscData, analyticsKpis,
   };
 })();
 
@@ -3013,11 +3267,52 @@ const Charts = (() => {
     lastFocus: null,
     toastSeq: 0,
     aiCopilotOpen: false,
+    dashEditMode: false,
+    dashWidgets: null,
   };
 
   const regState = (id) => (state.reg[id] ||= {
     q: '', status: 'semua', sort: null, page: 1, selected: new Set(),
   });
+
+  /* ====================================================================== */
+  /* Widget dashboard                                                        */
+  /* ====================================================================== */
+  const DEFAULT_WIDGETS = [
+    { id: 'w-kpi', type: 'kpi', label: 'Indikator Utama', w: 12, h: 2 },
+    { id: 'w-revenue', type: 'revenue', label: 'Pendapatan vs Target', w: 8, h: 5 },
+    { id: 'w-approvals', type: 'approvals', label: 'Menunggu Persetujuan', w: 4, h: 5 },
+    { id: 'w-inventory', type: 'inventory', label: 'Komposisi Persediaan', w: 6, h: 5 },
+    { id: 'w-aging', type: 'aging', label: 'Umur Piutang', w: 6, h: 5 },
+    { id: 'w-stock', type: 'stock-alerts', label: 'Stok Kritis', w: 6, h: 4 },
+    { id: 'w-activity', type: 'activity', label: 'Aktivitas Hari Ini', w: 6, h: 4 },
+  ];
+
+  const WIDGET_CATALOG = [
+    { type: 'kpi', label: 'Indikator Utama (KPI)', desc: '4 kartu metrik ringkasan', icon: 'grid', defaultW: 12, defaultH: 2 },
+    { type: 'revenue', label: 'Pendapatan vs Target', desc: 'Grafik garis tren 12 bulan', icon: 'bar-chart', defaultW: 8, defaultH: 5 },
+    { type: 'approvals', label: 'Menunggu Persetujuan', desc: 'Daftar dokumen menunggu', icon: 'inbox', defaultW: 4, defaultH: 5 },
+    { type: 'inventory', label: 'Komposisi Persediaan', desc: 'Grafik komposisi nilai stok', icon: 'boxes', defaultW: 6, defaultH: 5 },
+    { type: 'aging', label: 'Umur Piutang', desc: 'Grafik kolom aging AR', icon: 'clock', defaultW: 6, defaultH: 5 },
+    { type: 'stock-alerts', label: 'Stok Kritis', desc: 'Barang di bawah minimum', icon: 'alert', defaultW: 6, defaultH: 4 },
+    { type: 'activity', label: 'Aktivitas Hari Ini', desc: 'Jejak audit ringkas', icon: 'scroll', defaultW: 6, defaultH: 4 },
+    { type: 'ai-briefing', label: 'AI Briefing', desc: 'Ringkasan harian AI', icon: 'sparkle', defaultW: 12, defaultH: 3 },
+  ];
+
+  function getWidgets() {
+    if (!state.dashWidgets) {
+      try {
+        const saved = localStorage.getItem('erp-dash-widgets');
+        if (saved) state.dashWidgets = JSON.parse(saved);
+      } catch { /* sandbox */ }
+      if (!state.dashWidgets) state.dashWidgets = DEFAULT_WIDGETS.map(w => ({...w}));
+    }
+    return state.dashWidgets;
+  }
+
+  function saveWidgets() {
+    try { localStorage.setItem('erp-dash-widgets', JSON.stringify(state.dashWidgets)); } catch { /* sandbox */ }
+  }
 
   /* ====================================================================== */
   /* Tema                                                                    */
@@ -3591,6 +3886,8 @@ const Charts = (() => {
       persetujuan: { title: 'Kotak Persetujuan', sub: 'Dokumen dan transaksi yang menunggu persetujuan Anda.' },
       'kas-bank': { title: 'Kas & Bank', sub: 'Saldo rekening bank, kas kecil, dan status rekonsiliasi.' },
       'rantai-pasok': { title: 'Rantai Pasok', sub: 'Pengiriman aktif, logistik, dan pelacakan barang.' },
+      analitik: { title: 'Analitik & BI', sub: 'Ringkasan kinerja bisnis, tren, dan perbandingan antar departemen.' },
+      bsc: { title: 'Balanced Scorecard', sub: 'Kinerja empat perspektif: keuangan, pelanggan, proses, dan pertumbuhan.' },
     })[id] || { title: 'Halaman', sub: '' };
   }
 
@@ -3700,183 +3997,161 @@ const Charts = (() => {
       </article>`;
   }
 
+  function renderWidgetContent(widget) {
+    const type = widget.type;
+
+    if (type === 'kpi') {
+      return '<section class="grid grid-kpi" aria-label="Indikator utama">' + DATA.kpis.map(kpiTile).join('') + '</section>';
+    }
+
+    if (type === 'revenue') {
+      const trenTable =
+        '<div class="table-scroll"><table class="table">' +
+        '<thead><tr><th>Bulan</th><th class="ta-r">Pendapatan</th><th class="ta-r">Target</th><th class="ta-r">Selisih</th></tr></thead>' +
+        '<tbody>' +
+        DATA.revenueTrend.labels.map((l, i) => {
+          const a = DATA.revenueTrend.actual[i], t = DATA.revenueTrend.target[i];
+          const d = a - t;
+          return '<tr><td class="num">' + esc(l) + ' 2026</td><td class="ta-r num">' + FMT.rpCompact(a * 1e9) + '</td><td class="ta-r num">' + FMT.rpCompact(t * 1e9) + '</td><td class="ta-r num ' + (d >= 0 ? 'pos' : 'neg') + '">' + (d >= 0 ? '+' : '') + FMT.rpCompact(d * 1e9) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+
+      const pressed = function(k) { return state.chartView.tren === k ? 'true' : 'false'; };
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Pendapatan terhadap target</h2>' +
+        '<span class="card-note">12 bulan terakhir &middot; nilai dalam rupiah</span></div>' +
+        '<div class="card-tools"><div class="segmented" role="group" aria-label="Tampilan pendapatan">' +
+        '<button data-chart-view="tren:grafik" aria-pressed="' + pressed('grafik') + '">Grafik</button>' +
+        '<button data-chart-view="tren:tabel" aria-pressed="' + pressed('tabel') + '">Tabel</button>' +
+        '</div></div></div>' +
+        (state.chartView.tren === 'grafik'
+          ? '<div class="card-body"><div class="chart" data-chart="tren"></div>' +
+            '<div class="chart-legend"><span class="chart-legend-item"><i class="chart-swatch" data-swatch="cat-1"></i>Pendapatan aktual</span>' +
+            '<span class="chart-legend-item"><i class="chart-swatch chart-swatch-line"></i>Target</span></div></div>'
+          : trenTable);
+    }
+
+    if (type === 'approvals') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Menunggu persetujuan Anda</h2>' +
+        '<span class="card-note">' + DATA.approvals.length + ' dokumen &middot; Rp 828,6 jt</span>' +
+        '</div></div><div class="worklist">' +
+        DATA.approvals.slice(0, 4).map(function(a) {
+          return '<button class="worklist-item" data-approval="' + esc(a.id) + '">' +
+            '<span class="wl-icon" data-tone="' + a.tone + '">' + icon(a.icon) + '</span>' +
+            '<span class="worklist-body">' +
+            '<span class="worklist-title">' + esc(a.title) + '</span>' +
+            '<span class="worklist-meta"><span class="code">' + esc(a.id) + '</span><span>' + esc(a.reason) + '</span></span>' +
+            '<span class="worklist-meta">' + esc(a.by) + ' &middot; ' + esc(a.ago) + '</span></span>' +
+            '<span class="worklist-side"><b class="num">' + FMT.rpCompact(a.amount) + '</b>' + icon('chevron-right') + '</span></button>';
+        }).join('') +
+        '</div><div class="card-foot"><button class="btn btn-sm" data-nav="pesanan-penjualan">Buka semua persetujuan</button></div>';
+    }
+
+    if (type === 'inventory') {
+      const mixTotal = DATA.inventoryMix.reduce(function(s, d) { return s + d.value; }, 0);
+      const mixTable =
+        '<div class="table-scroll"><table class="table">' +
+        '<thead><tr><th>Kategori</th><th class="ta-r">Nilai</th><th class="ta-r">Porsi</th></tr></thead><tbody>' +
+        DATA.inventoryMix.map(function(d) {
+          return '<tr><td>' + esc(d.label) + '</td><td class="ta-r num">' + FMT.rpCompact(d.value) + '</td><td class="ta-r num">' + FMT.pct((d.value / mixTotal) * 100) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+
+      const pressed = function(k) { return state.chartView.mix === k ? 'true' : 'false'; };
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Komposisi nilai persediaan</h2>' +
+        '<span class="card-note">Total ' + FMT.rpCompact(mixTotal) + ' per ' + esc(DATA.org.period) + '</span></div>' +
+        '<div class="card-tools"><div class="segmented" role="group" aria-label="Tampilan persediaan">' +
+        '<button data-chart-view="mix:grafik" aria-pressed="' + pressed('grafik') + '">Grafik</button>' +
+        '<button data-chart-view="mix:tabel" aria-pressed="' + pressed('tabel') + '">Tabel</button>' +
+        '</div></div></div>' +
+        (state.chartView.mix === 'grafik'
+          ? '<div class="card-body"><div class="chart"><div data-stackbar="mix"></div></div><div data-stacklegend="mix"></div></div>'
+          : mixTable);
+    }
+
+    if (type === 'aging') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Umur piutang</h2>' +
+        '<span class="card-note">Semakin tua ember, semakin pekat warnanya</span></div>' +
+        '<div class="card-tools"><button class="btn btn-sm" data-nav="piutang">Rincian</button></div></div>' +
+        '<div class="card-body"><div class="chart" data-chart="aging"></div></div>';
+    }
+
+    if (type === 'stock-alerts') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Stok di bawah minimum</h2>' +
+        '<span class="card-note">' + DATA.stockAlerts.length + ' barang perlu tindakan pengadaan</span></div>' +
+        '<div class="card-tools"><button class="btn btn-sm" data-nav="stok">Buka stok</button></div></div>' +
+        '<div class="worklist">' +
+        DATA.stockAlerts.map(function(s) {
+          return '<button class="worklist-item" data-nav="stok">' +
+            '<span class="wl-icon" data-tone="' + s.tone + '">' + icon('alert') + '</span>' +
+            '<span class="worklist-body"><span class="worklist-title">' + esc(s.name) + '</span>' +
+            '<span class="worklist-meta"><span class="code">' + esc(s.sku) + '</span><span>' + esc(s.note) + '</span></span></span>' +
+            '<span class="worklist-side"><b class="num">' + FMT.int(s.onHand) + ' ' + esc(s.unit) + '</b>' +
+            '<span class="micro">min ' + FMT.int(s.min) + '</span></span></button>';
+        }).join('') +
+        '</div>';
+    }
+
+    if (type === 'activity') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Aktivitas hari ini</h2>' +
+        '<span class="card-note">Jejak audit ringkas</span></div></div>' +
+        '<div class="card-body"><div class="timeline">' +
+        DATA.activity.map(function(a) {
+          return '<div class="tl-item"><span class="tl-rail"><i class="tl-node" data-tone="' + a.tone + '"></i><i class="tl-line"></i></span>' +
+            '<span class="tl-body"><span class="tl-title"><b>' + esc(a.who) + '</b> ' + esc(a.what) + ' <span class="code">' + esc(a.ref) + '</span></span>' +
+            '<span class="tl-meta">' + esc(a.when) + '</span></span></div>';
+        }).join('') +
+        '</div></div>';
+    }
+
+    if (type === 'ai-briefing') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">' + icon('sparkle') + ' AI Briefing Harian</h2>' +
+        '<span class="card-note">Ringkasan otomatis oleh AI</span></div></div>' +
+        '<div class="card-body"><p style="font-size:var(--fs-sm);line-height:1.6;color:var(--ink-2)">' +
+        esc(DATA.aiBriefing) + '</p></div>';
+    }
+
+    return '<div class="card-body"><p class="muted">Widget tidak dikenali.</p></div>';
+  }
+
   function renderDashboard() {
-    const trenTable = `
-      <div class="table-scroll">
-        <table class="table">
-          <thead><tr><th>Bulan</th><th class="ta-r">Pendapatan</th><th class="ta-r">Target</th><th class="ta-r">Selisih</th></tr></thead>
-          <tbody>
-            ${DATA.revenueTrend.labels.map((l, i) => {
-              const a = DATA.revenueTrend.actual[i], t = DATA.revenueTrend.target[i];
-              const d = a - t;
-              return `<tr><td class="num">${esc(l)} 2026</td><td class="ta-r num">${FMT.rpCompact(a * 1e9)}</td><td class="ta-r num">${FMT.rpCompact(t * 1e9)}</td><td class="ta-r num ${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : ''}${FMT.rpCompact(d * 1e9)}</td></tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    const widgets = getWidgets();
+    const editMode = state.dashEditMode;
 
-    const mixTotal = DATA.inventoryMix.reduce((s, d) => s + d.value, 0);
-    const mixTable = `
-      <div class="table-scroll">
-        <table class="table">
-          <thead><tr><th>Kategori</th><th class="ta-r">Nilai</th><th class="ta-r">Porsi</th></tr></thead>
-          <tbody>
-            ${DATA.inventoryMix.map((d) => `<tr><td>${esc(d.label)}</td><td class="ta-r num">${FMT.rpCompact(d.value)}</td><td class="ta-r num">${FMT.pct((d.value / mixTotal) * 100)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    const editBar =
+      '<div class="dash-edit-bar" style="display:flex;align-items:flex-start;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
+      '<div style="flex:1">' +
+      '<h1 class="page-title">Selamat pagi, ' + esc(DATA.org.user.name.split(' ')[0]) + '</h1>' +
+      '<p class="page-sub">' + esc(DATA.org.branch) + ' &middot; ' + esc(DATA.org.period) + ' &middot; 5 dokumen menunggu keputusan Anda.</p></div>' +
+      '<div class="page-actions" style="display:flex;gap:var(--sp-2)">' +
+      (editMode
+        ? '<button class="btn" data-action="widget-add">' + icon('plus') + ' Tambah Widget</button>' +
+          '<button class="btn" data-action="widget-reset">' + icon('transfer') + ' Reset Layout</button>' +
+          '<button class="btn btn-primary" data-action="dash-edit-toggle">' + icon('check') + ' Selesai</button>'
+        : '<button class="btn" data-action="demo">' + icon('download') + ' Unduh ringkasan</button>' +
+          '<button class="btn" data-action="dash-edit-toggle">' + icon('edit') + ' Kustomisasi</button>' +
+          '<button class="btn btn-primary" data-action="new-so">' + icon('plus') + ' Pesanan baru</button>') +
+      '</div></div>';
 
-    return `
-      <div class="page-head">
-        <div class="page-head-text">
-          <h1 class="page-title">Selamat pagi, ${esc(DATA.org.user.name.split(' ')[0])}</h1>
-          <p class="page-sub">${esc(DATA.org.branch)} · ${esc(DATA.org.period)} · 5 dokumen menunggu keputusan Anda.</p>
-        </div>
-        <div class="page-actions">
-          <button class="btn" data-action="demo">${icon('download')} Unduh ringkasan</button>
-          <button class="btn btn-primary" data-action="new-so">${icon('plus')} Pesanan baru</button>
-        </div>
-      </div>
+    const widgetHtml = widgets.map(function(w, idx) {
+      return '<article class="card dash-widget" style="grid-column:span ' + w.w + ';grid-row:span ' + w.h + '"' +
+        ' draggable="' + editMode + '" data-widget-idx="' + idx + '" data-widget-type="' + w.type + '">' +
+        (editMode ? '<button class="widget-remove" data-widget-remove="' + idx + '" title="Hapus widget" style="position:absolute;top:var(--sp-1);right:var(--sp-1);z-index:2;background:var(--surf-danger,#ef4444);color:#fff;border:0;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center">&times;</button>' : '') +
+        (editMode ? '<span class="widget-drag-handle" style="position:absolute;top:var(--sp-1);left:var(--sp-1);cursor:grab;opacity:.5">' + icon('grid') + '</span>' : '') +
+        renderWidgetContent(w) +
+        (editMode ? '<span class="widget-resize" style="position:absolute;bottom:2px;right:2px;width:14px;height:14px;cursor:nwse-resize;opacity:.4;border-right:2px solid currentColor;border-bottom:2px solid currentColor"></span>' : '') +
+        '</article>';
+    }).join('');
 
-      <section class="grid grid-kpi" aria-label="Indikator utama">
-        ${DATA.kpis.map(kpiTile).join('')}
-      </section>
-
-      <section class="grid grid-2-1">
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Pendapatan terhadap target</h2>
-              <span class="card-note">12 bulan terakhir · nilai dalam rupiah</span>
-            </div>
-            <div class="card-tools">
-              <div class="segmented" role="group" aria-label="Tampilan pendapatan">
-                <button data-chart-view="tren:grafik" aria-pressed="${state.chartView.tren === 'grafik'}">Grafik</button>
-                <button data-chart-view="tren:tabel" aria-pressed="${state.chartView.tren === 'tabel'}">Tabel</button>
-              </div>
-            </div>
-          </div>
-          ${state.chartView.tren === 'grafik' ? `
-            <div class="card-body">
-              <div class="chart" data-chart="tren"></div>
-              <div class="chart-legend">
-                <span class="chart-legend-item"><i class="chart-swatch" data-swatch="cat-1"></i>Pendapatan aktual</span>
-                <span class="chart-legend-item"><i class="chart-swatch chart-swatch-line"></i>Target</span>
-              </div>
-            </div>` : trenTable}
-        </article>
-
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Menunggu persetujuan Anda</h2>
-              <span class="card-note">${DATA.approvals.length} dokumen · Rp 828,6 jt</span>
-            </div>
-          </div>
-          <div class="worklist">
-            ${DATA.approvals.slice(0, 4).map((a) => `
-              <button class="worklist-item" data-approval="${esc(a.id)}">
-                <span class="wl-icon" data-tone="${a.tone}">${icon(a.icon)}</span>
-                <span class="worklist-body">
-                  <span class="worklist-title">${esc(a.title)}</span>
-                  <span class="worklist-meta"><span class="code">${esc(a.id)}</span><span>${esc(a.reason)}</span></span>
-                  <span class="worklist-meta">${esc(a.by)} · ${esc(a.ago)}</span>
-                </span>
-                <span class="worklist-side">
-                  <b class="num">${FMT.rpCompact(a.amount)}</b>
-                  ${icon('chevron-right')}
-                </span>
-              </button>`).join('')}
-          </div>
-          <div class="card-foot">
-            <button class="btn btn-sm" data-nav="pesanan-penjualan">Buka semua persetujuan</button>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid grid-1-1">
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Komposisi nilai persediaan</h2>
-              <span class="card-note">Total ${FMT.rpCompact(mixTotal)} per ${esc(DATA.org.period)}</span>
-            </div>
-            <div class="card-tools">
-              <div class="segmented" role="group" aria-label="Tampilan persediaan">
-                <button data-chart-view="mix:grafik" aria-pressed="${state.chartView.mix === 'grafik'}">Grafik</button>
-                <button data-chart-view="mix:tabel" aria-pressed="${state.chartView.mix === 'tabel'}">Tabel</button>
-              </div>
-            </div>
-          </div>
-          ${state.chartView.mix === 'grafik' ? `
-            <div class="card-body">
-              <div class="chart"><div data-stackbar="mix"></div></div>
-              <div data-stacklegend="mix"></div>
-            </div>` : mixTable}
-        </article>
-
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Umur piutang</h2>
-              <span class="card-note">Semakin tua ember, semakin pekat warnanya</span>
-            </div>
-            <div class="card-tools">
-              <button class="btn btn-sm" data-nav="piutang">Rincian</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="chart" data-chart="aging"></div>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid grid-1-1">
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Stok di bawah minimum</h2>
-              <span class="card-note">${DATA.stockAlerts.length} barang perlu tindakan pengadaan</span>
-            </div>
-            <div class="card-tools"><button class="btn btn-sm" data-nav="stok">Buka stok</button></div>
-          </div>
-          <div class="worklist">
-            ${DATA.stockAlerts.map((s) => `
-              <button class="worklist-item" data-nav="stok">
-                <span class="wl-icon" data-tone="${s.tone}">${icon('alert')}</span>
-                <span class="worklist-body">
-                  <span class="worklist-title">${esc(s.name)}</span>
-                  <span class="worklist-meta"><span class="code">${esc(s.sku)}</span><span>${esc(s.note)}</span></span>
-                </span>
-                <span class="worklist-side">
-                  <b class="num">${FMT.int(s.onHand)} ${esc(s.unit)}</b>
-                  <span class="micro">min ${FMT.int(s.min)}</span>
-                </span>
-              </button>`).join('')}
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head">
-            <div class="card-head-text">
-              <h2 class="card-title">Aktivitas hari ini</h2>
-              <span class="card-note">Jejak audit ringkas</span>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="timeline">
-              ${DATA.activity.map((a) => `
-                <div class="tl-item">
-                  <span class="tl-rail"><i class="tl-node" data-tone="${a.tone}"></i><i class="tl-line"></i></span>
-                  <span class="tl-body">
-                    <span class="tl-title"><b>${esc(a.who)}</b> ${esc(a.what)} <span class="code">${esc(a.ref)}</span></span>
-                    <span class="tl-meta">${esc(a.when)}</span>
-                  </span>
-                </div>`).join('')}
-            </div>
-          </div>
-        </article>
-      </section>`;
+    return editBar +
+      '<div class="dash-grid' + (editMode ? ' dash-edit-mode' : '') + '" style="display:grid;grid-template-columns:repeat(12,1fr);gap:var(--sp-4);align-items:start">' +
+      widgetHtml + '</div>';
   }
 
   function mountDashboard(root) {
@@ -5425,9 +5700,228 @@ const Charts = (() => {
       </aside>` : ''}`;
   }
 
+  /* ====================================================================== */
+  /* Balanced Scorecard                                                      */
+  /* ====================================================================== */
+  function renderBSC() {
+    var bsc = DATA.bscData;
+    var perspectives = [
+      { key: 'financial', label: 'Keuangan', icon: 'wallet', color: '#2563eb' },
+      { key: 'customer', label: 'Pelanggan', icon: 'users', color: '#16a34a' },
+      { key: 'internal', label: 'Proses Internal', icon: 'factory', color: '#d97706' },
+      { key: 'growth', label: 'Pembelajaran & Pertumbuhan', icon: 'target', color: '#9333ea' },
+    ];
+
+    /* Compute overall score */
+    var totalMetrics = 0;
+    var achievedSum = 0;
+    perspectives.forEach(function(p) {
+      bsc[p.key].forEach(function(m) {
+        totalMetrics++;
+        var ratio = m.actual / m.target;
+        if (ratio > 1) ratio = 1;
+        achievedSum += ratio;
+      });
+    });
+    var overallPct = Math.round((achievedSum / totalMetrics) * 100);
+
+    /* SVG donut for overall score */
+    var radius = 54;
+    var circum = 2 * Math.PI * radius;
+    var offset = circum - (circum * overallPct / 100);
+    var scoreRing =
+      '<svg viewBox="0 0 128 128" width="128" height="128" style="display:block;margin:auto">' +
+      '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="var(--border-1,#e5e7eb)" stroke-width="10"/>' +
+      '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="' + (overallPct >= 80 ? '#16a34a' : overallPct >= 60 ? '#d97706' : '#ef4444') + '" stroke-width="10" ' +
+      'stroke-dasharray="' + circum + '" stroke-dashoffset="' + offset + '" stroke-linecap="round" transform="rotate(-90 64 64)"/>' +
+      '<text x="64" y="60" text-anchor="middle" font-size="24" font-weight="700" fill="var(--ink-1,#111)">' + overallPct + '%</text>' +
+      '<text x="64" y="78" text-anchor="middle" font-size="10" fill="var(--ink-3,#6b7280)">Skor Keseluruhan</text></svg>';
+
+    var perspectiveCards = perspectives.map(function(p) {
+      var metrics = bsc[p.key];
+      var rows = metrics.map(function(m) {
+        var pct = Math.min(Math.round((m.actual / m.target) * 100), 100);
+        var barColor = pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#ef4444';
+        var trendHtml = '<span class="bsc-trend" style="display:inline-flex;gap:1px;align-items:flex-end;height:16px">' +
+          m.trend.map(function(v) {
+            var h = Math.max(3, Math.round((v / m.target) * 16));
+            return '<span style="width:4px;height:' + h + 'px;background:' + barColor + ';border-radius:1px;display:inline-block"></span>';
+          }).join('') + '</span>';
+        return '<tr>' +
+          '<td>' + esc(m.metric) + '</td>' +
+          '<td class="ta-r num">' + m.actual + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
+          '<td class="ta-r num">' + m.target + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
+          '<td class="ta-r"><div style="display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end">' +
+          '<div style="width:64px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:3px"></div></div>' +
+          '<span class="micro num">' + pct + '%</span></div></td>' +
+          '<td class="ta-c">' + trendHtml + '</td></tr>';
+      }).join('');
+
+      return '<article class="card" style="overflow:hidden">' +
+        '<div style="height:4px;background:' + p.color + '"></div>' +
+        '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">' + icon(p.icon) + ' ' + esc(p.label) + '</h2></div></div>' +
+        '<div class="table-scroll"><table class="table"><thead><tr>' +
+        '<th>Metrik</th><th class="ta-r">Aktual</th><th class="ta-r">Target</th><th class="ta-r">Pencapaian</th><th class="ta-c">Tren</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div></article>';
+    }).join('');
+
+    return '<div class="page-head"><div class="page-head-text">' +
+      '<h1 class="page-title">Balanced Scorecard</h1>' +
+      '<p class="page-sub">Periode ' + esc(bsc.period) + ' &middot; 4 perspektif &middot; ' + totalMetrics + ' indikator kinerja</p></div></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
+      '<article class="card"><div class="card-body" style="text-align:center;padding:var(--sp-6)">' +
+      scoreRing +
+      '<p style="margin-top:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-3)">Rata-rata pencapaian terhadap target seluruh perspektif</p>' +
+      '</div></article>' +
+      '<article class="card"><div class="card-body" style="padding:var(--sp-4)">' +
+      '<h3 style="font-size:var(--fs-sm);font-weight:600;margin-bottom:var(--sp-3)">Ringkasan per Perspektif</h3>' +
+      perspectives.map(function(p) {
+        var metrics = bsc[p.key];
+        var avg = Math.round(metrics.reduce(function(s, m) { return s + Math.min(m.actual / m.target, 1); }, 0) / metrics.length * 100);
+        return '<div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)">' +
+          '<span style="width:10px;height:10px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
+          '<span style="flex:1;font-size:var(--fs-sm)">' + esc(p.label) + '</span>' +
+          '<div style="width:80px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
+          '<div style="width:' + avg + '%;height:100%;background:' + p.color + ';border-radius:3px"></div></div>' +
+          '<span class="num micro" style="width:32px;text-align:right">' + avg + '%</span></div>';
+      }).join('') +
+      '</div></article></div>' +
+      perspectiveCards;
+  }
+
+  /* ====================================================================== */
+  /* Analitik                                                                */
+  /* ====================================================================== */
+  function renderAnalytics() {
+    var kpis = DATA.analyticsKpis;
+
+    var kpiTiles = kpis.map(function(k) {
+      var fmtVal;
+      if (k.format === 'rp') fmtVal = FMT.rpCompact(k.value);
+      else if (k.format === 'pct') fmtVal = FMT.pct(k.value);
+      else if (k.format === 'hari') fmtVal = k.value + ' hari';
+      else if (k.format === 'item') fmtVal = k.value + ' item';
+      else fmtVal = FMT.int(k.value);
+
+      var deltaClass = k.delta >= 0 ? 'pos' : 'neg';
+      var deltaIcon = k.delta >= 0 ? 'arrow-up' : 'arrow-down';
+
+      return '<article class="card kpi">' +
+        '<div class="kpi-top"><span class="micro">' + icon(k.icon) + ' ' + esc(k.label) + '</span></div>' +
+        '<div class="kpi-metric">' + fmtVal + '</div>' +
+        '<div class="kpi-row"><span class="kpi-delta ' + deltaClass + '" style="color:' + (k.delta >= 0 ? 'var(--tone-ok,#16a34a)' : 'var(--tone-danger,#ef4444)') + '">' +
+        icon(deltaIcon) + ' ' + FMT.signedPct(k.delta) +
+        '</span></div></article>';
+    }).join('');
+
+    /* Revenue trend chart card */
+    var revenueCard =
+      '<article class="card">' +
+      '<div class="card-head"><div class="card-head-text">' +
+      '<h2 class="card-title">Tren Pendapatan 12 Bulan</h2>' +
+      '<span class="card-note">Aktual vs target dalam miliar rupiah</span></div></div>' +
+      '<div class="card-body"><div class="chart" data-chart="analytics-tren"></div></div></article>';
+
+    /* Pipeline funnel */
+    var stages = DATA.crmStages || [];
+    var funnelCard =
+      '<article class="card">' +
+      '<div class="card-head"><div class="card-head-text">' +
+      '<h2 class="card-title">Funnel Pipeline CRM</h2>' +
+      '<span class="card-note">Nilai peluang per tahap</span></div></div>' +
+      '<div class="card-body">' +
+      (stages.length > 0 ? stages.map(function(s, i) {
+        var leads = (DATA.leads || []).filter(function(l) { return l.stage === s.id; });
+        var total = leads.reduce(function(sum, l) { return sum + l.value; }, 0);
+        var maxVal = stages.reduce(function(mx, st) {
+          var stLeads = (DATA.leads || []).filter(function(l) { return l.stage === st.id; });
+          return Math.max(mx, stLeads.reduce(function(s2, l) { return s2 + l.value; }, 0));
+        }, 1);
+        var pct = Math.round((total / maxVal) * 100);
+        var colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
+        var c = colors[i % colors.length];
+        return '<div style="margin-bottom:var(--sp-2)">' +
+          '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
+          '<span>' + esc(s.label) + ' (' + leads.length + ')</span>' +
+          '<span class="num">' + FMT.rpCompact(total) + '</span></div>' +
+          '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;height:100%;background:' + c + ';border-radius:4px"></div></div></div>';
+      }).join('') : '<p class="muted">Data pipeline belum tersedia.</p>') +
+      '</div></article>';
+
+    /* AR aging chart */
+    var agingCard =
+      '<article class="card">' +
+      '<div class="card-head"><div class="card-head-text">' +
+      '<h2 class="card-title">Umur Piutang (Aging)</h2>' +
+      '<span class="card-note">Distribusi piutang per bucket</span></div></div>' +
+      '<div class="card-body"><div class="chart" data-chart="analytics-aging"></div></div></article>';
+
+    /* Department comparison */
+    var deptData = [
+      { dept: 'Penjualan', budget: 2400, actual: 2180 },
+      { dept: 'Produksi', budget: 5600, actual: 5320 },
+      { dept: 'Pembelian', budget: 1800, actual: 1950 },
+      { dept: 'SDM', budget: 1200, actual: 1150 },
+      { dept: 'Keuangan', budget: 800, actual: 720 },
+    ];
+    var deptCard =
+      '<article class="card">' +
+      '<div class="card-head"><div class="card-head-text">' +
+      '<h2 class="card-title">Realisasi vs Anggaran per Departemen</h2>' +
+      '<span class="card-note">Dalam jutaan rupiah</span></div></div>' +
+      '<div class="card-body">' +
+      deptData.map(function(d) {
+        var pct = Math.round((d.actual / d.budget) * 100);
+        var barColor = pct > 100 ? '#ef4444' : pct > 90 ? '#d97706' : '#16a34a';
+        return '<div style="margin-bottom:var(--sp-2)">' +
+          '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
+          '<span>' + esc(d.dept) + '</span>' +
+          '<span class="num">' + FMT.rpCompact(d.actual * 1e6) + ' / ' + FMT.rpCompact(d.budget * 1e6) + ' (' + pct + '%)</span></div>' +
+          '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
+          '<div style="width:' + Math.min(pct, 100) + '%;height:100%;background:' + barColor + ';border-radius:4px"></div></div></div>';
+      }).join('') +
+      '</div></article>';
+
+    return '<div class="page-head"><div class="page-head-text">' +
+      '<h1 class="page-title">Analitik &amp; BI</h1>' +
+      '<p class="page-sub">Ikhtisar kinerja bisnis ' + esc(DATA.org.company) + ' &middot; ' + esc(DATA.org.period) + '</p></div></div>' +
+      '<section class="grid grid-kpi" aria-label="Analitik KPI">' + kpiTiles + '</section>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
+      revenueCard + funnelCard + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)">' +
+      agingCard + deptCard + '</div>';
+  }
+
+  function mountAnalytics(root) {
+    var tren = $('[data-chart="analytics-tren"]', root);
+    if (tren) {
+      Charts.lineChart(tren, {
+        title: 'Tren pendapatan',
+        labels: DATA.revenueTrend.labels,
+        actual: DATA.revenueTrend.actual,
+        target: DATA.revenueTrend.target,
+        format: 'rp-compact',
+        scale: 1e9,
+      });
+    }
+    var aging = $('[data-chart="analytics-aging"]', root);
+    if (aging) {
+      Charts.columnChart(aging, {
+        title: 'Umur piutang',
+        ariaLabel: 'Umur piutang per ember: ' + DATA.arAging.map(function(d) { return d.label + ' ' + FMT.rpCompact(d.value); }).join(', '),
+        items: DATA.arAging,
+        height: 214,
+      });
+    }
+  }
+
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
     ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
-     'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok'].includes(id);
+     'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok',
+     'analitik', 'bsc'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -5446,6 +5940,8 @@ const Charts = (() => {
       case 'persetujuan': return renderApprovalInbox();
       case 'kas-bank': return renderCashBank();
       case 'rantai-pasok': return renderSupplyChain();
+      case 'analitik': return renderAnalytics();
+      case 'bsc': return renderBSC();
       default: return renderDashboard();
     }
   }
@@ -5467,6 +5963,7 @@ const Charts = (() => {
 
     const root = $('#content');
     if (state.view === 'dasbor') mountDashboard(root);
+    if (state.view === 'analitik') mountAnalytics(root);
     if (state.view === 'piutang') {
       const node = $('[data-chart="aging-lg"]', root);
       if (node) Charts.columnChart(node, {
@@ -5507,6 +6004,41 @@ const Charts = (() => {
       const [k, v] = cv.dataset.chartView.split(':');
       state.chartView[k] = v;
       render();
+      return;
+    }
+
+    /* --- Widget remove ---------------------------------------------------- */
+    const wr = t.closest('[data-widget-remove]');
+    if (wr) {
+      const idx = Number(wr.dataset.widgetRemove);
+      const widgets = getWidgets();
+      if (idx >= 0 && idx < widgets.length) {
+        widgets.splice(idx, 1);
+        saveWidgets();
+        render();
+      }
+      return;
+    }
+
+    /* --- Widget catalog pick ---------------------------------------------- */
+    const wp = t.closest('[data-widget-pick]');
+    if (wp) {
+      const type = wp.dataset.widgetPick;
+      const cat = WIDGET_CATALOG.find(function(c) { return c.type === type; });
+      if (cat) {
+        var widgets = getWidgets();
+        widgets.push({
+          id: 'w-' + type + '-' + Date.now(),
+          type: cat.type,
+          label: cat.label,
+          w: cat.defaultW,
+          h: cat.defaultH,
+        });
+        saveWidgets();
+        closeOverlay();
+        render();
+        toast('Widget ditambahkan', cat.label + ' berhasil ditambahkan ke dasbor.', 'ok');
+      }
       return;
     }
 
@@ -5732,6 +6264,45 @@ const Charts = (() => {
         break;
       }
 
+      case 'dash-edit-toggle':
+        state.dashEditMode = !state.dashEditMode;
+        render();
+        if (state.dashEditMode) {
+          toast('Mode kustomisasi', 'Seret widget untuk mengatur ulang, atau tambah/hapus sesuai kebutuhan.', 'accent');
+        }
+        break;
+
+      case 'widget-add': {
+        const existing = getWidgets().map(function(w) { return w.type; });
+        const available = WIDGET_CATALOG.filter(function(c) { return !existing.includes(c.type); });
+        const catalogHtml = (available.length > 0
+          ? available.map(function(c) {
+              return '<button class="worklist-item" data-widget-pick="' + c.type + '">' +
+                '<span class="wl-icon">' + icon(c.icon) + '</span>' +
+                '<span class="worklist-body">' +
+                '<span class="worklist-title">' + esc(c.label) + '</span>' +
+                '<span class="worklist-meta">' + esc(c.desc) + '</span></span>' +
+                '<span class="worklist-side">' + icon('plus') + '</span></button>';
+            }).join('')
+          : '<p style="padding:var(--sp-4);color:var(--ink-3)">Semua widget sudah ditambahkan.</p>');
+
+        openDrawer({
+          eyebrow: '',
+          title: 'Tambah Widget',
+          subtitle: 'Pilih widget untuk ditambahkan ke dasbor',
+          body: '<div class="worklist">' + catalogHtml + '</div>',
+          foot: '<button class="btn" data-close>Tutup</button>',
+        });
+        break;
+      }
+
+      case 'widget-reset':
+        state.dashWidgets = DEFAULT_WIDGETS.map(function(w) { return Object.assign({}, w); });
+        saveWidgets();
+        render();
+        toast('Layout direset', 'Dasbor dikembalikan ke tata letak awal.', 'ok');
+        break;
+
       case 'toggle': break;
 
       default:
@@ -5777,6 +6348,49 @@ const Charts = (() => {
   /* ====================================================================== */
   /* Mulai                                                                   */
   /* ====================================================================== */
+  /* ====================================================================== */
+  /* Drag/drop & resize for widget dashboard                                 */
+  /* ====================================================================== */
+  let dragSrcIdx = null;
+
+  function onDragStart(ev) {
+    if (!state.dashEditMode) return;
+    const w = ev.target.closest('[data-widget-idx]');
+    if (!w) return;
+    dragSrcIdx = Number(w.dataset.widgetIdx);
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', String(dragSrcIdx));
+    w.style.opacity = '0.4';
+  }
+
+  function onDragOver(ev) {
+    if (!state.dashEditMode || dragSrcIdx === null) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'move';
+  }
+
+  function onDrop(ev) {
+    if (!state.dashEditMode || dragSrcIdx === null) return;
+    ev.preventDefault();
+    const target = ev.target.closest('[data-widget-idx]');
+    if (!target) return;
+    const destIdx = Number(target.dataset.widgetIdx);
+    if (destIdx === dragSrcIdx) return;
+
+    const widgets = getWidgets();
+    const moved = widgets.splice(dragSrcIdx, 1)[0];
+    widgets.splice(destIdx, 0, moved);
+    saveWidgets();
+    dragSrcIdx = null;
+    render();
+  }
+
+  function onDragEnd(ev) {
+    dragSrcIdx = null;
+    const w = ev.target.closest('[data-widget-idx]');
+    if (w) w.style.opacity = '';
+  }
+
   function start() {
     initTheme();
     const hash = location.hash.replace('#/', '');
@@ -5786,6 +6400,10 @@ const Charts = (() => {
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
     document.addEventListener('keydown', onKeydown);
+    document.addEventListener('dragstart', onDragStart);
+    document.addEventListener('dragover', onDragOver);
+    document.addEventListener('drop', onDrop);
+    document.addEventListener('dragend', onDragEnd);
     window.addEventListener('hashchange', () => {
       const id = location.hash.replace('#/', '');
       if (viewExists(id) && id !== state.view) { state.view = id; render(); }

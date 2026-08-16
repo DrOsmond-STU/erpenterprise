@@ -121,6 +121,7 @@ const DATA = (() => {
       label: 'Analitik',
       items: [
         { id: 'analitik', label: 'BI & Laporan', icon: 'bar-chart' },
+        { id: 'bsc', label: 'Balanced Scorecard', icon: 'target' },
       ],
     },
     {
@@ -743,6 +744,47 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'CMP-008', title: 'Perlindungan Data Karyawan', category: 'Tata Kelola', owner: 'Admin Sistem', dueDate: null, lastReview: '2026-03-15', risk: 'tinggi', status: 'peninjauan' },
   ];
 
+  /* --- Balanced Scorecard ------------------------------------------------ */
+  const bscData = {
+    period: 'Agu 2026',
+    financial: [
+      { metric: 'Pertumbuhan Pendapatan', target: 15, actual: 12.4, unit: '%', trend: [8.2, 9.1, 10.3, 11.0, 11.8, 12.4] },
+      { metric: 'Margin Laba Kotor', target: 36, actual: 35.0, unit: '%', trend: [33.2, 33.8, 34.1, 34.5, 34.8, 35.0] },
+      { metric: 'Return on Investment', target: 18, actual: 16.2, unit: '%', trend: [14.1, 14.8, 15.2, 15.6, 15.9, 16.2] },
+      { metric: 'Arus Kas Operasional', target: 1.0, actual: 0.89, unit: 'M', trend: [0.72, 0.78, 0.82, 0.85, 0.87, 0.89] },
+    ],
+    customer: [
+      { metric: 'Indeks Kepuasan Pelanggan', target: 90, actual: 87, unit: '%', trend: [82, 83, 85, 85, 86, 87] },
+      { metric: 'Retensi Pelanggan', target: 95, actual: 93.2, unit: '%', trend: [91.0, 91.5, 92.0, 92.4, 92.8, 93.2] },
+      { metric: 'Pengiriman Tepat Waktu', target: 98, actual: 96.1, unit: '%', trend: [94.2, 94.8, 95.1, 95.5, 95.8, 96.1] },
+      { metric: 'Keluhan per 1000 Transaksi', target: 2, actual: 3.1, unit: '', trend: [4.2, 3.8, 3.6, 3.4, 3.2, 3.1] },
+    ],
+    internal: [
+      { metric: 'OEE (Overall Equipment Effectiveness)', target: 85, actual: 81.4, unit: '%', trend: [78.0, 79.2, 79.8, 80.2, 80.8, 81.4] },
+      { metric: 'Tingkat Cacat Produksi', target: 1.0, actual: 0.8, unit: '%', trend: [1.4, 1.2, 1.1, 1.0, 0.9, 0.8] },
+      { metric: 'Waktu Siklus Rata-rata', target: 4.0, actual: 4.2, unit: 'hari', trend: [5.0, 4.8, 4.6, 4.5, 4.3, 4.2] },
+      { metric: 'Perputaran Persediaan', target: 8, actual: 7.2, unit: 'x/thn', trend: [6.1, 6.4, 6.7, 6.9, 7.0, 7.2] },
+    ],
+    growth: [
+      { metric: 'Jam Pelatihan per Karyawan', target: 40, actual: 32, unit: 'jam', trend: [18, 22, 24, 26, 28, 32] },
+      { metric: 'Indeks Kepuasan Karyawan', target: 80, actual: 76, unit: '%', trend: [70, 72, 73, 74, 75, 76] },
+      { metric: 'Turnover Karyawan', target: 5, actual: 3.8, unit: '%', trend: [6.2, 5.8, 5.1, 4.6, 4.2, 3.8] },
+      { metric: 'Adopsi Sistem Digital', target: 90, actual: 82, unit: '%', trend: [62, 68, 72, 76, 79, 82] },
+    ],
+  };
+
+  /* --- Analitik: Ringkasan KPI ------------------------------------------- */
+  const analyticsKpis = [
+    { id: 'ax-revenue', label: 'Total Penjualan MTD', value: 4_823_400_000, delta: 12.4, format: 'rp', icon: 'cart' },
+    { id: 'ax-margin', label: 'Margin Laba Kotor', value: 35.0, delta: -1.0, format: 'pct', icon: 'piechart' },
+    { id: 'ax-pipeline', label: 'Pipeline CRM', value: 9_685_000_000, delta: 18.2, format: 'rp', icon: 'target' },
+    { id: 'ax-conversion', label: 'Konversi Pipeline', value: 32.5, delta: -2.1, format: 'pct', icon: 'check' },
+    { id: 'ax-oee', label: 'OEE Produksi', value: 81.4, delta: 1.8, format: 'pct', icon: 'factory' },
+    { id: 'ax-dso', label: 'DSO', value: 38, delta: 3, format: 'hari', icon: 'clock' },
+    { id: 'ax-stock', label: 'Stok Kritis', value: 4, delta: 1, format: 'item', icon: 'alert' },
+    { id: 'ax-satisfaction', label: 'Kepuasan Pelanggan', value: 87, delta: 2, format: 'pct', icon: 'users' },
+  ];
+
   /* --- Rantai Pasok (Supply Chain) --------------------------------------- */
   const shipments = [
     { id: 'SHP-2026-0188', date: '2026-08-14', origin: 'Cikarang — Pabrik', destination: 'PT Global Komponen Indo, Surabaya', carrier: 'JNE Trucking', ref: 'DO-2026-0908', weight: 2400, eta: '2026-08-17', status: 'transit' },
@@ -770,5 +812,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     /* Modul tambahan */
     masterProducts, rfqs, payables, apAging, bankAccounts,
     attendanceRecords, workflows, reports, complianceItems, shipments,
+    /* Dashboard */
+    bscData, analyticsKpis,
   };
 })();
