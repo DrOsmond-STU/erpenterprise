@@ -1200,65 +1200,80 @@ svg { display: block; }
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: var(--sp-3);
+  gap: var(--sp-4);
   padding: 0;
+  align-items: start;
 }
 .dash-widget {
   position: relative;
   min-height: 0;
   transition: box-shadow var(--speed) var(--ease), transform 0.15s var(--ease);
 }
+.dash-widget-editing {
+  box-shadow: 0 0 0 2px var(--accent-faint, rgba(59,130,246,0.3)), var(--shadow-card);
+}
+.dash-widget-editing:hover {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-card-hover);
+}
 .dash-widget.dragging {
   opacity: 0.5;
   z-index: 100;
 }
 .dash-widget.drag-over {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 3px var(--accent);
 }
-.dash-edit-bar {
-  display: flex; align-items: center; gap: var(--sp-3);
-  padding: var(--sp-2) 0;
-  margin-bottom: var(--sp-3);
-}
-.dash-edit-bar .btn { font-size: var(--fs-cap); }
 
-/* Widget resize handles */
-.widget-resize {
-  position: absolute; bottom: 0; right: 0;
-  width: 20px; height: 20px;
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity var(--speed) var(--ease);
-  z-index: 5;
+/* Widget edit toolbar — appears at the top of each widget in edit mode */
+.widget-toolbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--accent); color: var(--ink-on-brand);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  font-size: var(--fs-cap);
+  min-height: 32px;
+  user-select: none;
 }
-.widget-resize::after {
-  content: '';
-  position: absolute; bottom: 4px; right: 4px;
-  width: 8px; height: 8px;
-  border-right: 2px solid var(--ink-3);
-  border-bottom: 2px solid var(--ink-3);
+.widget-toolbar-drag {
+  cursor: grab; opacity: 0.7;
+  display: flex; align-items: center;
+  padding: 2px;
 }
-.dash-widget:hover .widget-resize,
-.dash-edit-mode .widget-resize {
-  opacity: 1;
+.widget-toolbar-drag:active { cursor: grabbing; }
+.widget-toolbar-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widget-toolbar-spacer { flex: 1; }
+.widget-toolbar-group {
+  display: flex; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.15);
+  border-radius: var(--r-md);
+  padding: 1px 4px;
 }
-.widget-remove {
-  position: absolute; top: var(--sp-1); right: var(--sp-1);
+.widget-toolbar-group .micro {
+  color: rgba(255,255,255,0.7);
+  margin-right: 2px;
+  font-size: 10px;
+}
+.widget-toolbar-val {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  min-width: 18px; text-align: center;
+  font-weight: 700;
+}
+.widget-toolbar-btn {
+  display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px;
-  display: none; align-items: center; justify-content: center;
-  background: var(--danger); color: #fff;
-  border: none; border-radius: var(--r-full);
-  cursor: pointer; z-index: 6;
-  font-size: var(--fs-cap); line-height: 1;
+  border: none; border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.15);
+  color: inherit; cursor: pointer;
+  transition: background var(--speed) var(--ease);
 }
-.dash-edit-mode .widget-remove { display: flex; }
-.widget-drag-handle {
-  cursor: grab; opacity: 0;
-  transition: opacity var(--speed) var(--ease);
-}
-.dash-edit-mode .widget-drag-handle,
-.dash-widget:hover .widget-drag-handle { opacity: 0.7; }
-.widget-drag-handle:active { cursor: grabbing; }
+.widget-toolbar-btn:hover { background: rgba(255,255,255,0.3); }
+.widget-toolbar-btn svg { width: 12px; height: 12px; }
+.widget-toolbar-btn-danger { background: rgba(220,38,38,0.6); }
+.widget-toolbar-btn-danger:hover { background: rgba(220,38,38,0.9); }
+
+.widget-body { min-width: 0; min-height: 0; overflow: hidden; }
+
+.dash-edit-bar .btn { font-size: var(--fs-cap); }
 
 /* Widget picker modal */
 .widget-picker-overlay {

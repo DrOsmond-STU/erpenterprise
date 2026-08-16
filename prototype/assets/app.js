@@ -782,6 +782,11 @@
   /* Kerangka: rail, topbar, context bar                                     */
   /* ====================================================================== */
   function viewMeta(id) {
+    var dashViews = {
+      analitik: { title: 'Analitik & BI', sub: 'Ringkasan kinerja bisnis, tren, dan perbandingan antar departemen.' },
+      bsc: { title: 'Balanced Scorecard', sub: 'Kinerja empat perspektif: keuangan, pelanggan, proses, dan pertumbuhan.' },
+    };
+    if (dashViews[id]) return dashViews[id];
     if (REGISTERS[id]) return { title: REGISTERS[id].title, sub: REGISTERS[id].sub };
     return ({
       dasbor: { title: 'Dasbor', sub: `Ikhtisar operasi ${DATA.org.company} untuk periode ${DATA.org.period}.` },
@@ -1031,6 +1036,35 @@
     return '<div class="card-body"><p class="muted">Widget tidak dikenali.</p></div>';
   }
 
+  function widgetEditToolbar(w, idx) {
+    const cat = WIDGET_CATALOG.find(function(c) { return c.type === w.type; });
+    const typeLabel = cat ? cat.label : w.type;
+    return '<div class="widget-toolbar" data-widget-idx="' + idx + '">' +
+      /* Drag handle + label */
+      '<span class="widget-toolbar-drag" draggable="true" data-widget-idx="' + idx + '" title="Seret untuk pindahkan">' + icon('grid') + '</span>' +
+      '<span class="widget-toolbar-label">' + esc(typeLabel) + '</span>' +
+      '<span class="widget-toolbar-spacer"></span>' +
+      /* Width controls */
+      '<span class="widget-toolbar-group">' +
+      '<span class="micro">Lebar</span>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':-1:0" title="Kurangi lebar">' + icon('minus') + '</button>' +
+      '<span class="widget-toolbar-val">' + w.w + '</span>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':1:0" title="Tambah lebar">' + icon('plus') + '</button>' +
+      '</span>' +
+      /* Height controls */
+      '<span class="widget-toolbar-group">' +
+      '<span class="micro">Tinggi</span>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':0:-1" title="Kurangi tinggi">' + icon('minus') + '</button>' +
+      '<span class="widget-toolbar-val">' + w.h + '</span>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':0:1" title="Tambah tinggi">' + icon('plus') + '</button>' +
+      '</span>' +
+      /* Change content */
+      '<button class="widget-toolbar-btn" data-widget-change="' + idx + '" title="Ganti konten">' + icon('edit') + '</button>' +
+      /* Delete */
+      '<button class="widget-toolbar-btn widget-toolbar-btn-danger" data-widget-remove="' + idx + '" title="Hapus widget">' + icon('x') + '</button>' +
+      '</div>';
+  }
+
   function renderDashboard() {
     const widgets = getWidgets();
     const editMode = state.dashEditMode;
@@ -1051,17 +1085,16 @@
       '</div></div>';
 
     const widgetHtml = widgets.map(function(w, idx) {
-      return '<article class="card dash-widget" style="grid-column:span ' + w.w + ';grid-row:span ' + w.h + '"' +
-        ' draggable="' + editMode + '" data-widget-idx="' + idx + '" data-widget-type="' + w.type + '">' +
-        (editMode ? '<button class="widget-remove" data-widget-remove="' + idx + '" title="Hapus widget" style="position:absolute;top:var(--sp-1);right:var(--sp-1);z-index:2;background:var(--surf-danger,#ef4444);color:#fff;border:0;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center">&times;</button>' : '') +
-        (editMode ? '<span class="widget-drag-handle" style="position:absolute;top:var(--sp-1);left:var(--sp-1);cursor:grab;opacity:.5">' + icon('grid') + '</span>' : '') +
-        renderWidgetContent(w) +
-        (editMode ? '<span class="widget-resize" style="position:absolute;bottom:2px;right:2px;width:14px;height:14px;cursor:nwse-resize;opacity:.4;border-right:2px solid currentColor;border-bottom:2px solid currentColor"></span>' : '') +
+      return '<article class="card dash-widget' + (editMode ? ' dash-widget-editing' : '') + '"' +
+        ' style="grid-column:span ' + w.w + ';grid-row:span ' + w.h + '"' +
+        ' data-widget-idx="' + idx + '" data-widget-type="' + w.type + '">' +
+        (editMode ? widgetEditToolbar(w, idx) : '') +
+        '<div class="widget-body">' + renderWidgetContent(w) + '</div>' +
         '</article>';
     }).join('');
 
     return editBar +
-      '<div class="dash-grid' + (editMode ? ' dash-edit-mode' : '') + '" style="display:grid;grid-template-columns:repeat(12,1fr);gap:var(--sp-4);align-items:start">' +
+      '<div class="dash-grid' + (editMode ? ' dash-edit-mode' : '') + '">' +
       widgetHtml + '</div>';
   }
 
@@ -2836,6 +2869,8 @@
 
   function renderView() {
     const id = state.view;
+    if (id === 'analitik') return renderAnalytics();
+    if (id === 'bsc') return renderBSC();
     if (REGISTERS[id]) return renderRegister(id);
     switch (id) {
       case 'dasbor': return renderDashboard();
@@ -2924,14 +2959,78 @@
       const idx = Number(wr.dataset.widgetRemove);
       const widgets = getWidgets();
       if (idx >= 0 && idx < widgets.length) {
+        const removed = widgets[idx];
         widgets.splice(idx, 1);
+        saveWidgets();
+        render();
+        toast('Widget dihapus', (removed.label || removed.type) + ' dihapus dari dasbor.', 'ok');
+      }
+      return;
+    }
+
+    /* --- Widget resize (+/- lebar & tinggi) ------------------------------- */
+    const wr2 = t.closest('[data-widget-resize]');
+    if (wr2) {
+      const parts = wr2.dataset.widgetResize.split(':');
+      const idx = Number(parts[0]), dw = Number(parts[1]), dh = Number(parts[2]);
+      const widgets = getWidgets();
+      if (idx >= 0 && idx < widgets.length) {
+        const w = widgets[idx];
+        w.w = Math.max(2, Math.min(12, w.w + dw));
+        w.h = Math.max(1, Math.min(10, w.h + dh));
         saveWidgets();
         render();
       }
       return;
     }
 
-    /* --- Widget catalog pick ---------------------------------------------- */
+    /* --- Widget change content -------------------------------------------- */
+    const wch = t.closest('[data-widget-change]');
+    if (wch) {
+      const idx = Number(wch.dataset.widgetChange);
+      const widgets = getWidgets();
+      if (idx >= 0 && idx < widgets.length) {
+        const current = widgets[idx];
+        const changeHtml = WIDGET_CATALOG.map(function(c) {
+          var isActive = c.type === current.type ? ' style="border-color:var(--accent);background:var(--accent-faint,rgba(59,130,246,0.08))"' : '';
+          return '<button class="worklist-item" data-widget-swap="' + idx + ':' + c.type + '"' + isActive + '>' +
+            '<span class="wl-icon">' + icon(c.icon) + '</span>' +
+            '<span class="worklist-body">' +
+            '<span class="worklist-title">' + esc(c.label) + (c.type === current.type ? ' ✓' : '') + '</span>' +
+            '<span class="worklist-meta">' + esc(c.desc) + '</span></span></button>';
+        }).join('');
+        openDrawer({
+          eyebrow: 'Widget #' + (idx + 1),
+          title: 'Ganti Konten Widget',
+          subtitle: 'Pilih konten baru untuk kotak ini',
+          body: '<div class="worklist">' + changeHtml + '</div>',
+          foot: '<button class="btn" data-close>Tutup</button>',
+        });
+      }
+      return;
+    }
+
+    /* --- Widget swap type ------------------------------------------------- */
+    const wsw = t.closest('[data-widget-swap]');
+    if (wsw) {
+      const parts = wsw.dataset.widgetSwap.split(':');
+      const idx = Number(parts[0]), newType = parts[1];
+      const widgets = getWidgets();
+      if (idx >= 0 && idx < widgets.length) {
+        const cat = WIDGET_CATALOG.find(function(c) { return c.type === newType; });
+        if (cat) {
+          widgets[idx].type = cat.type;
+          widgets[idx].label = cat.label;
+          saveWidgets();
+          closeOverlay();
+          render();
+          toast('Konten diganti', 'Widget sekarang menampilkan: ' + cat.label, 'ok');
+        }
+      }
+      return;
+    }
+
+    /* --- Widget catalog pick (tambah baru) -------------------------------- */
     const wp = t.closest('[data-widget-pick]');
     if (wp) {
       const type = wp.dataset.widgetPick;
@@ -3266,12 +3365,14 @@
 
   function onDragStart(ev) {
     if (!state.dashEditMode) return;
-    const w = ev.target.closest('[data-widget-idx]');
-    if (!w) return;
-    dragSrcIdx = Number(w.dataset.widgetIdx);
+    var handle = ev.target.closest('.widget-toolbar-drag');
+    if (!handle) { ev.preventDefault(); return; }
+    var article = handle.closest('article[data-widget-idx]');
+    if (!article) return;
+    dragSrcIdx = Number(article.dataset.widgetIdx);
     ev.dataTransfer.effectAllowed = 'move';
     ev.dataTransfer.setData('text/plain', String(dragSrcIdx));
-    w.style.opacity = '0.4';
+    article.style.opacity = '0.4';
   }
 
   function onDragOver(ev) {
@@ -3283,13 +3384,13 @@
   function onDrop(ev) {
     if (!state.dashEditMode || dragSrcIdx === null) return;
     ev.preventDefault();
-    const target = ev.target.closest('[data-widget-idx]');
+    var target = ev.target.closest('article[data-widget-idx]');
     if (!target) return;
-    const destIdx = Number(target.dataset.widgetIdx);
+    var destIdx = Number(target.dataset.widgetIdx);
     if (destIdx === dragSrcIdx) return;
 
-    const widgets = getWidgets();
-    const moved = widgets.splice(dragSrcIdx, 1)[0];
+    var widgets = getWidgets();
+    var moved = widgets.splice(dragSrcIdx, 1)[0];
     widgets.splice(destIdx, 0, moved);
     saveWidgets();
     dragSrcIdx = null;
@@ -3298,8 +3399,8 @@
 
   function onDragEnd(ev) {
     dragSrcIdx = null;
-    const w = ev.target.closest('[data-widget-idx]');
-    if (w) w.style.opacity = '';
+    var article = ev.target.closest('article[data-widget-idx]');
+    if (article) article.style.opacity = '';
   }
 
   function start() {
