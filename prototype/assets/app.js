@@ -180,6 +180,10 @@
     aiCopilotOpen: false,
     dashEditMode: false,
     dashWidgets: null,
+    analyticsEditMode: false,
+    analyticsWidgets: null,
+    bscEditMode: false,
+    bscWidgets: null,
   };
 
   const regState = (id) => (state.reg[id] ||= {
@@ -210,20 +214,69 @@
     { type: 'ai-briefing', label: 'AI Briefing', desc: 'Ringkasan harian AI', icon: 'sparkle', defaultW: 12, defaultH: 3 },
   ];
 
-  function getWidgets() {
-    if (!state.dashWidgets) {
+  /* --- Analitik widgets --------------------------------------------------- */
+  const DEFAULT_ANALYTICS_WIDGETS = [
+    { id: 'aw-kpi', type: 'a-kpi', label: 'KPI Analitik', w: 12, h: 2 },
+    { id: 'aw-tren', type: 'a-tren', label: 'Tren Pendapatan', w: 6, h: 5 },
+    { id: 'aw-funnel', type: 'a-funnel', label: 'Funnel Pipeline CRM', w: 6, h: 5 },
+    { id: 'aw-aging', type: 'a-aging', label: 'Umur Piutang', w: 6, h: 5 },
+    { id: 'aw-dept', type: 'a-dept', label: 'Realisasi vs Anggaran', w: 6, h: 5 },
+  ];
+  const ANALYTICS_CATALOG = [
+    { type: 'a-kpi', label: 'KPI Analitik', desc: '8 kartu metrik bisnis utama', icon: 'grid', defaultW: 12, defaultH: 2 },
+    { type: 'a-tren', label: 'Tren Pendapatan 12 Bulan', desc: 'Grafik aktual vs target', icon: 'bar-chart', defaultW: 6, defaultH: 5 },
+    { type: 'a-funnel', label: 'Funnel Pipeline CRM', desc: 'Nilai peluang per tahap', icon: 'users', defaultW: 6, defaultH: 5 },
+    { type: 'a-aging', label: 'Umur Piutang (Aging)', desc: 'Distribusi piutang per bucket', icon: 'clock', defaultW: 6, defaultH: 5 },
+    { type: 'a-dept', label: 'Realisasi vs Anggaran', desc: 'Perbandingan per departemen', icon: 'wallet', defaultW: 6, defaultH: 5 },
+    { type: 'a-inventory', label: 'Komposisi Persediaan', desc: 'Grafik komposisi nilai stok', icon: 'boxes', defaultW: 6, defaultH: 5 },
+    { type: 'a-activity', label: 'Aktivitas Terbaru', desc: 'Jejak audit ringkas', icon: 'scroll', defaultW: 6, defaultH: 4 },
+  ];
+
+  /* --- BSC widgets ------------------------------------------------------- */
+  const DEFAULT_BSC_WIDGETS = [
+    { id: 'bw-ring', type: 'b-ring', label: 'Skor Keseluruhan', w: 6, h: 4 },
+    { id: 'bw-summary', type: 'b-summary', label: 'Ringkasan Perspektif', w: 6, h: 4 },
+    { id: 'bw-financial', type: 'b-financial', label: 'Keuangan', w: 12, h: 4 },
+    { id: 'bw-customer', type: 'b-customer', label: 'Pelanggan', w: 12, h: 4 },
+    { id: 'bw-internal', type: 'b-internal', label: 'Proses Internal', w: 12, h: 4 },
+    { id: 'bw-growth', type: 'b-growth', label: 'Pembelajaran & Pertumbuhan', w: 12, h: 4 },
+  ];
+  const BSC_CATALOG = [
+    { type: 'b-ring', label: 'Skor Keseluruhan', desc: 'Donut ring skor rata-rata BSC', icon: 'target', defaultW: 6, defaultH: 4 },
+    { type: 'b-summary', label: 'Ringkasan Perspektif', desc: 'Progress bar per perspektif', icon: 'bar-chart', defaultW: 6, defaultH: 4 },
+    { type: 'b-financial', label: 'Keuangan', desc: 'Metrik keuangan & tren', icon: 'wallet', defaultW: 12, defaultH: 4 },
+    { type: 'b-customer', label: 'Pelanggan', desc: 'Metrik pelanggan & tren', icon: 'users', defaultW: 12, defaultH: 4 },
+    { type: 'b-internal', label: 'Proses Internal', desc: 'Metrik proses internal & tren', icon: 'factory', defaultW: 12, defaultH: 4 },
+    { type: 'b-growth', label: 'Pembelajaran & Pertumbuhan', desc: 'Metrik pertumbuhan & tren', icon: 'target', defaultW: 12, defaultH: 4 },
+  ];
+
+  /* --- Generic widget state management ----------------------------------- */
+  var DASH_CONFIGS = {
+    dash: { stateKey: 'dashWidgets', editKey: 'dashEditMode', storageKey: 'erp-dash-widgets', defaults: DEFAULT_WIDGETS, catalog: WIDGET_CATALOG },
+    analitik: { stateKey: 'analyticsWidgets', editKey: 'analyticsEditMode', storageKey: 'erp-analytics-widgets', defaults: DEFAULT_ANALYTICS_WIDGETS, catalog: ANALYTICS_CATALOG },
+    bsc: { stateKey: 'bscWidgets', editKey: 'bscEditMode', storageKey: 'erp-bsc-widgets', defaults: DEFAULT_BSC_WIDGETS, catalog: BSC_CATALOG },
+  };
+
+  function getWidgetsFor(dashId) {
+    var cfg = DASH_CONFIGS[dashId];
+    if (!state[cfg.stateKey]) {
       try {
-        const saved = localStorage.getItem('erp-dash-widgets');
-        if (saved) state.dashWidgets = JSON.parse(saved);
-      } catch { /* sandbox */ }
-      if (!state.dashWidgets) state.dashWidgets = DEFAULT_WIDGETS.map(w => ({...w}));
+        var saved = localStorage.getItem(cfg.storageKey);
+        if (saved) state[cfg.stateKey] = JSON.parse(saved);
+      } catch(e) { /* sandbox */ }
+      if (!state[cfg.stateKey]) state[cfg.stateKey] = cfg.defaults.map(function(w) { return Object.assign({}, w); });
     }
-    return state.dashWidgets;
+    return state[cfg.stateKey];
   }
 
-  function saveWidgets() {
-    try { localStorage.setItem('erp-dash-widgets', JSON.stringify(state.dashWidgets)); } catch { /* sandbox */ }
+  function saveWidgetsFor(dashId) {
+    var cfg = DASH_CONFIGS[dashId];
+    try { localStorage.setItem(cfg.storageKey, JSON.stringify(state[cfg.stateKey])); } catch(e) { /* sandbox */ }
   }
+
+  /* Backward-compatible helpers for main dashboard */
+  function getWidgets() { return getWidgetsFor('dash'); }
+  function saveWidgets() { saveWidgetsFor('dash'); }
 
   /* ====================================================================== */
   /* Tema                                                                    */
@@ -1036,32 +1089,232 @@
     return '<div class="card-body"><p class="muted">Widget tidak dikenali.</p></div>';
   }
 
-  function widgetEditToolbar(w, idx) {
-    const cat = WIDGET_CATALOG.find(function(c) { return c.type === w.type; });
-    const typeLabel = cat ? cat.label : w.type;
-    return '<div class="widget-toolbar" data-widget-idx="' + idx + '">' +
-      /* Drag handle + label */
-      '<span class="widget-toolbar-drag" draggable="true" data-widget-idx="' + idx + '" title="Seret untuk pindahkan">' + icon('grid') + '</span>' +
+  /* ====================================================================== */
+  /* Analytics widget content                                                */
+  /* ====================================================================== */
+  function renderAnalyticsWidgetContent(widget) {
+    var type = widget.type;
+
+    if (type === 'a-kpi') {
+      var kpis = DATA.analyticsKpis;
+      return '<section class="grid grid-kpi" aria-label="Analitik KPI" style="padding:var(--sp-3)">' +
+        kpis.map(function(k) {
+          var fmtVal;
+          if (k.format === 'rp') fmtVal = FMT.rpCompact(k.value);
+          else if (k.format === 'pct') fmtVal = FMT.pct(k.value);
+          else if (k.format === 'hari') fmtVal = k.value + ' hari';
+          else if (k.format === 'item') fmtVal = k.value + ' item';
+          else fmtVal = FMT.int(k.value);
+          var deltaClass = k.delta >= 0 ? 'pos' : 'neg';
+          var deltaIcon = k.delta >= 0 ? 'arrow-up' : 'arrow-down';
+          return '<article class="card kpi">' +
+            '<div class="kpi-top"><span class="micro">' + icon(k.icon) + ' ' + esc(k.label) + '</span></div>' +
+            '<div class="kpi-metric">' + fmtVal + '</div>' +
+            '<div class="kpi-row"><span class="kpi-delta ' + deltaClass + '" style="color:' + (k.delta >= 0 ? 'var(--tone-ok,#16a34a)' : 'var(--tone-danger,#ef4444)') + '">' +
+            icon(deltaIcon) + ' ' + FMT.signedPct(k.delta) +
+            '</span></div></article>';
+        }).join('') + '</section>';
+    }
+
+    if (type === 'a-tren') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Tren Pendapatan 12 Bulan</h2>' +
+        '<span class="card-note">Aktual vs target dalam miliar rupiah</span></div></div>' +
+        '<div class="card-body"><div class="chart" data-chart="analytics-tren"></div></div>';
+    }
+
+    if (type === 'a-funnel') {
+      var stages = DATA.crmStages || [];
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Funnel Pipeline CRM</h2>' +
+        '<span class="card-note">Nilai peluang per tahap</span></div></div>' +
+        '<div class="card-body">' +
+        (stages.length > 0 ? stages.map(function(s, i) {
+          var leads = (DATA.leads || []).filter(function(l) { return l.stage === s.id; });
+          var total = leads.reduce(function(sum, l) { return sum + l.value; }, 0);
+          var maxVal = stages.reduce(function(mx, st) {
+            var stLeads = (DATA.leads || []).filter(function(l) { return l.stage === st.id; });
+            return Math.max(mx, stLeads.reduce(function(s2, l) { return s2 + l.value; }, 0));
+          }, 1);
+          var pct = Math.round((total / maxVal) * 100);
+          var colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
+          var c = colors[i % colors.length];
+          return '<div style="margin-bottom:var(--sp-2)">' +
+            '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
+            '<span>' + esc(s.label) + ' (' + leads.length + ')</span>' +
+            '<span class="num">' + FMT.rpCompact(total) + '</span></div>' +
+            '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
+            '<div style="width:' + pct + '%;height:100%;background:' + c + ';border-radius:4px"></div></div></div>';
+        }).join('') : '<p class="muted">Data pipeline belum tersedia.</p>') +
+        '</div>';
+    }
+
+    if (type === 'a-aging') {
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Umur Piutang (Aging)</h2>' +
+        '<span class="card-note">Distribusi piutang per bucket</span></div></div>' +
+        '<div class="card-body"><div class="chart" data-chart="analytics-aging"></div></div>';
+    }
+
+    if (type === 'a-dept') {
+      var deptData = [
+        { dept: 'Penjualan', budget: 2400, actual: 2180 },
+        { dept: 'Produksi', budget: 5600, actual: 5320 },
+        { dept: 'Pembelian', budget: 1800, actual: 1950 },
+        { dept: 'SDM', budget: 1200, actual: 1150 },
+        { dept: 'Keuangan', budget: 800, actual: 720 },
+      ];
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Realisasi vs Anggaran per Departemen</h2>' +
+        '<span class="card-note">Dalam jutaan rupiah</span></div></div>' +
+        '<div class="card-body">' +
+        deptData.map(function(d) {
+          var pct = Math.round((d.actual / d.budget) * 100);
+          var barColor = pct > 100 ? '#ef4444' : pct > 90 ? '#d97706' : '#16a34a';
+          return '<div style="margin-bottom:var(--sp-2)">' +
+            '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
+            '<span>' + esc(d.dept) + '</span>' +
+            '<span class="num">' + FMT.rpCompact(d.actual * 1e6) + ' / ' + FMT.rpCompact(d.budget * 1e6) + ' (' + pct + '%)</span></div>' +
+            '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
+            '<div style="width:' + Math.min(pct, 100) + '%;height:100%;background:' + barColor + ';border-radius:4px"></div></div></div>';
+        }).join('') +
+        '</div>';
+    }
+
+    if (type === 'a-inventory') {
+      return renderWidgetContent({ type: 'inventory', label: 'Komposisi Persediaan' });
+    }
+
+    if (type === 'a-activity') {
+      return renderWidgetContent({ type: 'activity', label: 'Aktivitas' });
+    }
+
+    return '<div class="card-body"><p class="muted">Widget analitik tidak dikenali.</p></div>';
+  }
+
+  /* ====================================================================== */
+  /* BSC widget content                                                      */
+  /* ====================================================================== */
+  var BSC_PERSPECTIVES = [
+    { key: 'financial', label: 'Keuangan', icon: 'wallet', color: '#2563eb' },
+    { key: 'customer', label: 'Pelanggan', icon: 'users', color: '#16a34a' },
+    { key: 'internal', label: 'Proses Internal', icon: 'factory', color: '#d97706' },
+    { key: 'growth', label: 'Pembelajaran & Pertumbuhan', icon: 'target', color: '#9333ea' },
+  ];
+
+  function bscOverallPct() {
+    var bsc = DATA.bscData;
+    var total = 0, sum = 0;
+    BSC_PERSPECTIVES.forEach(function(p) {
+      bsc[p.key].forEach(function(m) {
+        total++;
+        sum += Math.min(m.actual / m.target, 1);
+      });
+    });
+    return Math.round((sum / total) * 100);
+  }
+
+  function renderBscPerspectiveTable(perspKey) {
+    var p = BSC_PERSPECTIVES.find(function(pp) { return pp.key === perspKey; });
+    if (!p) return '<div class="card-body"><p class="muted">Perspektif tidak ditemukan.</p></div>';
+    var metrics = DATA.bscData[p.key];
+    var rows = metrics.map(function(m) {
+      var pct = Math.min(Math.round((m.actual / m.target) * 100), 100);
+      var barColor = pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#ef4444';
+      var trendHtml = '<span class="bsc-trend" style="display:inline-flex;gap:1px;align-items:flex-end;height:16px">' +
+        m.trend.map(function(v) {
+          var h = Math.max(3, Math.round((v / m.target) * 16));
+          return '<span style="width:4px;height:' + h + 'px;background:' + barColor + ';border-radius:1px;display:inline-block"></span>';
+        }).join('') + '</span>';
+      return '<tr>' +
+        '<td>' + esc(m.metric) + '</td>' +
+        '<td class="ta-r num">' + m.actual + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
+        '<td class="ta-r num">' + m.target + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
+        '<td class="ta-r"><div style="display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end">' +
+        '<div style="width:64px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:3px"></div></div>' +
+        '<span class="micro num">' + pct + '%</span></div></td>' +
+        '<td class="ta-c">' + trendHtml + '</td></tr>';
+    }).join('');
+
+    return '<div style="height:4px;background:' + p.color + '"></div>' +
+      '<div class="card-head"><div class="card-head-text">' +
+      '<h2 class="card-title">' + icon(p.icon) + ' ' + esc(p.label) + '</h2></div></div>' +
+      '<div class="table-scroll"><table class="table"><thead><tr>' +
+      '<th>Metrik</th><th class="ta-r">Aktual</th><th class="ta-r">Target</th><th class="ta-r">Pencapaian</th><th class="ta-c">Tren</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function renderBscWidgetContent(widget) {
+    var type = widget.type;
+
+    if (type === 'b-ring') {
+      var overallPct = bscOverallPct();
+      var radius = 54;
+      var circum = 2 * Math.PI * radius;
+      var offset = circum - (circum * overallPct / 100);
+      return '<div class="card-body" style="text-align:center;padding:var(--sp-6)">' +
+        '<svg viewBox="0 0 128 128" width="128" height="128" style="display:block;margin:auto">' +
+        '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="var(--border-1,#e5e7eb)" stroke-width="10"/>' +
+        '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="' + (overallPct >= 80 ? '#16a34a' : overallPct >= 60 ? '#d97706' : '#ef4444') + '" stroke-width="10" ' +
+        'stroke-dasharray="' + circum + '" stroke-dashoffset="' + offset + '" stroke-linecap="round" transform="rotate(-90 64 64)"/>' +
+        '<text x="64" y="60" text-anchor="middle" font-size="24" font-weight="700" fill="var(--ink-1,#111)">' + overallPct + '%</text>' +
+        '<text x="64" y="78" text-anchor="middle" font-size="10" fill="var(--ink-3,#6b7280)">Skor Keseluruhan</text></svg>' +
+        '<p style="margin-top:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-3)">Rata-rata pencapaian terhadap target seluruh perspektif</p></div>';
+    }
+
+    if (type === 'b-summary') {
+      var bsc = DATA.bscData;
+      return '<div class="card-body" style="padding:var(--sp-4)">' +
+        '<h3 style="font-size:var(--fs-sm);font-weight:600;margin-bottom:var(--sp-3)">Ringkasan per Perspektif</h3>' +
+        BSC_PERSPECTIVES.map(function(p) {
+          var metrics = bsc[p.key];
+          var avg = Math.round(metrics.reduce(function(s, m) { return s + Math.min(m.actual / m.target, 1); }, 0) / metrics.length * 100);
+          return '<div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)">' +
+            '<span style="width:10px;height:10px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
+            '<span style="flex:1;font-size:var(--fs-sm)">' + esc(p.label) + '</span>' +
+            '<div style="width:80px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
+            '<div style="width:' + avg + '%;height:100%;background:' + p.color + ';border-radius:3px"></div></div>' +
+            '<span class="num micro" style="width:32px;text-align:right">' + avg + '%</span></div>';
+        }).join('') +
+        '</div>';
+    }
+
+    if (type === 'b-financial') return renderBscPerspectiveTable('financial');
+    if (type === 'b-customer') return renderBscPerspectiveTable('customer');
+    if (type === 'b-internal') return renderBscPerspectiveTable('internal');
+    if (type === 'b-growth') return renderBscPerspectiveTable('growth');
+
+    return '<div class="card-body"><p class="muted">Widget BSC tidak dikenali.</p></div>';
+  }
+
+  /* ====================================================================== */
+  /* Generic widget toolbar (works for all dashboards)                       */
+  /* ====================================================================== */
+  function widgetEditToolbar(w, idx, dashId) {
+    var d = dashId || 'dash';
+    var catalog = DASH_CONFIGS[d].catalog;
+    var cat = catalog.find(function(c) { return c.type === w.type; });
+    var typeLabel = cat ? cat.label : w.type;
+    var prefix = d + ':' + idx;
+    return '<div class="widget-toolbar" data-widget-idx="' + idx + '" data-dash="' + d + '">' +
+      '<span class="widget-toolbar-drag" draggable="true" data-widget-idx="' + idx + '" data-dash="' + d + '" title="Seret untuk pindahkan">' + icon('grid') + '</span>' +
       '<span class="widget-toolbar-label">' + esc(typeLabel) + '</span>' +
       '<span class="widget-toolbar-spacer"></span>' +
-      /* Width controls */
       '<span class="widget-toolbar-group">' +
       '<span class="micro">Lebar</span>' +
-      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':-1:0" title="Kurangi lebar">' + icon('minus') + '</button>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + prefix + ':-1:0" title="Kurangi lebar">' + icon('minus') + '</button>' +
       '<span class="widget-toolbar-val">' + w.w + '</span>' +
-      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':1:0" title="Tambah lebar">' + icon('plus') + '</button>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + prefix + ':1:0" title="Tambah lebar">' + icon('plus') + '</button>' +
       '</span>' +
-      /* Height controls */
       '<span class="widget-toolbar-group">' +
       '<span class="micro">Tinggi</span>' +
-      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':0:-1" title="Kurangi tinggi">' + icon('minus') + '</button>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + prefix + ':0:-1" title="Kurangi tinggi">' + icon('minus') + '</button>' +
       '<span class="widget-toolbar-val">' + w.h + '</span>' +
-      '<button class="widget-toolbar-btn" data-widget-resize="' + idx + ':0:1" title="Tambah tinggi">' + icon('plus') + '</button>' +
+      '<button class="widget-toolbar-btn" data-widget-resize="' + prefix + ':0:1" title="Tambah tinggi">' + icon('plus') + '</button>' +
       '</span>' +
-      /* Change content */
-      '<button class="widget-toolbar-btn" data-widget-change="' + idx + '" title="Ganti konten">' + icon('edit') + '</button>' +
-      /* Delete */
-      '<button class="widget-toolbar-btn widget-toolbar-btn-danger" data-widget-remove="' + idx + '" title="Hapus widget">' + icon('x') + '</button>' +
+      '<button class="widget-toolbar-btn" data-widget-change="' + prefix + '" title="Ganti konten">' + icon('edit') + '</button>' +
+      '<button class="widget-toolbar-btn widget-toolbar-btn-danger" data-widget-remove="' + prefix + '" title="Hapus widget">' + icon('x') + '</button>' +
       '</div>';
   }
 
@@ -1087,8 +1340,8 @@
     const widgetHtml = widgets.map(function(w, idx) {
       return '<article class="card dash-widget' + (editMode ? ' dash-widget-editing' : '') + '"' +
         ' style="grid-column:span ' + w.w + ';grid-row:span ' + w.h + '"' +
-        ' data-widget-idx="' + idx + '" data-widget-type="' + w.type + '">' +
-        (editMode ? widgetEditToolbar(w, idx) : '') +
+        ' data-widget-idx="' + idx + '" data-widget-type="' + w.type + '" data-dash="dash">' +
+        (editMode ? widgetEditToolbar(w, idx, 'dash') : '') +
         '<div class="widget-body">' + renderWidgetContent(w) + '</div>' +
         '</article>';
     }).join('');
@@ -2647,196 +2900,56 @@
   /* ====================================================================== */
   /* Balanced Scorecard                                                      */
   /* ====================================================================== */
-  function renderBSC() {
-    var bsc = DATA.bscData;
-    var perspectives = [
-      { key: 'financial', label: 'Keuangan', icon: 'wallet', color: '#2563eb' },
-      { key: 'customer', label: 'Pelanggan', icon: 'users', color: '#16a34a' },
-      { key: 'internal', label: 'Proses Internal', icon: 'factory', color: '#d97706' },
-      { key: 'growth', label: 'Pembelajaran & Pertumbuhan', icon: 'target', color: '#9333ea' },
-    ];
+  /* ====================================================================== */
+  /* Generic customizable dashboard renderer                                 */
+  /* ====================================================================== */
+  function renderWidgetDashboard(dashId, title, subtitle, contentRenderer) {
+    var cfg = DASH_CONFIGS[dashId];
+    var widgets = getWidgetsFor(dashId);
+    var editMode = state[cfg.editKey];
 
-    /* Compute overall score */
-    var totalMetrics = 0;
-    var achievedSum = 0;
-    perspectives.forEach(function(p) {
-      bsc[p.key].forEach(function(m) {
-        totalMetrics++;
-        var ratio = m.actual / m.target;
-        if (ratio > 1) ratio = 1;
-        achievedSum += ratio;
-      });
-    });
-    var overallPct = Math.round((achievedSum / totalMetrics) * 100);
+    var editBar =
+      '<div class="dash-edit-bar" style="display:flex;align-items:flex-start;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
+      '<div style="flex:1">' +
+      '<h1 class="page-title">' + title + '</h1>' +
+      '<p class="page-sub">' + subtitle + '</p></div>' +
+      '<div class="page-actions" style="display:flex;gap:var(--sp-2)">' +
+      (editMode
+        ? '<button class="btn" data-action="widget-add" data-dash="' + dashId + '">' + icon('plus') + ' Tambah Widget</button>' +
+          '<button class="btn" data-action="widget-reset" data-dash="' + dashId + '">' + icon('transfer') + ' Reset Layout</button>' +
+          '<button class="btn btn-primary" data-action="dash-edit-toggle" data-dash="' + dashId + '">' + icon('check') + ' Selesai</button>'
+        : '<button class="btn" data-action="dash-edit-toggle" data-dash="' + dashId + '">' + icon('edit') + ' Kustomisasi</button>') +
+      '</div></div>';
 
-    /* SVG donut for overall score */
-    var radius = 54;
-    var circum = 2 * Math.PI * radius;
-    var offset = circum - (circum * overallPct / 100);
-    var scoreRing =
-      '<svg viewBox="0 0 128 128" width="128" height="128" style="display:block;margin:auto">' +
-      '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="var(--border-1,#e5e7eb)" stroke-width="10"/>' +
-      '<circle cx="64" cy="64" r="' + radius + '" fill="none" stroke="' + (overallPct >= 80 ? '#16a34a' : overallPct >= 60 ? '#d97706' : '#ef4444') + '" stroke-width="10" ' +
-      'stroke-dasharray="' + circum + '" stroke-dashoffset="' + offset + '" stroke-linecap="round" transform="rotate(-90 64 64)"/>' +
-      '<text x="64" y="60" text-anchor="middle" font-size="24" font-weight="700" fill="var(--ink-1,#111)">' + overallPct + '%</text>' +
-      '<text x="64" y="78" text-anchor="middle" font-size="10" fill="var(--ink-3,#6b7280)">Skor Keseluruhan</text></svg>';
-
-    var perspectiveCards = perspectives.map(function(p) {
-      var metrics = bsc[p.key];
-      var rows = metrics.map(function(m) {
-        var pct = Math.min(Math.round((m.actual / m.target) * 100), 100);
-        var barColor = pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#ef4444';
-        var trendHtml = '<span class="bsc-trend" style="display:inline-flex;gap:1px;align-items:flex-end;height:16px">' +
-          m.trend.map(function(v) {
-            var h = Math.max(3, Math.round((v / m.target) * 16));
-            return '<span style="width:4px;height:' + h + 'px;background:' + barColor + ';border-radius:1px;display:inline-block"></span>';
-          }).join('') + '</span>';
-        return '<tr>' +
-          '<td>' + esc(m.metric) + '</td>' +
-          '<td class="ta-r num">' + m.actual + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
-          '<td class="ta-r num">' + m.target + (m.unit ? ' ' + esc(m.unit) : '') + '</td>' +
-          '<td class="ta-r"><div style="display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end">' +
-          '<div style="width:64px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
-          '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:3px"></div></div>' +
-          '<span class="micro num">' + pct + '%</span></div></td>' +
-          '<td class="ta-c">' + trendHtml + '</td></tr>';
-      }).join('');
-
-      return '<article class="card" style="overflow:hidden">' +
-        '<div style="height:4px;background:' + p.color + '"></div>' +
-        '<div class="card-head"><div class="card-head-text">' +
-        '<h2 class="card-title">' + icon(p.icon) + ' ' + esc(p.label) + '</h2></div></div>' +
-        '<div class="table-scroll"><table class="table"><thead><tr>' +
-        '<th>Metrik</th><th class="ta-r">Aktual</th><th class="ta-r">Target</th><th class="ta-r">Pencapaian</th><th class="ta-c">Tren</th>' +
-        '</tr></thead><tbody>' + rows + '</tbody></table></div></article>';
+    var widgetHtml = widgets.map(function(w, idx) {
+      return '<article class="card dash-widget' + (editMode ? ' dash-widget-editing' : '') + '"' +
+        ' style="grid-column:span ' + w.w + ';grid-row:span ' + w.h + '"' +
+        ' data-widget-idx="' + idx + '" data-widget-type="' + w.type + '" data-dash="' + dashId + '">' +
+        (editMode ? widgetEditToolbar(w, idx, dashId) : '') +
+        '<div class="widget-body">' + contentRenderer(w) + '</div>' +
+        '</article>';
     }).join('');
 
-    return '<div class="page-head"><div class="page-head-text">' +
-      '<h1 class="page-title">Balanced Scorecard</h1>' +
-      '<p class="page-sub">Periode ' + esc(bsc.period) + ' &middot; 4 perspektif &middot; ' + totalMetrics + ' indikator kinerja</p></div></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
-      '<article class="card"><div class="card-body" style="text-align:center;padding:var(--sp-6)">' +
-      scoreRing +
-      '<p style="margin-top:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-3)">Rata-rata pencapaian terhadap target seluruh perspektif</p>' +
-      '</div></article>' +
-      '<article class="card"><div class="card-body" style="padding:var(--sp-4)">' +
-      '<h3 style="font-size:var(--fs-sm);font-weight:600;margin-bottom:var(--sp-3)">Ringkasan per Perspektif</h3>' +
-      perspectives.map(function(p) {
-        var metrics = bsc[p.key];
-        var avg = Math.round(metrics.reduce(function(s, m) { return s + Math.min(m.actual / m.target, 1); }, 0) / metrics.length * 100);
-        return '<div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)">' +
-          '<span style="width:10px;height:10px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
-          '<span style="flex:1;font-size:var(--fs-sm)">' + esc(p.label) + '</span>' +
-          '<div style="width:80px;height:6px;background:var(--border-1,#e5e7eb);border-radius:3px;overflow:hidden">' +
-          '<div style="width:' + avg + '%;height:100%;background:' + p.color + ';border-radius:3px"></div></div>' +
-          '<span class="num micro" style="width:32px;text-align:right">' + avg + '%</span></div>';
-      }).join('') +
-      '</div></article></div>' +
-      perspectiveCards;
+    return editBar +
+      '<div class="dash-grid' + (editMode ? ' dash-edit-mode' : '') + '">' +
+      widgetHtml + '</div>';
   }
 
-  /* ====================================================================== */
-  /* Analitik                                                                */
-  /* ====================================================================== */
+  function renderBSC() {
+    var bsc = DATA.bscData;
+    var totalMetrics = 0;
+    BSC_PERSPECTIVES.forEach(function(p) { totalMetrics += bsc[p.key].length; });
+    return renderWidgetDashboard('bsc',
+      'Balanced Scorecard',
+      'Periode ' + esc(bsc.period) + ' &middot; 4 perspektif &middot; ' + totalMetrics + ' indikator kinerja',
+      renderBscWidgetContent);
+  }
+
   function renderAnalytics() {
-    var kpis = DATA.analyticsKpis;
-
-    var kpiTiles = kpis.map(function(k) {
-      var fmtVal;
-      if (k.format === 'rp') fmtVal = FMT.rpCompact(k.value);
-      else if (k.format === 'pct') fmtVal = FMT.pct(k.value);
-      else if (k.format === 'hari') fmtVal = k.value + ' hari';
-      else if (k.format === 'item') fmtVal = k.value + ' item';
-      else fmtVal = FMT.int(k.value);
-
-      var deltaClass = k.delta >= 0 ? 'pos' : 'neg';
-      var deltaIcon = k.delta >= 0 ? 'arrow-up' : 'arrow-down';
-
-      return '<article class="card kpi">' +
-        '<div class="kpi-top"><span class="micro">' + icon(k.icon) + ' ' + esc(k.label) + '</span></div>' +
-        '<div class="kpi-metric">' + fmtVal + '</div>' +
-        '<div class="kpi-row"><span class="kpi-delta ' + deltaClass + '" style="color:' + (k.delta >= 0 ? 'var(--tone-ok,#16a34a)' : 'var(--tone-danger,#ef4444)') + '">' +
-        icon(deltaIcon) + ' ' + FMT.signedPct(k.delta) +
-        '</span></div></article>';
-    }).join('');
-
-    /* Revenue trend chart card */
-    var revenueCard =
-      '<article class="card">' +
-      '<div class="card-head"><div class="card-head-text">' +
-      '<h2 class="card-title">Tren Pendapatan 12 Bulan</h2>' +
-      '<span class="card-note">Aktual vs target dalam miliar rupiah</span></div></div>' +
-      '<div class="card-body"><div class="chart" data-chart="analytics-tren"></div></div></article>';
-
-    /* Pipeline funnel */
-    var stages = DATA.crmStages || [];
-    var funnelCard =
-      '<article class="card">' +
-      '<div class="card-head"><div class="card-head-text">' +
-      '<h2 class="card-title">Funnel Pipeline CRM</h2>' +
-      '<span class="card-note">Nilai peluang per tahap</span></div></div>' +
-      '<div class="card-body">' +
-      (stages.length > 0 ? stages.map(function(s, i) {
-        var leads = (DATA.leads || []).filter(function(l) { return l.stage === s.id; });
-        var total = leads.reduce(function(sum, l) { return sum + l.value; }, 0);
-        var maxVal = stages.reduce(function(mx, st) {
-          var stLeads = (DATA.leads || []).filter(function(l) { return l.stage === st.id; });
-          return Math.max(mx, stLeads.reduce(function(s2, l) { return s2 + l.value; }, 0));
-        }, 1);
-        var pct = Math.round((total / maxVal) * 100);
-        var colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
-        var c = colors[i % colors.length];
-        return '<div style="margin-bottom:var(--sp-2)">' +
-          '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
-          '<span>' + esc(s.label) + ' (' + leads.length + ')</span>' +
-          '<span class="num">' + FMT.rpCompact(total) + '</span></div>' +
-          '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
-          '<div style="width:' + pct + '%;height:100%;background:' + c + ';border-radius:4px"></div></div></div>';
-      }).join('') : '<p class="muted">Data pipeline belum tersedia.</p>') +
-      '</div></article>';
-
-    /* AR aging chart */
-    var agingCard =
-      '<article class="card">' +
-      '<div class="card-head"><div class="card-head-text">' +
-      '<h2 class="card-title">Umur Piutang (Aging)</h2>' +
-      '<span class="card-note">Distribusi piutang per bucket</span></div></div>' +
-      '<div class="card-body"><div class="chart" data-chart="analytics-aging"></div></div></article>';
-
-    /* Department comparison */
-    var deptData = [
-      { dept: 'Penjualan', budget: 2400, actual: 2180 },
-      { dept: 'Produksi', budget: 5600, actual: 5320 },
-      { dept: 'Pembelian', budget: 1800, actual: 1950 },
-      { dept: 'SDM', budget: 1200, actual: 1150 },
-      { dept: 'Keuangan', budget: 800, actual: 720 },
-    ];
-    var deptCard =
-      '<article class="card">' +
-      '<div class="card-head"><div class="card-head-text">' +
-      '<h2 class="card-title">Realisasi vs Anggaran per Departemen</h2>' +
-      '<span class="card-note">Dalam jutaan rupiah</span></div></div>' +
-      '<div class="card-body">' +
-      deptData.map(function(d) {
-        var pct = Math.round((d.actual / d.budget) * 100);
-        var barColor = pct > 100 ? '#ef4444' : pct > 90 ? '#d97706' : '#16a34a';
-        return '<div style="margin-bottom:var(--sp-2)">' +
-          '<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);margin-bottom:2px">' +
-          '<span>' + esc(d.dept) + '</span>' +
-          '<span class="num">' + FMT.rpCompact(d.actual * 1e6) + ' / ' + FMT.rpCompact(d.budget * 1e6) + ' (' + pct + '%)</span></div>' +
-          '<div style="height:8px;background:var(--border-1,#e5e7eb);border-radius:4px;overflow:hidden">' +
-          '<div style="width:' + Math.min(pct, 100) + '%;height:100%;background:' + barColor + ';border-radius:4px"></div></div></div>';
-      }).join('') +
-      '</div></article>';
-
-    return '<div class="page-head"><div class="page-head-text">' +
-      '<h1 class="page-title">Analitik &amp; BI</h1>' +
-      '<p class="page-sub">Ikhtisar kinerja bisnis ' + esc(DATA.org.company) + ' &middot; ' + esc(DATA.org.period) + '</p></div></div>' +
-      '<section class="grid grid-kpi" aria-label="Analitik KPI">' + kpiTiles + '</section>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
-      revenueCard + funnelCard + '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)">' +
-      agingCard + deptCard + '</div>';
+    return renderWidgetDashboard('analitik',
+      'Analitik &amp; BI',
+      'Ikhtisar kinerja bisnis ' + esc(DATA.org.company) + ' &middot; ' + esc(DATA.org.period),
+      renderAnalyticsWidgetContent);
   }
 
   function mountAnalytics(root) {
@@ -2953,54 +3066,61 @@
       return;
     }
 
-    /* --- Widget remove ---------------------------------------------------- */
-    const wr = t.closest('[data-widget-remove]');
+    /* --- Widget remove (format: "dashId:idx") ------------------------------- */
+    var wr = t.closest('[data-widget-remove]');
     if (wr) {
-      const idx = Number(wr.dataset.widgetRemove);
-      const widgets = getWidgets();
-      if (idx >= 0 && idx < widgets.length) {
-        const removed = widgets[idx];
-        widgets.splice(idx, 1);
-        saveWidgets();
+      var rmParts = wr.dataset.widgetRemove.split(':');
+      var rmDash = rmParts.length > 1 ? rmParts[0] : 'dash';
+      var rmIdx = Number(rmParts.length > 1 ? rmParts[1] : rmParts[0]);
+      var rmWidgets = getWidgetsFor(rmDash);
+      if (rmIdx >= 0 && rmIdx < rmWidgets.length) {
+        var removed = rmWidgets[rmIdx];
+        rmWidgets.splice(rmIdx, 1);
+        saveWidgetsFor(rmDash);
         render();
         toast('Widget dihapus', (removed.label || removed.type) + ' dihapus dari dasbor.', 'ok');
       }
       return;
     }
 
-    /* --- Widget resize (+/- lebar & tinggi) ------------------------------- */
-    const wr2 = t.closest('[data-widget-resize]');
+    /* --- Widget resize (format: "dashId:idx:dw:dh") ----------------------- */
+    var wr2 = t.closest('[data-widget-resize]');
     if (wr2) {
-      const parts = wr2.dataset.widgetResize.split(':');
-      const idx = Number(parts[0]), dw = Number(parts[1]), dh = Number(parts[2]);
-      const widgets = getWidgets();
-      if (idx >= 0 && idx < widgets.length) {
-        const w = widgets[idx];
-        w.w = Math.max(2, Math.min(12, w.w + dw));
-        w.h = Math.max(1, Math.min(10, w.h + dh));
-        saveWidgets();
+      var rsParts = wr2.dataset.widgetResize.split(':');
+      var rsDash, rsIdx, rsDw, rsDh;
+      if (rsParts.length > 3) { rsDash = rsParts[0]; rsIdx = Number(rsParts[1]); rsDw = Number(rsParts[2]); rsDh = Number(rsParts[3]); }
+      else { rsDash = 'dash'; rsIdx = Number(rsParts[0]); rsDw = Number(rsParts[1]); rsDh = Number(rsParts[2]); }
+      var rsWidgets = getWidgetsFor(rsDash);
+      if (rsIdx >= 0 && rsIdx < rsWidgets.length) {
+        var rsW = rsWidgets[rsIdx];
+        rsW.w = Math.max(2, Math.min(12, rsW.w + rsDw));
+        rsW.h = Math.max(1, Math.min(10, rsW.h + rsDh));
+        saveWidgetsFor(rsDash);
         render();
       }
       return;
     }
 
-    /* --- Widget change content -------------------------------------------- */
-    const wch = t.closest('[data-widget-change]');
+    /* --- Widget change content (format: "dashId:idx") --------------------- */
+    var wch = t.closest('[data-widget-change]');
     if (wch) {
-      const idx = Number(wch.dataset.widgetChange);
-      const widgets = getWidgets();
-      if (idx >= 0 && idx < widgets.length) {
-        const current = widgets[idx];
-        const changeHtml = WIDGET_CATALOG.map(function(c) {
+      var chParts = wch.dataset.widgetChange.split(':');
+      var chDash = chParts.length > 1 ? chParts[0] : 'dash';
+      var chIdx = Number(chParts.length > 1 ? chParts[1] : chParts[0]);
+      var chWidgets = getWidgetsFor(chDash);
+      var chCatalog = DASH_CONFIGS[chDash].catalog;
+      if (chIdx >= 0 && chIdx < chWidgets.length) {
+        var current = chWidgets[chIdx];
+        var changeHtml = chCatalog.map(function(c) {
           var isActive = c.type === current.type ? ' style="border-color:var(--accent);background:var(--accent-faint,rgba(59,130,246,0.08))"' : '';
-          return '<button class="worklist-item" data-widget-swap="' + idx + ':' + c.type + '"' + isActive + '>' +
+          return '<button class="worklist-item" data-widget-swap="' + chDash + ':' + chIdx + ':' + c.type + '"' + isActive + '>' +
             '<span class="wl-icon">' + icon(c.icon) + '</span>' +
             '<span class="worklist-body">' +
             '<span class="worklist-title">' + esc(c.label) + (c.type === current.type ? ' ✓' : '') + '</span>' +
             '<span class="worklist-meta">' + esc(c.desc) + '</span></span></button>';
         }).join('');
         openDrawer({
-          eyebrow: 'Widget #' + (idx + 1),
+          eyebrow: 'Widget #' + (chIdx + 1),
           title: 'Ganti Konten Widget',
           subtitle: 'Pilih konten baru untuk kotak ini',
           body: '<div class="worklist">' + changeHtml + '</div>',
@@ -3010,44 +3130,50 @@
       return;
     }
 
-    /* --- Widget swap type ------------------------------------------------- */
-    const wsw = t.closest('[data-widget-swap]');
+    /* --- Widget swap type (format: "dashId:idx:type") --------------------- */
+    var wsw = t.closest('[data-widget-swap]');
     if (wsw) {
-      const parts = wsw.dataset.widgetSwap.split(':');
-      const idx = Number(parts[0]), newType = parts[1];
-      const widgets = getWidgets();
-      if (idx >= 0 && idx < widgets.length) {
-        const cat = WIDGET_CATALOG.find(function(c) { return c.type === newType; });
-        if (cat) {
-          widgets[idx].type = cat.type;
-          widgets[idx].label = cat.label;
-          saveWidgets();
+      var swParts = wsw.dataset.widgetSwap.split(':');
+      var swDash, swIdx, swType;
+      if (swParts.length > 2) { swDash = swParts[0]; swIdx = Number(swParts[1]); swType = swParts[2]; }
+      else { swDash = 'dash'; swIdx = Number(swParts[0]); swType = swParts[1]; }
+      var swWidgets = getWidgetsFor(swDash);
+      var swCatalog = DASH_CONFIGS[swDash].catalog;
+      if (swIdx >= 0 && swIdx < swWidgets.length) {
+        var swCat = swCatalog.find(function(c) { return c.type === swType; });
+        if (swCat) {
+          swWidgets[swIdx].type = swCat.type;
+          swWidgets[swIdx].label = swCat.label;
+          saveWidgetsFor(swDash);
           closeOverlay();
           render();
-          toast('Konten diganti', 'Widget sekarang menampilkan: ' + cat.label, 'ok');
+          toast('Konten diganti', 'Widget sekarang menampilkan: ' + swCat.label, 'ok');
         }
       }
       return;
     }
 
-    /* --- Widget catalog pick (tambah baru) -------------------------------- */
-    const wp = t.closest('[data-widget-pick]');
+    /* --- Widget catalog pick (format: "dashId:type") ---------------------- */
+    var wp = t.closest('[data-widget-pick]');
     if (wp) {
-      const type = wp.dataset.widgetPick;
-      const cat = WIDGET_CATALOG.find(function(c) { return c.type === type; });
-      if (cat) {
-        var widgets = getWidgets();
-        widgets.push({
-          id: 'w-' + type + '-' + Date.now(),
-          type: cat.type,
-          label: cat.label,
-          w: cat.defaultW,
-          h: cat.defaultH,
+      var pkParts = wp.dataset.widgetPick.split(':');
+      var pkDash = pkParts.length > 1 ? pkParts[0] : 'dash';
+      var pkType = pkParts.length > 1 ? pkParts[1] : pkParts[0];
+      var pkCatalog = DASH_CONFIGS[pkDash].catalog;
+      var pkCat = pkCatalog.find(function(c) { return c.type === pkType; });
+      if (pkCat) {
+        var pkWidgets = getWidgetsFor(pkDash);
+        pkWidgets.push({
+          id: 'w-' + pkType + '-' + Date.now(),
+          type: pkCat.type,
+          label: pkCat.label,
+          w: pkCat.defaultW,
+          h: pkCat.defaultH,
         });
-        saveWidgets();
+        saveWidgetsFor(pkDash);
         closeOverlay();
         render();
-        toast('Widget ditambahkan', cat.label + ' berhasil ditambahkan ke dasbor.', 'ok');
+        toast('Widget ditambahkan', pkCat.label + ' berhasil ditambahkan ke dasbor.', 'ok');
       }
       return;
     }
@@ -3274,20 +3400,25 @@
         break;
       }
 
-      case 'dash-edit-toggle':
-        state.dashEditMode = !state.dashEditMode;
+      case 'dash-edit-toggle': {
+        var dId = act.dataset.dash || 'dash';
+        var eCfg = DASH_CONFIGS[dId];
+        state[eCfg.editKey] = !state[eCfg.editKey];
         render();
-        if (state.dashEditMode) {
+        if (state[eCfg.editKey]) {
           toast('Mode kustomisasi', 'Seret widget untuk mengatur ulang, atau tambah/hapus sesuai kebutuhan.', 'accent');
         }
         break;
+      }
 
       case 'widget-add': {
-        const existing = getWidgets().map(function(w) { return w.type; });
-        const available = WIDGET_CATALOG.filter(function(c) { return !existing.includes(c.type); });
-        const catalogHtml = (available.length > 0
+        var addDash = act.dataset.dash || 'dash';
+        var addCfg = DASH_CONFIGS[addDash];
+        var existing = getWidgetsFor(addDash).map(function(w) { return w.type; });
+        var available = addCfg.catalog.filter(function(c) { return !existing.includes(c.type); });
+        var catalogHtml = (available.length > 0
           ? available.map(function(c) {
-              return '<button class="worklist-item" data-widget-pick="' + c.type + '">' +
+              return '<button class="worklist-item" data-widget-pick="' + addDash + ':' + c.type + '">' +
                 '<span class="wl-icon">' + icon(c.icon) + '</span>' +
                 '<span class="worklist-body">' +
                 '<span class="worklist-title">' + esc(c.label) + '</span>' +
@@ -3306,12 +3437,15 @@
         break;
       }
 
-      case 'widget-reset':
-        state.dashWidgets = DEFAULT_WIDGETS.map(function(w) { return Object.assign({}, w); });
-        saveWidgets();
+      case 'widget-reset': {
+        var rstDash = act.dataset.dash || 'dash';
+        var rstCfg = DASH_CONFIGS[rstDash];
+        state[rstCfg.stateKey] = rstCfg.defaults.map(function(w) { return Object.assign({}, w); });
+        saveWidgetsFor(rstDash);
         render();
         toast('Layout direset', 'Dasbor dikembalikan ke tata letak awal.', 'ok');
         break;
+      }
 
       case 'toggle': break;
 
@@ -3361,44 +3495,54 @@
   /* ====================================================================== */
   /* Drag/drop & resize for widget dashboard                                 */
   /* ====================================================================== */
-  let dragSrcIdx = null;
+  var dragSrcIdx = null;
+  var dragSrcDash = null;
+
+  function isAnyEditMode() {
+    return state.dashEditMode || state.analyticsEditMode || state.bscEditMode;
+  }
 
   function onDragStart(ev) {
-    if (!state.dashEditMode) return;
+    if (!isAnyEditMode()) return;
     var handle = ev.target.closest('.widget-toolbar-drag');
     if (!handle) { ev.preventDefault(); return; }
     var article = handle.closest('article[data-widget-idx]');
     if (!article) return;
     dragSrcIdx = Number(article.dataset.widgetIdx);
+    dragSrcDash = article.dataset.dash || 'dash';
     ev.dataTransfer.effectAllowed = 'move';
-    ev.dataTransfer.setData('text/plain', String(dragSrcIdx));
+    ev.dataTransfer.setData('text/plain', dragSrcDash + ':' + dragSrcIdx);
     article.style.opacity = '0.4';
   }
 
   function onDragOver(ev) {
-    if (!state.dashEditMode || dragSrcIdx === null) return;
+    if (!isAnyEditMode() || dragSrcIdx === null) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect = 'move';
   }
 
   function onDrop(ev) {
-    if (!state.dashEditMode || dragSrcIdx === null) return;
+    if (!isAnyEditMode() || dragSrcIdx === null) return;
     ev.preventDefault();
     var target = ev.target.closest('article[data-widget-idx]');
     if (!target) return;
+    var destDash = target.dataset.dash || 'dash';
+    if (destDash !== dragSrcDash) return;
     var destIdx = Number(target.dataset.widgetIdx);
     if (destIdx === dragSrcIdx) return;
 
-    var widgets = getWidgets();
+    var widgets = getWidgetsFor(dragSrcDash);
     var moved = widgets.splice(dragSrcIdx, 1)[0];
     widgets.splice(destIdx, 0, moved);
-    saveWidgets();
+    saveWidgetsFor(dragSrcDash);
     dragSrcIdx = null;
+    dragSrcDash = null;
     render();
   }
 
   function onDragEnd(ev) {
     dragSrcIdx = null;
+    dragSrcDash = null;
     var article = ev.target.closest('article[data-widget-idx]');
     if (article) article.style.opacity = '';
   }
