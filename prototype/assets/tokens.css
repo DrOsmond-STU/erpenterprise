@@ -1,10 +1,9 @@
 /* ==========================================================================
    ERP Enterprise — Token Desain
    --------------------------------------------------------------------------
-   Arah visual: "Ledger & Steel".
-   Netral graphite dingin berbias petrol (baja pabrik), satu warna merek
-   petrol-teal, angka selalu monospace (buku besar). Semantik status terpisah
-   penuh dari warna merek dan dari palet kategorikal grafik.
+   Arah visual diselaraskan dengan FLMS (lab.semestateknologiutama.com):
+   Biru primer (#1b4bd6/#3563e9), teal & violet aksen, sidebar navy gelap,
+   latar abu-biru terang, radius kartu 12px.
 
    Struktur tema (WAJIB dipertahankan):
      :root                                   -> palet TERANG lengkap
@@ -16,36 +15,43 @@
    ========================================================================== */
 
 :root {
-  /* --- Tangga merek (petrol teal) ------------------------------------- */
-  --brand-50:  #E7F5F8;
-  --brand-100: #C6E7ED;
-  --brand-200: #93D0DC;
-  --brand-300: #57B2C6;
-  --brand-400: #1E9AB2;
-  --brand-500: #0089A0;
-  --brand-600: #0C6E7C;
-  --brand-700: #0B5763;
-  --brand-800: #0A4550;
-  --brand-900: #08333C;
+  /* --- Tangga merek (biru — selaras FLMS) -------------------------------- */
+  --brand-50:  #eef4ff;
+  --brand-100: #dbe6ff;
+  --brand-200: #bcd0ff;
+  --brand-300: #8fb0ff;
+  --brand-400: #5c86fb;
+  --brand-500: #3563e9;
+  --brand-600: #1b4bd6;
+  --brand-700: #163bad;
+  --brand-800: #16338a;
+  --brand-900: #172e6e;
 
-  /* --- Permukaan & garis (terang) -------------------------------------- */
-  --canvas:        #EFF3F4;
-  --surface:       #FFFFFF;
-  --surface-2:     #F6F9FA;
-  --surface-3:     #E8EEF0;
-  --surface-inset: #F1F5F6;
-  --overlay-scrim: rgba(10, 26, 30, 0.42);
+  /* --- Permukaan & garis (terang) ---------------------------------------- */
+  --canvas:        #f5f7fb;
+  --surface:       #ffffff;
+  --surface-2:     #f8fafc;
+  --surface-3:     #f1f5f9;
+  --surface-inset: #eef1f6;
+  --overlay-scrim: rgba(11, 17, 32, 0.50);
 
-  --line:        #DCE5E8;
-  --line-strong: #C0CDD2;
-  --line-faint:  #E9EFF1;
+  --line:        #e3e8f0;
+  --line-strong: #cfd7e4;
+  --line-faint:  #edf1f5;
 
   /* --- Tinta (terang) --------------------------------------------------- */
-  --ink:    #0C1A1E;
-  --ink-2:  #33474D;
-  --ink-3:  #5E747B;
-  --ink-4:  #8A9EA4;
-  --ink-on-brand: #FFFFFF;
+  --ink:    #101a2e;
+  --ink-2:  #3d4f66;
+  --ink-3:  #5b6b85;
+  --ink-4:  #8a99b0;
+  --ink-on-brand: #ffffff;
+
+  /* --- Rail / sidebar ---------------------------------------------------- */
+  --rail-bg:     #101a2e;
+  --rail-fg:     #a9b6cd;
+  --rail-fg-hi:  #ffffff;
+  --rail-hover:  rgba(255,255,255,.07);
+  --rail-active: #1b4bd6;
 
   /* --- Aksi merek -------------------------------------------------------- */
   --accent:        var(--brand-600);
@@ -53,65 +59,66 @@
   --accent-ink:    var(--brand-700);
   --accent-soft:   var(--brand-50);
   --accent-soft-line: var(--brand-200);
-  --focus-ring:    #1E9AB2;
+  --focus-ring:    #3563e9;
 
-  /* --- Semantik status (terpisah dari merek & dari palet grafik) --------- */
-  --ok:        #2E7D4F;
-  --ok-soft:   #E6F3EB;
-  --ok-line:   #B7DCC5;
-  --warn:      #A66A00;
-  --warn-soft: #FBF0DC;
-  --warn-line: #EBD5A6;
-  --danger:      #B3261E;
-  --danger-soft: #FBE9E7;
-  --danger-line: #EFC4BF;
-  --info:      #1C5FA8;
-  --info-soft: #E7EFF9;
-  --info-line: #BCD2EC;
+  /* --- Warna aksen sekunder (teal & violet — selaras FLMS) --------------- */
+  --teal-100: #d3f4f2;
+  --teal-500: #0fa3a3;
+  --teal-600: #0b8484;
+  --violet-100: #ece6ff;
+  --violet-500: #7c3aed;
+  --violet-600: #6b28dc;
+
+  /* --- Semantik status --------------------------------------------------- */
+  --ok:        #16a34a;
+  --ok-soft:   #d9f5e3;
+  --ok-line:   #b7dcc5;
+  --warn:      #d97706;
+  --warn-soft: #fdf0d5;
+  --warn-line: #ebd5a6;
+  --danger:      #dc2626;
+  --danger-soft: #fde3e3;
+  --danger-line: #efc4bf;
+  --info:      #1b4bd6;
+  --info-soft: #eef4ff;
+  --info-line: #bcd0ff;
   --neutral-soft: var(--surface-3);
   --neutral-line: var(--line-strong);
 
-  /* --- Palet kategorikal grafik ----------------------------------------
-     Lolos seluruh pemeriksaan validate_palette.js (mode terang):
-     pita lightness, lantai chroma, pemisahan CVD, lantai penglihatan
-     normal, dan kontras >= 3:1 terhadap permukaan. Urutan TETAP —
-     tidak pernah didaur ulang untuk seri ke-6. */
-  --cat-1: #0089A0;
-  --cat-2: #B87710;
-  --cat-3: #6B5BD6;
-  --cat-4: #C03C7A;
-  --cat-5: #5A9B2A;
+  /* --- Palet kategorikal grafik ------------------------------------------ */
+  --cat-1: #3563e9;
+  --cat-2: #d97706;
+  --cat-3: #7c3aed;
+  --cat-4: #dc2626;
+  --cat-5: #16a34a;
 
-  /* --- Ramp sekuensial (magnitudo/ordinal, satu rona, terang -> gelap) --- */
-  --seq-1: #B7DFE7;
-  --seq-2: #7FC6D3;
-  --seq-3: #3FA3B5;
-  --seq-4: #0089A0;
-  --seq-5: #06697B;
+  /* --- Ramp sekuensial --------------------------------------------------- */
+  --seq-1: #dbe6ff;
+  --seq-2: #8fb0ff;
+  --seq-3: #5c86fb;
+  --seq-4: #3563e9;
+  --seq-5: #1b4bd6;
 
   /* --- Kromatik grafik pendukung ---------------------------------------- */
-  --chart-grid:      #E4EBED;
-  --chart-axis:      #C6D3D7;
-  --chart-reference: #8A9EA4;
+  --chart-grid:      #e3e8f0;
+  --chart-axis:      #cfd7e4;
+  --chart-reference: #8a99b0;
   --chart-surface:   var(--surface);
 
-  /* --- Tipografi --------------------------------------------------------
-     Dua peran. Grotesk sistem untuk antarmuka; monospace sistem untuk
-     SETIAP angka, kode dokumen, SKU, dan nomor akun — aturan "buku besar". */
-  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-             "Helvetica Neue", "Liberation Sans", Arial, sans-serif;
-  --font-num: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Mono",
-              "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* --- Tipografi -------------------------------------------------------- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+             system-ui, "Inter", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-num: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --fs-micro: 0.6875rem;  /* 11px — label mono huruf besar */
+  --fs-micro: 0.6875rem;  /* 11px */
   --fs-cap:   0.75rem;    /* 12px */
   --fs-sm:    0.8125rem;  /* 13px */
-  --fs-base:  0.875rem;   /* 14px — densitas ERP */
+  --fs-base:  0.875rem;   /* 14px */
   --fs-lead:  1rem;       /* 16px */
   --fs-h3:    1.125rem;   /* 18px */
   --fs-h2:    1.375rem;   /* 22px */
   --fs-h1:    1.75rem;    /* 28px */
-  --fs-metric: 1.625rem;  /* 26px — angka KPI, mono */
+  --fs-metric: 1.625rem;  /* 26px */
 
   --lh-tight: 1.2;
   --lh-snug:  1.35;
@@ -123,15 +130,15 @@
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
   --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
 
-  /* Radius kecil & industrial — bukan "rounded-lg" di mana-mana. */
-  --r-xs: 3px;
-  --r-sm: 5px;
-  --r-md: 6px;
-  --r-lg: 8px;
+  /* Radius lebih lembut — diselaraskan dengan FLMS (12px kartu, 9px tombol) */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 12px;
   --r-pill: 999px;
 
-  --shadow-pop:    0 1px 2px rgba(10, 26, 30, .06), 0 8px 24px rgba(10, 26, 30, .12);
-  --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(10, 26, 30, .14);
+  --shadow-pop:    0 4px 16px rgba(16,26,46,.08), 0 1px 3px rgba(16,26,46,.05);
+  --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(16,26,46,.14);
   --shadow-bar:    0 1px 0 var(--line);
 
   /* --- Kerangka layout --------------------------------------------------- */
@@ -151,66 +158,73 @@
 /* --- Override GELAP: OS gelap tanpa pilihan eksplisit "terang" ----------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas:        #080F12;
-    --surface:       #0F171B;
-    --surface-2:     #141F24;
-    --surface-3:     #1B282F;
-    --surface-inset: #0B1418;
-    --overlay-scrim: rgba(3, 9, 11, 0.62);
+    --canvas:        #0b1120;
+    --surface:       #121b2d;
+    --surface-2:     #172236;
+    --surface-3:     #1d2942;
+    --surface-inset: #0e1625;
+    --overlay-scrim: rgba(5, 8, 18, 0.62);
 
-    --line:        #22323A;
-    --line-strong: #33474F;
-    --line-faint:  #1A272D;
+    --line:        #24314c;
+    --line-strong: #33425f;
+    --line-faint:  #1a2640;
 
-    --ink:    #E4EDEF;
-    --ink-2:  #B2C4C9;
-    --ink-3:  #879BA1;
-    --ink-4:  #66797F;
-    --ink-on-brand: #04191E;
+    --ink:    #e8edf7;
+    --ink-2:  #b5c3d8;
+    --ink-3:  #8a9ab5;
+    --ink-4:  #6a7a96;
+    --ink-on-brand: #04091a;
 
-    --accent:       #1E9AB2;
-    --accent-hover: #38AFC5;
-    --accent-ink:   #57B2C6;
-    --accent-soft:  #0D2A31;
-    --accent-soft-line: #17454F;
-    --focus-ring:   #57B2C6;
+    --rail-bg:     #080e1b;
+    --rail-fg:     #8a9ab5;
+    --rail-fg-hi:  #e8edf7;
+    --rail-hover:  rgba(255,255,255,.06);
+    --rail-active: #3563e9;
 
-    --ok:        #63C286;
-    --ok-soft:   #10281B;
-    --ok-line:   #23492F;
-    --warn:      #DCA544;
-    --warn-soft: #2B2110;
-    --warn-line: #4C3B18;
-    --danger:      #F08B84;
-    --danger-soft: #2E1614;
-    --danger-line: #4F2621;
-    --info:      #78B0EA;
-    --info-soft: #11212F;
-    --info-line: #1F3B54;
+    --accent:       #5c86fb;
+    --accent-hover: #8fb0ff;
+    --accent-ink:   #8fb0ff;
+    --accent-soft:  #17233d;
+    --accent-soft-line: #1c2a49;
+    --focus-ring:   #5c86fb;
+
+    --teal-100: #0e2f30;
+    --violet-100: #241a45;
+
+    --ok:        #4ade80;
+    --ok-soft:   #0e2e1c;
+    --ok-line:   #23492f;
+    --warn:      #f6b95c;
+    --warn-soft: #38270c;
+    --warn-line: #4c3b18;
+    --danger:      #ff8b8b;
+    --danger-soft: #3a1518;
+    --danger-line: #4f2621;
+    --info:      #8fb0ff;
+    --info-soft: #17233d;
+    --info-line: #1c2a49;
     --neutral-soft: var(--surface-3);
     --neutral-line: var(--line-strong);
 
-    /* Palet gelap DIPILIH ulang, bukan dibalik otomatis; lolos validator
-       pada permukaan #0F171B. */
-    --cat-1: #159AB0;
-    --cat-2: #BE851B;
-    --cat-3: #7B6FE0;
-    --cat-4: #D2528A;
-    --cat-5: #69A836;
+    --cat-1: #6f97ff;
+    --cat-2: #f6b95c;
+    --cat-3: #a98bff;
+    --cat-4: #ff8b8b;
+    --cat-5: #4ade80;
 
-    --seq-1: #0A3F4A;
-    --seq-2: #0D5967;
-    --seq-3: #117488;
-    --seq-4: #1E9AB2;
-    --seq-5: #57C0D3;
+    --seq-1: #17233d;
+    --seq-2: #1c2a49;
+    --seq-3: #3563e9;
+    --seq-4: #5c86fb;
+    --seq-5: #8fb0ff;
 
-    --chart-grid:      #1D2C33;
-    --chart-axis:      #2C3F47;
-    --chart-reference: #7C9198;
+    --chart-grid:      #1d2942;
+    --chart-axis:      #33425f;
+    --chart-reference: #6a7a96;
     --chart-surface:   var(--surface);
 
-    --shadow-pop:    0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .55);
-    --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(0, 0, 0, .5);
+    --shadow-pop:    0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.55);
+    --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(0,0,0,.5);
     --shadow-bar:    0 1px 0 var(--line);
 
     color-scheme: dark;
@@ -219,64 +233,73 @@
 
 /* --- Override GELAP: pilihan eksplisit menang atas OS terang ------------- */
 :root[data-theme="dark"] {
-  --canvas:        #080F12;
-  --surface:       #0F171B;
-  --surface-2:     #141F24;
-  --surface-3:     #1B282F;
-  --surface-inset: #0B1418;
-  --overlay-scrim: rgba(3, 9, 11, 0.62);
+  --canvas:        #0b1120;
+  --surface:       #121b2d;
+  --surface-2:     #172236;
+  --surface-3:     #1d2942;
+  --surface-inset: #0e1625;
+  --overlay-scrim: rgba(5, 8, 18, 0.62);
 
-  --line:        #22323A;
-  --line-strong: #33474F;
-  --line-faint:  #1A272D;
+  --line:        #24314c;
+  --line-strong: #33425f;
+  --line-faint:  #1a2640;
 
-  --ink:    #E4EDEF;
-  --ink-2:  #B2C4C9;
-  --ink-3:  #879BA1;
-  --ink-4:  #66797F;
-  --ink-on-brand: #04191E;
+  --ink:    #e8edf7;
+  --ink-2:  #b5c3d8;
+  --ink-3:  #8a9ab5;
+  --ink-4:  #6a7a96;
+  --ink-on-brand: #04091a;
 
-  --accent:       #1E9AB2;
-  --accent-hover: #38AFC5;
-  --accent-ink:   #57B2C6;
-  --accent-soft:  #0D2A31;
-  --accent-soft-line: #17454F;
-  --focus-ring:   #57B2C6;
+  --rail-bg:     #080e1b;
+  --rail-fg:     #8a9ab5;
+  --rail-fg-hi:  #e8edf7;
+  --rail-hover:  rgba(255,255,255,.06);
+  --rail-active: #3563e9;
 
-  --ok:        #63C286;
-  --ok-soft:   #10281B;
-  --ok-line:   #23492F;
-  --warn:      #DCA544;
-  --warn-soft: #2B2110;
-  --warn-line: #4C3B18;
-  --danger:      #F08B84;
-  --danger-soft: #2E1614;
-  --danger-line: #4F2621;
-  --info:      #78B0EA;
-  --info-soft: #11212F;
-  --info-line: #1F3B54;
+  --accent:       #5c86fb;
+  --accent-hover: #8fb0ff;
+  --accent-ink:   #8fb0ff;
+  --accent-soft:  #17233d;
+  --accent-soft-line: #1c2a49;
+  --focus-ring:   #5c86fb;
+
+  --teal-100: #0e2f30;
+  --violet-100: #241a45;
+
+  --ok:        #4ade80;
+  --ok-soft:   #0e2e1c;
+  --ok-line:   #23492f;
+  --warn:      #f6b95c;
+  --warn-soft: #38270c;
+  --warn-line: #4c3b18;
+  --danger:      #ff8b8b;
+  --danger-soft: #3a1518;
+  --danger-line: #4f2621;
+  --info:      #8fb0ff;
+  --info-soft: #17233d;
+  --info-line: #1c2a49;
   --neutral-soft: var(--surface-3);
   --neutral-line: var(--line-strong);
 
-  --cat-1: #159AB0;
-  --cat-2: #BE851B;
-  --cat-3: #7B6FE0;
-  --cat-4: #D2528A;
-  --cat-5: #69A836;
+  --cat-1: #6f97ff;
+  --cat-2: #f6b95c;
+  --cat-3: #a98bff;
+  --cat-4: #ff8b8b;
+  --cat-5: #4ade80;
 
-  --seq-1: #0A3F4A;
-  --seq-2: #0D5967;
-  --seq-3: #117488;
-  --seq-4: #1E9AB2;
-  --seq-5: #57C0D3;
+  --seq-1: #17233d;
+  --seq-2: #1c2a49;
+  --seq-3: #3563e9;
+  --seq-4: #5c86fb;
+  --seq-5: #8fb0ff;
 
-  --chart-grid:      #1D2C33;
-  --chart-axis:      #2C3F47;
-  --chart-reference: #7C9198;
+  --chart-grid:      #1d2942;
+  --chart-axis:      #33425f;
+  --chart-reference: #6a7a96;
   --chart-surface:   var(--surface);
 
-  --shadow-pop:    0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .55);
-  --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(0, 0, 0, .5);
+  --shadow-pop:    0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.55);
+  --shadow-drawer: -1px 0 0 var(--line), -24px 0 48px rgba(0,0,0,.5);
   --shadow-bar:    0 1px 0 var(--line);
 
   color-scheme: dark;
