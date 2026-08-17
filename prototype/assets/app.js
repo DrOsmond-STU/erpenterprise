@@ -2701,41 +2701,55 @@
   /* ====================================================================== */
   function renderApprovalInbox() {
     const items = DATA.approvals;
+    const total = items.reduce((s, a) => s + a.amount, 0);
+
     const cards = items.map((a) => `
-      <div class="card" style="cursor:pointer" data-approval="${a.id}">
-        <div style="display:flex;align-items:flex-start;gap:var(--sp-3)">
-          <span class="avatar" style="flex-shrink:0">${icon(a.icon)}</span>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1)">
-              <span class="pill" data-tone="${a.tone}"><i class="pill-dot"></i>${esc(a.kind)}</span>
-              <span class="muted" style="font-size:var(--fs-cap)">${esc(a.ago)}</span>
-            </div>
-            <div class="cell-strong">${esc(a.title)}</div>
-            <div class="muted" style="font-size:var(--fs-sm)">${esc(a.id)} · ${esc(a.reason)}</div>
-            <div style="margin-top:var(--sp-2);display:flex;align-items:center;gap:var(--sp-3)">
-              <span class="num" style="font-size:var(--fs-lead);font-weight:600">${FMT.rpCompact(a.amount)}</span>
-              <span class="muted" style="font-size:var(--fs-cap)">oleh ${esc(a.by)}</span>
-            </div>
-            <div style="margin-top:var(--sp-3);display:flex;gap:var(--sp-2)">
-              <button class="btn btn-sm" data-action="demo">${icon('check')} Setujui</button>
-              <button class="btn btn-sm btn-ghost" data-action="demo">${icon('x')} Tolak</button>
-              <button class="btn btn-sm btn-ghost" data-action="demo">${icon('eye')} Lihat</button>
-            </div>
-          </div>
+      <div class="card approval-card" style="cursor:pointer" data-approval="${a.id}">
+        <div class="approval-card-head">
+          <span class="pill" data-tone="${a.tone}"><i class="pill-dot"></i>${esc(a.kind)}</span>
+          <span class="num" style="font-weight:700">${FMT.rpCompact(a.amount)}</span>
+        </div>
+        <div class="approval-card-body">
+          <div class="cell-strong">${esc(a.title)}</div>
+          <div class="muted" style="font-size:var(--fs-cap)">${esc(a.id)} · ${esc(a.reason)}</div>
+          <div class="muted" style="font-size:var(--fs-cap);margin-top:2px">${esc(a.by)} · ${esc(a.ago)}</div>
+        </div>
+        <div class="approval-card-foot">
+          <button class="btn btn-sm" data-action="demo">${icon('check')} Setujui</button>
+          <button class="btn btn-sm btn-ghost" data-action="demo">${icon('x')} Tolak</button>
+          <button class="btn btn-sm btn-ghost" data-action="demo">${icon('eye')} Lihat</button>
         </div>
       </div>`).join('');
 
     return `
-      <section>
-        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
-          <span class="kpi-icon" data-tone="accent">${icon('inbox')}</span>
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Kotak Persetujuan</h1>
+        <p class="page-sub">Dokumen dan transaksi yang menunggu persetujuan Anda.</p>
+      </div></div>
+      <div class="approval-summary">
+        <div class="approval-stat">
+          <span class="approval-stat-icon" data-tone="accent">${icon('inbox')}</span>
           <div>
-            <div style="font-size:var(--fs-h3);font-weight:600">${items.length} Dokumen Menunggu</div>
-            <div class="muted" style="font-size:var(--fs-sm)">Total nilai Rp ${FMT.rpCompact(items.reduce((s, a) => s + a.amount, 0))}</div>
+            <div class="approval-stat-num">${items.length}</div>
+            <div class="approval-stat-label">Menunggu</div>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:var(--sp-3)">${cards}</div>
-      </section>`;
+        <div class="approval-stat">
+          <span class="approval-stat-icon" data-tone="warn">${icon('clock')}</span>
+          <div>
+            <div class="approval-stat-num">${FMT.rpCompact(total)}</div>
+            <div class="approval-stat-label">Total Nilai</div>
+          </div>
+        </div>
+        <div class="approval-stat">
+          <span class="approval-stat-icon" data-tone="ok">${icon('check')}</span>
+          <div>
+            <div class="approval-stat-num">${items.filter(a => a.tone === 'accent').length}</div>
+            <div class="approval-stat-label">Prioritas</div>
+          </div>
+        </div>
+      </div>
+      <div class="approval-grid">${cards}</div>`;
   }
 
   /* ====================================================================== */

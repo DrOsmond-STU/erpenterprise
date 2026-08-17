@@ -1410,15 +1410,86 @@ svg { display: block; }
   margin-top: var(--sp-4);
 }
 
+/* --- Approval Inbox ---------------------------------------------------- */
+.approval-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.approval-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-1, #e5e7eb);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3) var(--sp-4);
+}
+.approval-stat-icon {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--accent-faint, rgba(59,130,246,0.08));
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.approval-stat-icon[data-tone="warn"] { background: rgba(217,119,6,0.1); color: #d97706; }
+.approval-stat-icon[data-tone="ok"] { background: rgba(22,163,74,0.1); color: #16a34a; }
+.approval-stat-num {
+  font-size: var(--fs-lead, 1.25rem);
+  font-weight: 700;
+  color: var(--ink-1);
+  line-height: 1.2;
+}
+.approval-stat-label {
+  font-size: var(--fs-cap, 0.75rem);
+  color: var(--ink-3);
+}
+.approval-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-3);
+}
+.approval-card {
+  padding: 0 !important;
+  overflow: hidden;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.approval-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.1);
+}
+.approval-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-card-alt, var(--bg-alt, rgba(0,0,0,0.02)));
+  border-bottom: 1px solid var(--border-1, #e5e7eb);
+}
+.approval-card-body {
+  padding: var(--sp-3);
+}
+.approval-card-foot {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-1, #e5e7eb);
+}
+
 @media (max-width: 900px) {
   .bsc-grid { grid-template-columns: 1fr; }
   .analytics-kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .analytics-charts-grid { grid-template-columns: 1fr; }
   .widget-picker-body { grid-template-columns: 1fr; }
+  .approval-grid { grid-template-columns: 1fr; }
+  .approval-summary { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 640px) {
   .dash-grid { grid-template-columns: repeat(6, 1fr); }
   .analytics-kpi-grid { grid-template-columns: 1fr; }
+  .approval-summary { grid-template-columns: 1fr; }
 }
 
 @media print {
