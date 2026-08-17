@@ -2486,7 +2486,13 @@
         </div>`;
     }).join('');
 
-    return `${kpis}<div class="board">${cols}</div>`;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Pipeline CRM</h1>
+        <p class="page-sub">Kelola peluang penjualan dan pantau konversi pipeline.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Peluang Baru</button>
+      </div></div>${kpis}<div class="board">${cols}</div>`;
   }
 
   /* ====================================================================== */
@@ -2554,7 +2560,13 @@
         </table></div>
       </section>`;
 
-    return kpis + shifts + txns;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Point of Sale</h1>
+        <p class="page-sub">Pantau shift kasir, transaksi, dan performa penjualan harian.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Buka Shift Baru</button>
+      </div></div>` + kpis + shifts + txns;
   }
 
   /* ====================================================================== */
@@ -2623,7 +2635,13 @@
         </section>`;
     }).join('');
 
-    return chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Manajemen Proyek</h1>
+        <p class="page-sub">Pantau progres, anggaran, dan jadwal proyek perusahaan.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Proyek Baru</button>
+      </div></div>` + chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
   }
 
   /* ====================================================================== */
@@ -2686,6 +2704,14 @@
   function renderBudget() {
     const tab = state.budgetTab || 'cost-center';
 
+    const pageHead = `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Anggaran &amp; Pengendalian Biaya</h1>
+        <p class="page-sub">Monitor realisasi, komitmen, dan prakiraan anggaran perusahaan.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+      </div></div>`;
+
     /* ---------- Tab bar ---------- */
     const tabs = `
       <div class="tab-bar" style="margin-bottom:var(--sp-4)">
@@ -2693,8 +2719,8 @@
         <button class="tab-btn${tab === 'account' ? ' active' : ''}" data-budget-tab="account">${icon('ledger')} Per Akun (Manajemen)</button>
       </div>`;
 
-    if (tab === 'account') return tabs + renderAccountBudget();
-    return tabs + renderCostCenterBudget();
+    if (tab === 'account') return pageHead + tabs + renderAccountBudget();
+    return pageHead + tabs + renderCostCenterBudget();
   }
 
   /* --- Budget per Pusat Biaya ------------------------------------------- */
@@ -2955,7 +2981,8 @@
       </tr>`).join('');
 
     const table = `
-      <section>
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('wallet')} Daftar Rekening</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr>
             <th>Kode</th><th>Nama Rekening</th><th>Mata Uang</th>
@@ -2966,7 +2993,14 @@
         </table></div>
       </section>`;
 
-    return summary + table;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Kas &amp; Bank</h1>
+        <p class="page-sub">Kelola rekening bank, kas kecil, dan rekonsiliasi.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Rekening Baru</button>
+      </div></div>` + summary + table;
   }
 
   /* ====================================================================== */
@@ -3010,7 +3044,8 @@
       </tr>`).join('');
 
     const table = `
-      <section>
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('truck')} Daftar Pengiriman</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr>
             <th>Nomor</th><th>Tanggal</th><th>Asal</th><th>Tujuan</th>
@@ -3021,7 +3056,14 @@
         </table></div>
       </section>`;
 
-    return summary + table;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Rantai Pasok</h1>
+        <p class="page-sub">Pantau pengiriman, logistik, dan distribusi barang.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Pengiriman Baru</button>
+      </div></div>` + summary + table;
   }
 
   /* ====================================================================== */

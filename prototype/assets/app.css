@@ -521,20 +521,20 @@ svg { display: block; }
 .chip[aria-pressed="true"] .chip-count { color: var(--accent-ink); }
 
 /* --- Tabel padat ---------------------------------------------------------------- */
-.table-scroll { overflow-x: auto; }
-.table {
+.table-scroll, .tbl-wrap { overflow-x: auto; }
+.table, .tbl {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--fs-sm);
 }
-.table th, .table td {
+.table th, .table td, .tbl th, .tbl td {
   padding: 9px var(--sp-3);
   text-align: left;
   border-bottom: 1px solid var(--line-faint);
   vertical-align: middle;
 }
-.table th {
+.table th, .tbl th {
   position: sticky; top: 0; z-index: 2;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
@@ -546,12 +546,13 @@ svg { display: block; }
   color: var(--ink-3);
   white-space: nowrap;
 }
-.table th.ta-r, .table td.ta-r { text-align: right; }
-.table tbody tr { cursor: pointer; transition: background var(--speed-fast) var(--ease); }
-.table tbody tr:hover { background: var(--surface-2); }
-.table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
-.table tbody tr:last-child td { border-bottom: 0; }
-.table td.num, .table td .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.table th.ta-r, .table td.ta-r, .tbl th.r, .tbl td.r { text-align: right; }
+.table tbody tr, .tbl tbody tr { cursor: pointer; transition: background var(--speed-fast) var(--ease); }
+.table tbody tr:hover, .tbl tbody tr:hover { background: var(--surface-2); }
+.table tbody tr[aria-selected="true"], .tbl tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.table tbody tr:last-child td, .tbl tbody tr:last-child td { border-bottom: 0; }
+.table td.num, .table td .num, .tbl td.num, .tbl td .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.tbl .code { font-family: var(--font-num); font-size: var(--fs-cap); color: var(--ink-3); }
 .cell-strong { font-weight: 600; color: var(--ink); }
 .cell-sub { display: block; font-size: var(--fs-cap); color: var(--ink-3); }
 .col-check { width: 34px; }

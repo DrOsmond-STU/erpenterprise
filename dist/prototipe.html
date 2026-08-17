@@ -864,20 +864,20 @@ svg { display: block; }
 .chip[aria-pressed="true"] .chip-count { color: var(--accent-ink); }
 
 /* --- Tabel padat ---------------------------------------------------------------- */
-.table-scroll { overflow-x: auto; }
-.table {
+.table-scroll, .tbl-wrap { overflow-x: auto; }
+.table, .tbl {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--fs-sm);
 }
-.table th, .table td {
+.table th, .table td, .tbl th, .tbl td {
   padding: 9px var(--sp-3);
   text-align: left;
   border-bottom: 1px solid var(--line-faint);
   vertical-align: middle;
 }
-.table th {
+.table th, .tbl th {
   position: sticky; top: 0; z-index: 2;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
@@ -889,12 +889,13 @@ svg { display: block; }
   color: var(--ink-3);
   white-space: nowrap;
 }
-.table th.ta-r, .table td.ta-r { text-align: right; }
-.table tbody tr { cursor: pointer; transition: background var(--speed-fast) var(--ease); }
-.table tbody tr:hover { background: var(--surface-2); }
-.table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
-.table tbody tr:last-child td { border-bottom: 0; }
-.table td.num, .table td .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.table th.ta-r, .table td.ta-r, .tbl th.r, .tbl td.r { text-align: right; }
+.table tbody tr, .tbl tbody tr { cursor: pointer; transition: background var(--speed-fast) var(--ease); }
+.table tbody tr:hover, .tbl tbody tr:hover { background: var(--surface-2); }
+.table tbody tr[aria-selected="true"], .tbl tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.table tbody tr:last-child td, .tbl tbody tr:last-child td { border-bottom: 0; }
+.table td.num, .table td .num, .tbl td.num, .tbl td .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.tbl .code { font-family: var(--font-num); font-size: var(--fs-cap); color: var(--ink-3); }
 .cell-strong { font-weight: 600; color: var(--ink); }
 .cell-sub { display: block; font-size: var(--fs-cap); color: var(--ink-3); }
 .col-check { width: 34px; }
@@ -5767,7 +5768,13 @@ const Charts = (() => {
         </div>`;
     }).join('');
 
-    return `${kpis}<div class="board">${cols}</div>`;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Pipeline CRM</h1>
+        <p class="page-sub">Kelola peluang penjualan dan pantau konversi pipeline.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Peluang Baru</button>
+      </div></div>${kpis}<div class="board">${cols}</div>`;
   }
 
   /* ====================================================================== */
@@ -5835,7 +5842,13 @@ const Charts = (() => {
         </table></div>
       </section>`;
 
-    return kpis + shifts + txns;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Point of Sale</h1>
+        <p class="page-sub">Pantau shift kasir, transaksi, dan performa penjualan harian.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Buka Shift Baru</button>
+      </div></div>` + kpis + shifts + txns;
   }
 
   /* ====================================================================== */
@@ -5904,7 +5917,13 @@ const Charts = (() => {
         </section>`;
     }).join('');
 
-    return chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Manajemen Proyek</h1>
+        <p class="page-sub">Pantau progres, anggaran, dan jadwal proyek perusahaan.</p>
+      </div><div class="page-actions">
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Proyek Baru</button>
+      </div></div>` + chipBar + (cards || '<p class="muted" style="padding:var(--sp-5)">Tidak ada proyek pada filter ini.</p>');
   }
 
   /* ====================================================================== */
@@ -5967,6 +5986,14 @@ const Charts = (() => {
   function renderBudget() {
     const tab = state.budgetTab || 'cost-center';
 
+    const pageHead = `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Anggaran &amp; Pengendalian Biaya</h1>
+        <p class="page-sub">Monitor realisasi, komitmen, dan prakiraan anggaran perusahaan.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+      </div></div>`;
+
     /* ---------- Tab bar ---------- */
     const tabs = `
       <div class="tab-bar" style="margin-bottom:var(--sp-4)">
@@ -5974,8 +6001,8 @@ const Charts = (() => {
         <button class="tab-btn${tab === 'account' ? ' active' : ''}" data-budget-tab="account">${icon('ledger')} Per Akun (Manajemen)</button>
       </div>`;
 
-    if (tab === 'account') return tabs + renderAccountBudget();
-    return tabs + renderCostCenterBudget();
+    if (tab === 'account') return pageHead + tabs + renderAccountBudget();
+    return pageHead + tabs + renderCostCenterBudget();
   }
 
   /* --- Budget per Pusat Biaya ------------------------------------------- */
@@ -6236,7 +6263,8 @@ const Charts = (() => {
       </tr>`).join('');
 
     const table = `
-      <section>
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('wallet')} Daftar Rekening</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr>
             <th>Kode</th><th>Nama Rekening</th><th>Mata Uang</th>
@@ -6247,7 +6275,14 @@ const Charts = (() => {
         </table></div>
       </section>`;
 
-    return summary + table;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Kas &amp; Bank</h1>
+        <p class="page-sub">Kelola rekening bank, kas kecil, dan rekonsiliasi.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Rekening Baru</button>
+      </div></div>` + summary + table;
   }
 
   /* ====================================================================== */
@@ -6291,7 +6326,8 @@ const Charts = (() => {
       </tr>`).join('');
 
     const table = `
-      <section>
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('truck')} Daftar Pengiriman</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr>
             <th>Nomor</th><th>Tanggal</th><th>Asal</th><th>Tujuan</th>
@@ -6302,7 +6338,14 @@ const Charts = (() => {
         </table></div>
       </section>`;
 
-    return summary + table;
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Rantai Pasok</h1>
+        <p class="page-sub">Pantau pengiriman, logistik, dan distribusi barang.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+        <button class="btn btn-primary" data-action="demo">${icon('plus')} Pengiriman Baru</button>
+      </div></div>` + summary + table;
   }
 
   /* ====================================================================== */
