@@ -82,6 +82,7 @@
     workflow: '<circle cx="3.4" cy="4.4" r="1.8"/><circle cx="12.6" cy="4.4" r="1.8"/><circle cx="8" cy="12" r="1.8"/><path d="M5.2 4.4h5.6M4.4 6 8 10.2M11.6 6 8 10.2"/>',
     'bar-chart': '<path d="M2 14h12"/><rect x="3.6" y="6" width="2" height="8" rx=".4"/><rect x="7" y="3" width="2" height="11" rx=".4"/><rect x="10.4" y="8" width="2" height="6" rx=".4"/>',
     'file-check': '<path d="M4 1.6h5.6L13 5v8.4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"/><path d="M9.6 1.6V5H13"/><path d="M6.4 9.4l1.4 1.4 2.8-2.8"/>',
+    'tree': '<path d="M8 2v5M8 7H4.5M8 7h3.5M4.5 7v3M11.5 7v3M4.5 10H2.5v2.5h4V10H4.5zM11.5 10H9.5v2.5h4V10H11.5z"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -851,7 +852,8 @@
       lead: { title: 'Pipeline CRM', sub: 'Peluang penjualan dari prospek hingga closing, beserta nilai dan probabilitasnya.' },
       kasir: { title: 'Kasir (POS)', sub: 'Ikhtisar shift kasir, transaksi hari ini, dan pencapaian target penjualan toko.' },
       proyek: { title: 'Manajemen Proyek', sub: 'Progres proyek, kesehatan anggaran, dan linimasa tugas utama.' },
-      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya.' },
+      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya dan per akun manajemen.' },
+      'bagan-akun': { title: 'Bagan Akun (COA)', sub: 'Struktur akun buku besar perusahaan — aset, liabilitas, ekuitas, pendapatan, dan beban.' },
       persetujuan: { title: 'Kotak Persetujuan', sub: 'Dokumen dan transaksi yang menunggu persetujuan Anda.' },
       'kas-bank': { title: 'Kas & Bank', sub: 'Saldo rekening bank, kas kecil, dan status rekonsiliasi.' },
       'rantai-pasok': { title: 'Rantai Pasok', sub: 'Pengiriman aktif, logistik, dan pelacakan barang.' },
@@ -2625,9 +2627,78 @@
   }
 
   /* ====================================================================== */
+  /* Bagan Akun (Chart of Accounts)                                          */
+  /* ====================================================================== */
+  function renderChartOfAccounts() {
+    const coa = DATA.chartOfAccounts;
+    const categories = ['Aset', 'Liabilitas', 'Ekuitas', 'Pendapatan', 'Beban'];
+    const catTotals = categories.map((cat) => {
+      const items = coa.filter((a) => a.category === cat && a.type === 'Detail');
+      return { cat, total: items.reduce((s, a) => s + a.balance, 0), count: items.length };
+    });
+
+    const summaryCards = `
+      <div class="coa-summary">
+        ${catTotals.map((c) => `
+          <div class="card coa-summary-card">
+            <span class="coa-summary-label">${esc(c.cat)}</span>
+            <span class="coa-summary-num${c.total < 0 ? ' neg' : ''}">${FMT.rpCompact(Math.abs(c.total))}</span>
+            <span class="muted" style="font-size:var(--fs-cap)">${c.count} akun</span>
+          </div>`).join('')}
+      </div>`;
+
+    const rows = coa.map((a) => {
+      const indent = a.level * 24;
+      const isHeader = a.type === 'Header';
+      return `<tr class="${isHeader ? 'coa-header-row' : ''}">
+        <td class="code" style="padding-left:${indent + 12}px">${esc(a.code)}</td>
+        <td class="${isHeader ? 'cell-strong' : ''}" style="padding-left:${indent + 12}px">${esc(a.name)}</td>
+        <td>${isHeader ? '' : esc(a.type)}</td>
+        <td class="r num">${isHeader ? '' : FMT.rpCompact(a.balance)}</td>
+        <td>${pill(a.status)}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Bagan Akun (Chart of Accounts)</h1>
+        <p class="page-sub">Struktur akun buku besar perusahaan.</p>
+      </div><div class="page-head-actions">
+        <button class="btn" data-action="demo">${icon('plus')} Akun Baru</button>
+        <button class="btn btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
+      </div></div>
+      ${summaryCards}
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('tree')} Daftar Akun</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Nama Akun</th><th>Tipe</th>
+            <th class="r">Saldo</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  /* ====================================================================== */
   /* Anggaran & Pengendalian Biaya                                           */
   /* ====================================================================== */
   function renderBudget() {
+    const tab = state.budgetTab || 'cost-center';
+
+    /* ---------- Tab bar ---------- */
+    const tabs = `
+      <div class="tab-bar" style="margin-bottom:var(--sp-4)">
+        <button class="tab-btn${tab === 'cost-center' ? ' active' : ''}" data-budget-tab="cost-center">${icon('piechart')} Per Pusat Biaya</button>
+        <button class="tab-btn${tab === 'account' ? ' active' : ''}" data-budget-tab="account">${icon('ledger')} Per Akun (Manajemen)</button>
+      </div>`;
+
+    if (tab === 'account') return tabs + renderAccountBudget();
+    return tabs + renderCostCenterBudget();
+  }
+
+  /* --- Budget per Pusat Biaya ------------------------------------------- */
+  function renderCostCenterBudget() {
     const totalBudget = DATA.budgets.reduce((s, b) => s + b.budget, 0);
     const totalActual = DATA.budgets.reduce((s, b) => s + b.actual, 0);
     const totalForecast = DATA.budgets.reduce((s, b) => s + b.forecast, 0);
@@ -2663,7 +2734,7 @@
       return `<tr>
         <td class="code">${esc(b.costCenter)}</td>
         <td class="cell-strong">${esc(b.dept)}</td>
-        <td>${esc(b.type)}</td>
+        <td>${pill(b.type)}</td>
         <td class="r num">${FMT.rpCompact(b.budget)}</td>
         <td class="r num">${FMT.rpCompact(b.actual)}</td>
         <td>
@@ -2680,7 +2751,7 @@
       </tr>`;
     }).join('');
 
-    const table = `
+    return kpis + `
       <section class="card">
         <div class="card-head"><h3 class="card-title">${icon('piechart')} Realisasi per Pusat Biaya</h3></div>
         <div class="tbl-wrap"><table class="tbl">
@@ -2690,6 +2761,100 @@
             <th>Penyerapan</th><th class="r">Komitmen</th><th class="r">Prakiraan</th>
           </tr></thead>
           <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  /* --- Budget per Akun (Management Budget) ------------------------------ */
+  function renderAccountBudget() {
+    const acctBudgets = DATA.accountBudgets;
+    const expenseItems = acctBudgets.filter((a) => a.accountCode.startsWith('5'));
+    const revenueItems = acctBudgets.filter((a) => a.accountCode.startsWith('4'));
+
+    const totalExpBudget = expenseItems.reduce((s, a) => s + a.budget, 0);
+    const totalExpActual = expenseItems.reduce((s, a) => s + a.actual, 0);
+    const totalRevBudget = revenueItems.reduce((s, a) => s + a.budget, 0);
+    const totalRevActual = revenueItems.reduce((s, a) => s + a.actual, 0);
+    const expPct = totalExpActual / totalExpBudget * 100;
+    const revPct = totalRevActual / totalRevBudget * 100;
+    const totalVariance = acctBudgets.reduce((s, a) => s + a.variance, 0);
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Anggaran Pendapatan</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalRevBudget)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" style="width:${Math.min(100, revPct)}%"></span></span><span class="meter-val">${FMT.pct(revPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Anggaran Beban</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalExpBudget)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${expPct > 90 ? ' data-tone="danger"' : expPct > 75 ? ' data-tone="warn"' : ''} style="width:${Math.min(100, expPct)}%"></span></span><span class="meter-val">${FMT.pct(expPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Total Varians</span>
+          <span class="kpi-metric${totalVariance > 0 ? ' neg' : ' pos'}">${totalVariance > 0 ? '+' : ''}${FMT.rpCompact(totalVariance)}</span>
+          <span class="muted" style="font-size:var(--fs-cap)">${totalVariance > 0 ? 'Over budget' : 'Di bawah anggaran'}</span>
+        </div>
+      </div>`;
+
+    const buildRows = (items, label) => {
+      if (!items.length) return '';
+      const groupTotal = items.reduce((s, a) => s + a.budget, 0);
+      const groupActual = items.reduce((s, a) => s + a.actual, 0);
+      const groupPct = groupActual / groupTotal * 100;
+      const groupVariance = items.reduce((s, a) => s + a.variance, 0);
+      const headerRow = `<tr class="coa-header-row">
+        <td colspan="2" class="cell-strong">${esc(label)}</td>
+        <td class="r num"><b>${FMT.rpCompact(groupTotal)}</b></td>
+        <td class="r num"><b>${FMT.rpCompact(groupActual)}</b></td>
+        <td><span class="meter"><span class="meter-track"><span class="meter-fill" style="width:${Math.min(100, groupPct)}%"></span></span><span class="meter-val">${FMT.pct(groupPct, 0)}</span></span></td>
+        <td class="r num"><b>${FMT.rpCompact(items.reduce((s, a) => s + a.forecast, 0))}</b></td>
+        <td class="r num${groupVariance > 0 ? ' neg' : ' pos'}"><b>${groupVariance > 0 ? '+' : ''}${FMT.rpCompact(groupVariance)}</b></td>
+        <td></td>
+      </tr>`;
+      const dataRows = items.map((a) => {
+        const pct = Math.min(100, a.actual / a.budget * 100);
+        const tone = pct > 90 ? 'danger' : pct > 75 ? 'warn' : '';
+        return `<tr>
+          <td class="code">${esc(a.accountCode)}</td>
+          <td class="cell-strong">${esc(a.accountName)}</td>
+          <td class="r num">${FMT.rpCompact(a.budget)}</td>
+          <td class="r num">${FMT.rpCompact(a.actual)}</td>
+          <td>
+            <span class="budget-bar">
+              <span class="budget-bar-track">
+                <span class="budget-bar-actual"${tone ? ` data-tone="${tone}"` : ''} style="width:${pct}%"></span>
+              </span>
+              <span class="meter-val">${FMT.pct(pct, 0)}</span>
+            </span>
+          </td>
+          <td class="r num">${FMT.rpCompact(a.forecast)}</td>
+          <td class="r num${a.variance > 0 ? ' neg' : a.variance < 0 ? ' pos' : ''}">${a.variance > 0 ? '+' : ''}${FMT.rpCompact(a.variance)}</td>
+          <td class="muted" style="font-size:var(--fs-cap);max-width:140px">${esc(a.notes)}</td>
+        </tr>`;
+      }).join('');
+      return headerRow + dataRows;
+    };
+
+    const table = `
+      <section class="card">
+        <div class="card-head">
+          <h3 class="card-title">${icon('ledger')} Anggaran per Akun — Periode 2026</h3>
+          <div class="card-tools">
+            <button class="btn btn-sm btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
+          </div>
+        </div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Nama Akun</th>
+            <th class="r">Anggaran</th><th class="r">Realisasi</th>
+            <th>Penyerapan</th><th class="r">Prakiraan</th><th class="r">Varians</th><th>Catatan</th>
+          </tr></thead>
+          <tbody>
+            ${buildRows(revenueItems, 'Pendapatan')}
+            ${buildRows(expenseItems, 'Beban')}
+          </tbody>
         </table></div>
       </section>`;
 
@@ -2992,7 +3157,7 @@
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
     ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
      'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok',
-     'analitik', 'bsc'].includes(id);
+     'analitik', 'bsc', 'bagan-akun'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -3010,11 +3175,10 @@
       case 'kasir': return renderPOS();
       case 'proyek': return renderProjects();
       case 'anggaran': return renderBudget();
+      case 'bagan-akun': return renderChartOfAccounts();
       case 'persetujuan': return renderApprovalInbox();
       case 'kas-bank': return renderCashBank();
       case 'rantai-pasok': return renderSupplyChain();
-      case 'analitik': return renderAnalytics();
-      case 'bsc': return renderBSC();
       default: return renderDashboard();
     }
   }
@@ -3194,6 +3358,9 @@
 
     const bf = t.closest('[data-board-filter]');
     if (bf) { state.boardFilter = bf.dataset.boardFilter; render(); return; }
+
+    const btab = t.closest('[data-budget-tab]');
+    if (btab) { state.budgetTab = btab.dataset.budgetTab; render(); return; }
 
     const pi = t.closest('[data-pi]');
     if (pi) { runPalette(Number(pi.dataset.pi)); return; }

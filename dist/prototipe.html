@@ -1478,6 +1478,31 @@ svg { display: block; }
 }
 
 /* ====================================================================== */
+/* Tab bar (budget / generic)                                              */
+/* ====================================================================== */
+.tab-bar { display: flex; gap: var(--sp-1); border-bottom: 2px solid var(--border-1); }
+.tab-btn {
+  padding: var(--sp-2) var(--sp-3); font-size: var(--fs-body); font-weight: 600;
+  color: var(--text-2); background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  display: inline-flex; align-items: center; gap: var(--sp-1); transition: all .15s;
+}
+.tab-btn:hover { color: var(--text-1); background: var(--bg-card-alt); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ====================================================================== */
+/* Chart of Accounts                                                       */
+/* ====================================================================== */
+.coa-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.coa-summary-card { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) !important; }
+.coa-summary-label { font-size: var(--fs-cap); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.coa-summary-num { font-size: var(--fs-lead); font-weight: 700; }
+.coa-header-row { background: var(--bg-card-alt); }
+.coa-header-row td { font-weight: 600; }
+@media (max-width: 900px) { .coa-summary { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .coa-summary { grid-template-columns: 1fr 1fr; } }
+
+/* ====================================================================== */
 /* POS table compact helper                                                */
 /* ====================================================================== */
 .tbl-sm th, .tbl-sm td { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-cap); }
@@ -1934,6 +1959,7 @@ const DATA = (() => {
     {
       label: 'Keuangan',
       items: [
+        { id: 'bagan-akun', label: 'Bagan Akun', icon: 'tree' },
         { id: 'piutang', label: 'Piutang Usaha', icon: 'wallet' },
         { id: 'hutang', label: 'Hutang Usaha', icon: 'credit-card' },
         { id: 'kas-bank', label: 'Kas & Bank', icon: 'vault' },
@@ -2398,7 +2424,87 @@ Ingin saya buatkan draft permintaan pembelian?` },
     ],
   };
 
-  /* --- Anggaran (Budget & Cost Control) --------------------------------- */
+  /* --- Bagan Akun (Chart of Accounts) ----------------------------------- */
+  const chartOfAccounts = [
+    /* Aset */
+    { code: '1-0000', name: 'Aset', type: 'Header', category: 'Aset', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '1-1000', name: 'Aset Lancar', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
+    { code: '1-1100', name: 'Kas & Setara Kas', type: 'Detail', category: 'Aset', level: 2, balance: 4_841_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1200', name: 'Piutang Usaha', type: 'Detail', category: 'Aset', level: 2, balance: 1_627_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1300', name: 'Piutang Lain-lain', type: 'Detail', category: 'Aset', level: 2, balance: 84_600_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1400', name: 'Persediaan Bahan Baku', type: 'Detail', category: 'Aset', level: 2, balance: 2_184_200_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1500', name: 'Persediaan Barang Jadi', type: 'Detail', category: 'Aset', level: 2, balance: 1_342_000_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1600', name: 'Biaya Dibayar di Muka', type: 'Detail', category: 'Aset', level: 2, balance: 196_800_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1700', name: 'PPN Masukan', type: 'Detail', category: 'Aset', level: 2, balance: 312_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-2000', name: 'Aset Tetap', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
+    { code: '1-2100', name: 'Tanah', type: 'Detail', category: 'Aset', level: 2, balance: 3_200_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2200', name: 'Bangunan', type: 'Detail', category: 'Aset', level: 2, balance: 4_800_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2300', name: 'Mesin & Peralatan', type: 'Detail', category: 'Aset', level: 2, balance: 6_420_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2400', name: 'Kendaraan', type: 'Detail', category: 'Aset', level: 2, balance: 1_640_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2500', name: 'Peralatan Kantor', type: 'Detail', category: 'Aset', level: 2, balance: 486_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2900', name: 'Akumulasi Penyusutan', type: 'Detail', category: 'Aset', level: 2, balance: -4_218_000_000, parent: '1-2000', status: 'aktif' },
+    /* Liabilitas */
+    { code: '2-0000', name: 'Liabilitas', type: 'Header', category: 'Liabilitas', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '2-1000', name: 'Liabilitas Jangka Pendek', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
+    { code: '2-1100', name: 'Utang Usaha', type: 'Detail', category: 'Liabilitas', level: 2, balance: 1_842_600_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1200', name: 'Utang Gaji', type: 'Detail', category: 'Liabilitas', level: 2, balance: 486_200_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1300', name: 'Utang Pajak', type: 'Detail', category: 'Liabilitas', level: 2, balance: 324_800_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1400', name: 'PPN Keluaran', type: 'Detail', category: 'Liabilitas', level: 2, balance: 418_600_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1500', name: 'Pendapatan Diterima di Muka', type: 'Detail', category: 'Liabilitas', level: 2, balance: 264_000_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-2000', name: 'Liabilitas Jangka Panjang', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
+    { code: '2-2100', name: 'Utang Bank', type: 'Detail', category: 'Liabilitas', level: 2, balance: 4_600_000_000, parent: '2-2000', status: 'aktif' },
+    { code: '2-2200', name: 'Utang Sewa Guna', type: 'Detail', category: 'Liabilitas', level: 2, balance: 840_000_000, parent: '2-2000', status: 'aktif' },
+    /* Ekuitas */
+    { code: '3-0000', name: 'Ekuitas', type: 'Header', category: 'Ekuitas', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '3-1000', name: 'Modal Disetor', type: 'Detail', category: 'Ekuitas', level: 1, balance: 10_000_000_000, parent: '3-0000', status: 'aktif' },
+    { code: '3-2000', name: 'Laba Ditahan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 3_842_600_000, parent: '3-0000', status: 'aktif' },
+    { code: '3-3000', name: 'Laba Periode Berjalan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 1_687_200_000, parent: '3-0000', status: 'aktif' },
+    /* Pendapatan */
+    { code: '4-0000', name: 'Pendapatan', type: 'Header', category: 'Pendapatan', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '4-1000', name: 'Pendapatan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: 4_823_400_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-2000', name: 'Pendapatan Jasa', type: 'Detail', category: 'Pendapatan', level: 1, balance: 682_000_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-3000', name: 'Pendapatan Lain-lain', type: 'Detail', category: 'Pendapatan', level: 1, balance: 124_600_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-9000', name: 'Retur & Potongan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: -186_400_000, parent: '4-0000', status: 'aktif' },
+    /* Beban */
+    { code: '5-0000', name: 'Beban', type: 'Header', category: 'Beban', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '5-1000', name: 'Harga Pokok Penjualan', type: 'Detail', category: 'Beban', level: 1, balance: 3_136_200_000, parent: '5-0000', status: 'aktif' },
+    { code: '5-1900', name: 'Selisih Persediaan', type: 'Detail', category: 'Beban', level: 1, balance: 14_200_000, parent: '5-0000', status: 'aktif' },
+    { code: '5-2000', name: 'Beban Operasional', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
+    { code: '5-2100', name: 'Beban Tenaga Kerja Langsung', type: 'Detail', category: 'Beban', level: 2, balance: 1_246_800_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2200', name: 'Beban Gaji & Tunjangan', type: 'Detail', category: 'Beban', level: 2, balance: 2_184_000_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2300', name: 'Beban Pemasaran', type: 'Detail', category: 'Beban', level: 2, balance: 412_600_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2400', name: 'Beban Angkut', type: 'Detail', category: 'Beban', level: 2, balance: 186_400_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-3000', name: 'Beban Umum & Administrasi', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
+    { code: '5-3100', name: 'Beban Utilitas', type: 'Detail', category: 'Beban', level: 2, balance: 624_800_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3200', name: 'Beban Penyusutan', type: 'Detail', category: 'Beban', level: 2, balance: 842_400_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3300', name: 'Beban Sewa', type: 'Detail', category: 'Beban', level: 2, balance: 264_000_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3400', name: 'Beban Pemeliharaan', type: 'Detail', category: 'Beban', level: 2, balance: 312_600_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3500', name: 'Beban Asuransi', type: 'Detail', category: 'Beban', level: 2, balance: 148_200_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3600', name: 'Beban Perjalanan Dinas', type: 'Detail', category: 'Beban', level: 2, balance: 96_400_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3700', name: 'Beban Perlengkapan Kantor', type: 'Detail', category: 'Beban', level: 2, balance: 42_600_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-4000', name: 'Beban Lain-lain', type: 'Detail', category: 'Beban', level: 1, balance: 36_800_000, parent: '5-0000', status: 'aktif' },
+  ];
+
+  /* --- Anggaran per Akun (Management Budget) ------------------------------ */
+  const accountBudgets = [
+    { accountCode: '5-1000', accountName: 'Harga Pokok Penjualan', period: '2026', budget: 3_400_000_000, actual: 3_136_200_000, forecast: 3_380_000_000, variance: -20_000_000, notes: 'Efisiensi bahan baku' },
+    { accountCode: '5-2100', accountName: 'Beban Tenaga Kerja Langsung', period: '2026', budget: 1_320_000_000, actual: 1_246_800_000, forecast: 1_340_000_000, variance: 20_000_000, notes: 'Lembur proyek besar' },
+    { accountCode: '5-2200', accountName: 'Beban Gaji & Tunjangan', period: '2026', budget: 2_280_000_000, actual: 2_184_000_000, forecast: 2_260_000_000, variance: -20_000_000, notes: 'Sesuai target' },
+    { accountCode: '5-2300', accountName: 'Beban Pemasaran', period: '2026', budget: 480_000_000, actual: 412_600_000, forecast: 520_000_000, variance: 40_000_000, notes: 'Kampanye Q4 dipercepat' },
+    { accountCode: '5-2400', accountName: 'Beban Angkut', period: '2026', budget: 200_000_000, actual: 186_400_000, forecast: 210_000_000, variance: 10_000_000, notes: 'Kenaikan tarif ekspedisi' },
+    { accountCode: '5-3100', accountName: 'Beban Utilitas', period: '2026', budget: 660_000_000, actual: 624_800_000, forecast: 680_000_000, variance: 20_000_000, notes: 'Tarif PLN naik' },
+    { accountCode: '5-3200', accountName: 'Beban Penyusutan', period: '2026', budget: 860_000_000, actual: 842_400_000, forecast: 855_000_000, variance: -5_000_000, notes: 'Sesuai rencana' },
+    { accountCode: '5-3300', accountName: 'Beban Sewa', period: '2026', budget: 264_000_000, actual: 264_000_000, forecast: 264_000_000, variance: 0, notes: 'Kontrak tetap' },
+    { accountCode: '5-3400', accountName: 'Beban Pemeliharaan', period: '2026', budget: 300_000_000, actual: 312_600_000, forecast: 340_000_000, variance: 40_000_000, notes: 'Perbaikan mesin tak terduga' },
+    { accountCode: '5-3500', accountName: 'Beban Asuransi', period: '2026', budget: 150_000_000, actual: 148_200_000, forecast: 150_000_000, variance: 0, notes: 'Sesuai polis' },
+    { accountCode: '5-3600', accountName: 'Beban Perjalanan Dinas', period: '2026', budget: 120_000_000, actual: 96_400_000, forecast: 115_000_000, variance: -5_000_000, notes: 'Penghematan video call' },
+    { accountCode: '5-3700', accountName: 'Beban Perlengkapan Kantor', period: '2026', budget: 48_000_000, actual: 42_600_000, forecast: 46_000_000, variance: -2_000_000, notes: 'Efisiensi pengadaan' },
+    { accountCode: '5-4000', accountName: 'Beban Lain-lain', period: '2026', budget: 60_000_000, actual: 36_800_000, forecast: 55_000_000, variance: -5_000_000, notes: 'Di bawah anggaran' },
+    { accountCode: '4-1000', accountName: 'Pendapatan Penjualan', period: '2026', budget: 5_100_000_000, actual: 4_823_400_000, forecast: 5_050_000_000, variance: -50_000_000, notes: 'Sedikit di bawah target' },
+    { accountCode: '4-2000', accountName: 'Pendapatan Jasa', period: '2026', budget: 720_000_000, actual: 682_000_000, forecast: 710_000_000, variance: -10_000_000, notes: 'Kontrak baru tertunda' },
+  ];
+
+  /* --- Anggaran per Pusat Biaya (Cost Center Budget) ---------------------- */
   const budgets = [
     { id: 'BDG-001', costCenter: 'CC-PRD', dept: 'Produksi', type: 'OPEX', budget: 2_400_000_000, commitment: 312_000_000, actual: 1_824_000_000, forecast: 2_520_000_000 },
     { id: 'BDG-002', costCenter: 'CC-SCM', dept: 'Pengadaan & Gudang', type: 'OPEX', budget: 860_000_000, commitment: 186_200_000, actual: 512_400_000, forecast: 840_000_000 },
@@ -2657,7 +2763,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     aiBriefing, aiMessages,
     crmStages, leads, quotations, purchaseRequests,
     projects, projectTasks,
-    budgets, payroll, assets, maintenanceOrders,
+    budgets, accountBudgets, chartOfAccounts, payroll, assets, maintenanceOrders,
     documents, posShifts, posTransactions, posKpis,
     auditTrail,
     /* Modul tambahan */
@@ -3257,6 +3363,7 @@ const Charts = (() => {
     workflow: '<circle cx="3.4" cy="4.4" r="1.8"/><circle cx="12.6" cy="4.4" r="1.8"/><circle cx="8" cy="12" r="1.8"/><path d="M5.2 4.4h5.6M4.4 6 8 10.2M11.6 6 8 10.2"/>',
     'bar-chart': '<path d="M2 14h12"/><rect x="3.6" y="6" width="2" height="8" rx=".4"/><rect x="7" y="3" width="2" height="11" rx=".4"/><rect x="10.4" y="8" width="2" height="6" rx=".4"/>',
     'file-check': '<path d="M4 1.6h5.6L13 5v8.4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"/><path d="M9.6 1.6V5H13"/><path d="M6.4 9.4l1.4 1.4 2.8-2.8"/>',
+    'tree': '<path d="M8 2v5M8 7H4.5M8 7h3.5M4.5 7v3M11.5 7v3M4.5 10H2.5v2.5h4V10H4.5zM11.5 10H9.5v2.5h4V10H11.5z"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -4026,7 +4133,8 @@ const Charts = (() => {
       lead: { title: 'Pipeline CRM', sub: 'Peluang penjualan dari prospek hingga closing, beserta nilai dan probabilitasnya.' },
       kasir: { title: 'Kasir (POS)', sub: 'Ikhtisar shift kasir, transaksi hari ini, dan pencapaian target penjualan toko.' },
       proyek: { title: 'Manajemen Proyek', sub: 'Progres proyek, kesehatan anggaran, dan linimasa tugas utama.' },
-      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya.' },
+      anggaran: { title: 'Anggaran & Biaya', sub: 'Realisasi biaya terhadap anggaran per pusat biaya dan per akun manajemen.' },
+      'bagan-akun': { title: 'Bagan Akun (COA)', sub: 'Struktur akun buku besar perusahaan — aset, liabilitas, ekuitas, pendapatan, dan beban.' },
       persetujuan: { title: 'Kotak Persetujuan', sub: 'Dokumen dan transaksi yang menunggu persetujuan Anda.' },
       'kas-bank': { title: 'Kas & Bank', sub: 'Saldo rekening bank, kas kecil, dan status rekonsiliasi.' },
       'rantai-pasok': { title: 'Rantai Pasok', sub: 'Pengiriman aktif, logistik, dan pelacakan barang.' },
@@ -5800,9 +5908,78 @@ const Charts = (() => {
   }
 
   /* ====================================================================== */
+  /* Bagan Akun (Chart of Accounts)                                          */
+  /* ====================================================================== */
+  function renderChartOfAccounts() {
+    const coa = DATA.chartOfAccounts;
+    const categories = ['Aset', 'Liabilitas', 'Ekuitas', 'Pendapatan', 'Beban'];
+    const catTotals = categories.map((cat) => {
+      const items = coa.filter((a) => a.category === cat && a.type === 'Detail');
+      return { cat, total: items.reduce((s, a) => s + a.balance, 0), count: items.length };
+    });
+
+    const summaryCards = `
+      <div class="coa-summary">
+        ${catTotals.map((c) => `
+          <div class="card coa-summary-card">
+            <span class="coa-summary-label">${esc(c.cat)}</span>
+            <span class="coa-summary-num${c.total < 0 ? ' neg' : ''}">${FMT.rpCompact(Math.abs(c.total))}</span>
+            <span class="muted" style="font-size:var(--fs-cap)">${c.count} akun</span>
+          </div>`).join('')}
+      </div>`;
+
+    const rows = coa.map((a) => {
+      const indent = a.level * 24;
+      const isHeader = a.type === 'Header';
+      return `<tr class="${isHeader ? 'coa-header-row' : ''}">
+        <td class="code" style="padding-left:${indent + 12}px">${esc(a.code)}</td>
+        <td class="${isHeader ? 'cell-strong' : ''}" style="padding-left:${indent + 12}px">${esc(a.name)}</td>
+        <td>${isHeader ? '' : esc(a.type)}</td>
+        <td class="r num">${isHeader ? '' : FMT.rpCompact(a.balance)}</td>
+        <td>${pill(a.status)}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="page-head"><div class="page-head-text">
+        <h1 class="page-title">Bagan Akun (Chart of Accounts)</h1>
+        <p class="page-sub">Struktur akun buku besar perusahaan.</p>
+      </div><div class="page-head-actions">
+        <button class="btn" data-action="demo">${icon('plus')} Akun Baru</button>
+        <button class="btn btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
+      </div></div>
+      ${summaryCards}
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">${icon('tree')} Daftar Akun</h3></div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Nama Akun</th><th>Tipe</th>
+            <th class="r">Saldo</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  /* ====================================================================== */
   /* Anggaran & Pengendalian Biaya                                           */
   /* ====================================================================== */
   function renderBudget() {
+    const tab = state.budgetTab || 'cost-center';
+
+    /* ---------- Tab bar ---------- */
+    const tabs = `
+      <div class="tab-bar" style="margin-bottom:var(--sp-4)">
+        <button class="tab-btn${tab === 'cost-center' ? ' active' : ''}" data-budget-tab="cost-center">${icon('piechart')} Per Pusat Biaya</button>
+        <button class="tab-btn${tab === 'account' ? ' active' : ''}" data-budget-tab="account">${icon('ledger')} Per Akun (Manajemen)</button>
+      </div>`;
+
+    if (tab === 'account') return tabs + renderAccountBudget();
+    return tabs + renderCostCenterBudget();
+  }
+
+  /* --- Budget per Pusat Biaya ------------------------------------------- */
+  function renderCostCenterBudget() {
     const totalBudget = DATA.budgets.reduce((s, b) => s + b.budget, 0);
     const totalActual = DATA.budgets.reduce((s, b) => s + b.actual, 0);
     const totalForecast = DATA.budgets.reduce((s, b) => s + b.forecast, 0);
@@ -5838,7 +6015,7 @@ const Charts = (() => {
       return `<tr>
         <td class="code">${esc(b.costCenter)}</td>
         <td class="cell-strong">${esc(b.dept)}</td>
-        <td>${esc(b.type)}</td>
+        <td>${pill(b.type)}</td>
         <td class="r num">${FMT.rpCompact(b.budget)}</td>
         <td class="r num">${FMT.rpCompact(b.actual)}</td>
         <td>
@@ -5855,7 +6032,7 @@ const Charts = (() => {
       </tr>`;
     }).join('');
 
-    const table = `
+    return kpis + `
       <section class="card">
         <div class="card-head"><h3 class="card-title">${icon('piechart')} Realisasi per Pusat Biaya</h3></div>
         <div class="tbl-wrap"><table class="tbl">
@@ -5865,6 +6042,100 @@ const Charts = (() => {
             <th>Penyerapan</th><th class="r">Komitmen</th><th class="r">Prakiraan</th>
           </tr></thead>
           <tbody>${rows}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  /* --- Budget per Akun (Management Budget) ------------------------------ */
+  function renderAccountBudget() {
+    const acctBudgets = DATA.accountBudgets;
+    const expenseItems = acctBudgets.filter((a) => a.accountCode.startsWith('5'));
+    const revenueItems = acctBudgets.filter((a) => a.accountCode.startsWith('4'));
+
+    const totalExpBudget = expenseItems.reduce((s, a) => s + a.budget, 0);
+    const totalExpActual = expenseItems.reduce((s, a) => s + a.actual, 0);
+    const totalRevBudget = revenueItems.reduce((s, a) => s + a.budget, 0);
+    const totalRevActual = revenueItems.reduce((s, a) => s + a.actual, 0);
+    const expPct = totalExpActual / totalExpBudget * 100;
+    const revPct = totalRevActual / totalRevBudget * 100;
+    const totalVariance = acctBudgets.reduce((s, a) => s + a.variance, 0);
+
+    const kpis = `
+      <div class="kpi-row" style="margin-bottom:var(--sp-5)">
+        <div class="kpi-tile">
+          <span class="kpi-label">Anggaran Pendapatan</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalRevBudget)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" style="width:${Math.min(100, revPct)}%"></span></span><span class="meter-val">${FMT.pct(revPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Anggaran Beban</span>
+          <span class="kpi-metric">${FMT.rpCompact(totalExpBudget)}</span>
+          <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${expPct > 90 ? ' data-tone="danger"' : expPct > 75 ? ' data-tone="warn"' : ''} style="width:${Math.min(100, expPct)}%"></span></span><span class="meter-val">${FMT.pct(expPct, 1)}</span></span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">Total Varians</span>
+          <span class="kpi-metric${totalVariance > 0 ? ' neg' : ' pos'}">${totalVariance > 0 ? '+' : ''}${FMT.rpCompact(totalVariance)}</span>
+          <span class="muted" style="font-size:var(--fs-cap)">${totalVariance > 0 ? 'Over budget' : 'Di bawah anggaran'}</span>
+        </div>
+      </div>`;
+
+    const buildRows = (items, label) => {
+      if (!items.length) return '';
+      const groupTotal = items.reduce((s, a) => s + a.budget, 0);
+      const groupActual = items.reduce((s, a) => s + a.actual, 0);
+      const groupPct = groupActual / groupTotal * 100;
+      const groupVariance = items.reduce((s, a) => s + a.variance, 0);
+      const headerRow = `<tr class="coa-header-row">
+        <td colspan="2" class="cell-strong">${esc(label)}</td>
+        <td class="r num"><b>${FMT.rpCompact(groupTotal)}</b></td>
+        <td class="r num"><b>${FMT.rpCompact(groupActual)}</b></td>
+        <td><span class="meter"><span class="meter-track"><span class="meter-fill" style="width:${Math.min(100, groupPct)}%"></span></span><span class="meter-val">${FMT.pct(groupPct, 0)}</span></span></td>
+        <td class="r num"><b>${FMT.rpCompact(items.reduce((s, a) => s + a.forecast, 0))}</b></td>
+        <td class="r num${groupVariance > 0 ? ' neg' : ' pos'}"><b>${groupVariance > 0 ? '+' : ''}${FMT.rpCompact(groupVariance)}</b></td>
+        <td></td>
+      </tr>`;
+      const dataRows = items.map((a) => {
+        const pct = Math.min(100, a.actual / a.budget * 100);
+        const tone = pct > 90 ? 'danger' : pct > 75 ? 'warn' : '';
+        return `<tr>
+          <td class="code">${esc(a.accountCode)}</td>
+          <td class="cell-strong">${esc(a.accountName)}</td>
+          <td class="r num">${FMT.rpCompact(a.budget)}</td>
+          <td class="r num">${FMT.rpCompact(a.actual)}</td>
+          <td>
+            <span class="budget-bar">
+              <span class="budget-bar-track">
+                <span class="budget-bar-actual"${tone ? ` data-tone="${tone}"` : ''} style="width:${pct}%"></span>
+              </span>
+              <span class="meter-val">${FMT.pct(pct, 0)}</span>
+            </span>
+          </td>
+          <td class="r num">${FMT.rpCompact(a.forecast)}</td>
+          <td class="r num${a.variance > 0 ? ' neg' : a.variance < 0 ? ' pos' : ''}">${a.variance > 0 ? '+' : ''}${FMT.rpCompact(a.variance)}</td>
+          <td class="muted" style="font-size:var(--fs-cap);max-width:140px">${esc(a.notes)}</td>
+        </tr>`;
+      }).join('');
+      return headerRow + dataRows;
+    };
+
+    const table = `
+      <section class="card">
+        <div class="card-head">
+          <h3 class="card-title">${icon('ledger')} Anggaran per Akun — Periode 2026</h3>
+          <div class="card-tools">
+            <button class="btn btn-sm btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
+          </div>
+        </div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr>
+            <th>Kode</th><th>Nama Akun</th>
+            <th class="r">Anggaran</th><th class="r">Realisasi</th>
+            <th>Penyerapan</th><th class="r">Prakiraan</th><th class="r">Varians</th><th>Catatan</th>
+          </tr></thead>
+          <tbody>
+            ${buildRows(revenueItems, 'Pendapatan')}
+            ${buildRows(expenseItems, 'Beban')}
+          </tbody>
         </table></div>
       </section>`;
 
@@ -6167,7 +6438,7 @@ const Charts = (() => {
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
     ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
      'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok',
-     'analitik', 'bsc'].includes(id);
+     'analitik', 'bsc', 'bagan-akun'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -6185,11 +6456,10 @@ const Charts = (() => {
       case 'kasir': return renderPOS();
       case 'proyek': return renderProjects();
       case 'anggaran': return renderBudget();
+      case 'bagan-akun': return renderChartOfAccounts();
       case 'persetujuan': return renderApprovalInbox();
       case 'kas-bank': return renderCashBank();
       case 'rantai-pasok': return renderSupplyChain();
-      case 'analitik': return renderAnalytics();
-      case 'bsc': return renderBSC();
       default: return renderDashboard();
     }
   }
@@ -6369,6 +6639,9 @@ const Charts = (() => {
 
     const bf = t.closest('[data-board-filter]');
     if (bf) { state.boardFilter = bf.dataset.boardFilter; render(); return; }
+
+    const btab = t.closest('[data-budget-tab]');
+    if (btab) { state.budgetTab = btab.dataset.budgetTab; render(); return; }
 
     const pi = t.closest('[data-pi]');
     if (pi) { runPalette(Number(pi.dataset.pi)); return; }

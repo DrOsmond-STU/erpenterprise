@@ -83,6 +83,7 @@ const DATA = (() => {
     {
       label: 'Keuangan',
       items: [
+        { id: 'bagan-akun', label: 'Bagan Akun', icon: 'tree' },
         { id: 'piutang', label: 'Piutang Usaha', icon: 'wallet' },
         { id: 'hutang', label: 'Hutang Usaha', icon: 'credit-card' },
         { id: 'kas-bank', label: 'Kas & Bank', icon: 'vault' },
@@ -547,7 +548,87 @@ Ingin saya buatkan draft permintaan pembelian?` },
     ],
   };
 
-  /* --- Anggaran (Budget & Cost Control) --------------------------------- */
+  /* --- Bagan Akun (Chart of Accounts) ----------------------------------- */
+  const chartOfAccounts = [
+    /* Aset */
+    { code: '1-0000', name: 'Aset', type: 'Header', category: 'Aset', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '1-1000', name: 'Aset Lancar', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
+    { code: '1-1100', name: 'Kas & Setara Kas', type: 'Detail', category: 'Aset', level: 2, balance: 4_841_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1200', name: 'Piutang Usaha', type: 'Detail', category: 'Aset', level: 2, balance: 1_627_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1300', name: 'Piutang Lain-lain', type: 'Detail', category: 'Aset', level: 2, balance: 84_600_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1400', name: 'Persediaan Bahan Baku', type: 'Detail', category: 'Aset', level: 2, balance: 2_184_200_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1500', name: 'Persediaan Barang Jadi', type: 'Detail', category: 'Aset', level: 2, balance: 1_342_000_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1600', name: 'Biaya Dibayar di Muka', type: 'Detail', category: 'Aset', level: 2, balance: 196_800_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-1700', name: 'PPN Masukan', type: 'Detail', category: 'Aset', level: 2, balance: 312_400_000, parent: '1-1000', status: 'aktif' },
+    { code: '1-2000', name: 'Aset Tetap', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
+    { code: '1-2100', name: 'Tanah', type: 'Detail', category: 'Aset', level: 2, balance: 3_200_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2200', name: 'Bangunan', type: 'Detail', category: 'Aset', level: 2, balance: 4_800_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2300', name: 'Mesin & Peralatan', type: 'Detail', category: 'Aset', level: 2, balance: 6_420_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2400', name: 'Kendaraan', type: 'Detail', category: 'Aset', level: 2, balance: 1_640_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2500', name: 'Peralatan Kantor', type: 'Detail', category: 'Aset', level: 2, balance: 486_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-2900', name: 'Akumulasi Penyusutan', type: 'Detail', category: 'Aset', level: 2, balance: -4_218_000_000, parent: '1-2000', status: 'aktif' },
+    /* Liabilitas */
+    { code: '2-0000', name: 'Liabilitas', type: 'Header', category: 'Liabilitas', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '2-1000', name: 'Liabilitas Jangka Pendek', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
+    { code: '2-1100', name: 'Utang Usaha', type: 'Detail', category: 'Liabilitas', level: 2, balance: 1_842_600_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1200', name: 'Utang Gaji', type: 'Detail', category: 'Liabilitas', level: 2, balance: 486_200_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1300', name: 'Utang Pajak', type: 'Detail', category: 'Liabilitas', level: 2, balance: 324_800_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1400', name: 'PPN Keluaran', type: 'Detail', category: 'Liabilitas', level: 2, balance: 418_600_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-1500', name: 'Pendapatan Diterima di Muka', type: 'Detail', category: 'Liabilitas', level: 2, balance: 264_000_000, parent: '2-1000', status: 'aktif' },
+    { code: '2-2000', name: 'Liabilitas Jangka Panjang', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
+    { code: '2-2100', name: 'Utang Bank', type: 'Detail', category: 'Liabilitas', level: 2, balance: 4_600_000_000, parent: '2-2000', status: 'aktif' },
+    { code: '2-2200', name: 'Utang Sewa Guna', type: 'Detail', category: 'Liabilitas', level: 2, balance: 840_000_000, parent: '2-2000', status: 'aktif' },
+    /* Ekuitas */
+    { code: '3-0000', name: 'Ekuitas', type: 'Header', category: 'Ekuitas', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '3-1000', name: 'Modal Disetor', type: 'Detail', category: 'Ekuitas', level: 1, balance: 10_000_000_000, parent: '3-0000', status: 'aktif' },
+    { code: '3-2000', name: 'Laba Ditahan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 3_842_600_000, parent: '3-0000', status: 'aktif' },
+    { code: '3-3000', name: 'Laba Periode Berjalan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 1_687_200_000, parent: '3-0000', status: 'aktif' },
+    /* Pendapatan */
+    { code: '4-0000', name: 'Pendapatan', type: 'Header', category: 'Pendapatan', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '4-1000', name: 'Pendapatan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: 4_823_400_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-2000', name: 'Pendapatan Jasa', type: 'Detail', category: 'Pendapatan', level: 1, balance: 682_000_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-3000', name: 'Pendapatan Lain-lain', type: 'Detail', category: 'Pendapatan', level: 1, balance: 124_600_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-9000', name: 'Retur & Potongan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: -186_400_000, parent: '4-0000', status: 'aktif' },
+    /* Beban */
+    { code: '5-0000', name: 'Beban', type: 'Header', category: 'Beban', level: 0, balance: 0, parent: null, status: 'aktif' },
+    { code: '5-1000', name: 'Harga Pokok Penjualan', type: 'Detail', category: 'Beban', level: 1, balance: 3_136_200_000, parent: '5-0000', status: 'aktif' },
+    { code: '5-1900', name: 'Selisih Persediaan', type: 'Detail', category: 'Beban', level: 1, balance: 14_200_000, parent: '5-0000', status: 'aktif' },
+    { code: '5-2000', name: 'Beban Operasional', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
+    { code: '5-2100', name: 'Beban Tenaga Kerja Langsung', type: 'Detail', category: 'Beban', level: 2, balance: 1_246_800_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2200', name: 'Beban Gaji & Tunjangan', type: 'Detail', category: 'Beban', level: 2, balance: 2_184_000_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2300', name: 'Beban Pemasaran', type: 'Detail', category: 'Beban', level: 2, balance: 412_600_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-2400', name: 'Beban Angkut', type: 'Detail', category: 'Beban', level: 2, balance: 186_400_000, parent: '5-2000', status: 'aktif' },
+    { code: '5-3000', name: 'Beban Umum & Administrasi', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
+    { code: '5-3100', name: 'Beban Utilitas', type: 'Detail', category: 'Beban', level: 2, balance: 624_800_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3200', name: 'Beban Penyusutan', type: 'Detail', category: 'Beban', level: 2, balance: 842_400_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3300', name: 'Beban Sewa', type: 'Detail', category: 'Beban', level: 2, balance: 264_000_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3400', name: 'Beban Pemeliharaan', type: 'Detail', category: 'Beban', level: 2, balance: 312_600_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3500', name: 'Beban Asuransi', type: 'Detail', category: 'Beban', level: 2, balance: 148_200_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3600', name: 'Beban Perjalanan Dinas', type: 'Detail', category: 'Beban', level: 2, balance: 96_400_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-3700', name: 'Beban Perlengkapan Kantor', type: 'Detail', category: 'Beban', level: 2, balance: 42_600_000, parent: '5-3000', status: 'aktif' },
+    { code: '5-4000', name: 'Beban Lain-lain', type: 'Detail', category: 'Beban', level: 1, balance: 36_800_000, parent: '5-0000', status: 'aktif' },
+  ];
+
+  /* --- Anggaran per Akun (Management Budget) ------------------------------ */
+  const accountBudgets = [
+    { accountCode: '5-1000', accountName: 'Harga Pokok Penjualan', period: '2026', budget: 3_400_000_000, actual: 3_136_200_000, forecast: 3_380_000_000, variance: -20_000_000, notes: 'Efisiensi bahan baku' },
+    { accountCode: '5-2100', accountName: 'Beban Tenaga Kerja Langsung', period: '2026', budget: 1_320_000_000, actual: 1_246_800_000, forecast: 1_340_000_000, variance: 20_000_000, notes: 'Lembur proyek besar' },
+    { accountCode: '5-2200', accountName: 'Beban Gaji & Tunjangan', period: '2026', budget: 2_280_000_000, actual: 2_184_000_000, forecast: 2_260_000_000, variance: -20_000_000, notes: 'Sesuai target' },
+    { accountCode: '5-2300', accountName: 'Beban Pemasaran', period: '2026', budget: 480_000_000, actual: 412_600_000, forecast: 520_000_000, variance: 40_000_000, notes: 'Kampanye Q4 dipercepat' },
+    { accountCode: '5-2400', accountName: 'Beban Angkut', period: '2026', budget: 200_000_000, actual: 186_400_000, forecast: 210_000_000, variance: 10_000_000, notes: 'Kenaikan tarif ekspedisi' },
+    { accountCode: '5-3100', accountName: 'Beban Utilitas', period: '2026', budget: 660_000_000, actual: 624_800_000, forecast: 680_000_000, variance: 20_000_000, notes: 'Tarif PLN naik' },
+    { accountCode: '5-3200', accountName: 'Beban Penyusutan', period: '2026', budget: 860_000_000, actual: 842_400_000, forecast: 855_000_000, variance: -5_000_000, notes: 'Sesuai rencana' },
+    { accountCode: '5-3300', accountName: 'Beban Sewa', period: '2026', budget: 264_000_000, actual: 264_000_000, forecast: 264_000_000, variance: 0, notes: 'Kontrak tetap' },
+    { accountCode: '5-3400', accountName: 'Beban Pemeliharaan', period: '2026', budget: 300_000_000, actual: 312_600_000, forecast: 340_000_000, variance: 40_000_000, notes: 'Perbaikan mesin tak terduga' },
+    { accountCode: '5-3500', accountName: 'Beban Asuransi', period: '2026', budget: 150_000_000, actual: 148_200_000, forecast: 150_000_000, variance: 0, notes: 'Sesuai polis' },
+    { accountCode: '5-3600', accountName: 'Beban Perjalanan Dinas', period: '2026', budget: 120_000_000, actual: 96_400_000, forecast: 115_000_000, variance: -5_000_000, notes: 'Penghematan video call' },
+    { accountCode: '5-3700', accountName: 'Beban Perlengkapan Kantor', period: '2026', budget: 48_000_000, actual: 42_600_000, forecast: 46_000_000, variance: -2_000_000, notes: 'Efisiensi pengadaan' },
+    { accountCode: '5-4000', accountName: 'Beban Lain-lain', period: '2026', budget: 60_000_000, actual: 36_800_000, forecast: 55_000_000, variance: -5_000_000, notes: 'Di bawah anggaran' },
+    { accountCode: '4-1000', accountName: 'Pendapatan Penjualan', period: '2026', budget: 5_100_000_000, actual: 4_823_400_000, forecast: 5_050_000_000, variance: -50_000_000, notes: 'Sedikit di bawah target' },
+    { accountCode: '4-2000', accountName: 'Pendapatan Jasa', period: '2026', budget: 720_000_000, actual: 682_000_000, forecast: 710_000_000, variance: -10_000_000, notes: 'Kontrak baru tertunda' },
+  ];
+
+  /* --- Anggaran per Pusat Biaya (Cost Center Budget) ---------------------- */
   const budgets = [
     { id: 'BDG-001', costCenter: 'CC-PRD', dept: 'Produksi', type: 'OPEX', budget: 2_400_000_000, commitment: 312_000_000, actual: 1_824_000_000, forecast: 2_520_000_000 },
     { id: 'BDG-002', costCenter: 'CC-SCM', dept: 'Pengadaan & Gudang', type: 'OPEX', budget: 860_000_000, commitment: 186_200_000, actual: 512_400_000, forecast: 840_000_000 },
@@ -806,7 +887,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     aiBriefing, aiMessages,
     crmStages, leads, quotations, purchaseRequests,
     projects, projectTasks,
-    budgets, payroll, assets, maintenanceOrders,
+    budgets, accountBudgets, chartOfAccounts, payroll, assets, maintenanceOrders,
     documents, posShifts, posTransactions, posKpis,
     auditTrail,
     /* Modul tambahan */

@@ -1135,6 +1135,31 @@ svg { display: block; }
 }
 
 /* ====================================================================== */
+/* Tab bar (budget / generic)                                              */
+/* ====================================================================== */
+.tab-bar { display: flex; gap: var(--sp-1); border-bottom: 2px solid var(--border-1); }
+.tab-btn {
+  padding: var(--sp-2) var(--sp-3); font-size: var(--fs-body); font-weight: 600;
+  color: var(--text-2); background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  display: inline-flex; align-items: center; gap: var(--sp-1); transition: all .15s;
+}
+.tab-btn:hover { color: var(--text-1); background: var(--bg-card-alt); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ====================================================================== */
+/* Chart of Accounts                                                       */
+/* ====================================================================== */
+.coa-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.coa-summary-card { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) !important; }
+.coa-summary-label { font-size: var(--fs-cap); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.coa-summary-num { font-size: var(--fs-lead); font-weight: 700; }
+.coa-header-row { background: var(--bg-card-alt); }
+.coa-header-row td { font-weight: 600; }
+@media (max-width: 900px) { .coa-summary { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .coa-summary { grid-template-columns: 1fr 1fr; } }
+
+/* ====================================================================== */
 /* POS table compact helper                                                */
 /* ====================================================================== */
 .tbl-sm th, .tbl-sm td { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-cap); }
