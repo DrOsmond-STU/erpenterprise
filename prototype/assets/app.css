@@ -380,7 +380,27 @@ svg { display: block; }
   font-size: var(--fs-cap); font-weight: 500;
   color: var(--ink-3); letter-spacing: 0;
 }
-.kpi-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.kpi-row { display: flex; align-items: stretch; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.kpi-tile {
+  flex: 1 1 0;
+  min-width: 140px;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-card);
+}
+.kpi-label { font-size: var(--fs-cap); font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; }
+.kpi-value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-metric);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--ink);
+  white-space: nowrap;
+}
 .kpi-spark { flex: 0 0 auto; width: 72px; height: 24px; }
 .kpi-delta {
   display: inline-flex; align-items: center; gap: 4px;

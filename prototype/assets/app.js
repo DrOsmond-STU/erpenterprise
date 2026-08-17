@@ -2444,19 +2444,23 @@
       <div class="kpi-row" style="margin-bottom:var(--sp-5)">
         <div class="kpi-tile">
           <span class="kpi-label">Nilai Pipeline</span>
-          <span class="kpi-metric">${FMT.rpCompact(pipelineValue)}</span>
+          <span class="kpi-value">${FMT.rpCompact(pipelineValue)}</span>
+          <span class="kpi-foot">${DATA.leads.filter((l) => l.stage !== 'menang' && l.stage !== 'kalah').length} peluang aktif</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Tertimbang</span>
-          <span class="kpi-metric">${FMT.rpCompact(weightedValue)}</span>
+          <span class="kpi-value">${FMT.rpCompact(weightedValue)}</span>
+          <span class="kpi-foot">berdasarkan probabilitas</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Menang</span>
-          <span class="kpi-metric pos">${wonLeads.length} <small>peluang</small></span>
+          <span class="kpi-value pos">${wonLeads.length}</span>
+          <span class="kpi-foot">peluang dimenangkan</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Kalah</span>
-          <span class="kpi-metric neg">${lostLeads.length} <small>peluang</small></span>
+          <span class="kpi-value neg">${lostLeads.length}</span>
+          <span class="kpi-foot">peluang gagal</span>
         </div>
       </div>`;
 
@@ -2507,20 +2511,23 @@
       <div class="kpi-row" style="margin-bottom:var(--sp-5)">
         <div class="kpi-tile">
           <span class="kpi-label">Penjualan Hari Ini</span>
-          <span class="kpi-metric">${FMT.rpCompact(k.todaySales)}</span>
+          <span class="kpi-value">${FMT.rpCompact(k.todaySales)}</span>
           <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" data-tone="${tone}" style="width:${pct}%"></span></span><span class="meter-val">${FMT.pct(pct, 0)} target</span></span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Transaksi</span>
-          <span class="kpi-metric">${FMT.int(k.transactions)}</span>
+          <span class="kpi-value">${FMT.int(k.transactions)}</span>
+          <span class="kpi-foot">hari ini</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Rata-rata Keranjang</span>
-          <span class="kpi-metric">${FMT.rpCompact(k.avgBasket)}</span>
+          <span class="kpi-value">${FMT.rpCompact(k.avgBasket)}</span>
+          <span class="kpi-foot">per transaksi</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Tingkat Refund</span>
-          <span class="kpi-metric${k.refundRate > 3 ? ' neg' : ''}">${FMT.pct(k.refundRate)}%</span>
+          <span class="kpi-value${k.refundRate > 3 ? ' neg' : ''}">${FMT.pct(k.refundRate)}%</span>
+          <span class="kpi-foot">dari total transaksi</span>
         </div>
       </div>`;
 
@@ -2735,20 +2742,23 @@
       <div class="kpi-row" style="margin-bottom:var(--sp-5)">
         <div class="kpi-tile">
           <span class="kpi-label">Total Anggaran</span>
-          <span class="kpi-metric">${FMT.rpCompact(totalBudget)}</span>
+          <span class="kpi-value">${FMT.rpCompact(totalBudget)}</span>
+          <span class="kpi-foot">${DATA.budgets.length} pusat biaya</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Realisasi</span>
-          <span class="kpi-metric">${FMT.rpCompact(totalActual)}</span>
+          <span class="kpi-value">${FMT.rpCompact(totalActual)}</span>
           <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${overallTone ? ` data-tone="${overallTone}"` : ''} style="width:${Math.min(100, overallPct)}%"></span></span><span class="meter-val">${FMT.pct(overallPct, 1)}</span></span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Prakiraan</span>
-          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ''}">${FMT.rpCompact(totalForecast)}</span>
+          <span class="kpi-value${totalForecast > totalBudget ? ' neg' : ''}">${FMT.rpCompact(totalForecast)}</span>
+          <span class="kpi-foot">estimasi akhir periode</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Varians</span>
-          <span class="kpi-metric${totalForecast > totalBudget ? ' neg' : ' pos'}">${totalForecast > totalBudget ? '+' : ''}${FMT.rpCompact(totalForecast - totalBudget)}</span>
+          <span class="kpi-value${totalForecast > totalBudget ? ' neg' : ' pos'}">${totalForecast > totalBudget ? '+' : ''}${FMT.rpCompact(totalForecast - totalBudget)}</span>
+          <span class="kpi-foot">${totalForecast > totalBudget ? 'over budget' : 'di bawah anggaran'}</span>
         </div>
       </div>`;
 
@@ -2809,18 +2819,18 @@
       <div class="kpi-row" style="margin-bottom:var(--sp-5)">
         <div class="kpi-tile">
           <span class="kpi-label">Anggaran Pendapatan</span>
-          <span class="kpi-metric">${FMT.rpCompact(totalRevBudget)}</span>
+          <span class="kpi-value">${FMT.rpCompact(totalRevBudget)}</span>
           <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill" style="width:${Math.min(100, revPct)}%"></span></span><span class="meter-val">${FMT.pct(revPct, 1)}</span></span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Anggaran Beban</span>
-          <span class="kpi-metric">${FMT.rpCompact(totalExpBudget)}</span>
+          <span class="kpi-value">${FMT.rpCompact(totalExpBudget)}</span>
           <span class="meter" style="margin-top:var(--sp-1)"><span class="meter-track"><span class="meter-fill"${expPct > 90 ? ' data-tone="danger"' : expPct > 75 ? ' data-tone="warn"' : ''} style="width:${Math.min(100, expPct)}%"></span></span><span class="meter-val">${FMT.pct(expPct, 1)}</span></span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Total Varians</span>
-          <span class="kpi-metric${totalVariance > 0 ? ' neg' : ' pos'}">${totalVariance > 0 ? '+' : ''}${FMT.rpCompact(totalVariance)}</span>
-          <span class="muted" style="font-size:var(--fs-cap)">${totalVariance > 0 ? 'Over budget' : 'Di bawah anggaran'}</span>
+          <span class="kpi-value${totalVariance > 0 ? ' neg' : ' pos'}">${totalVariance > 0 ? '+' : ''}${FMT.rpCompact(totalVariance)}</span>
+          <span class="kpi-foot">${totalVariance > 0 ? 'Over budget' : 'Di bawah anggaran'}</span>
         </div>
       </div>`;
 
