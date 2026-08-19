@@ -77,12 +77,36 @@ tutup buku. Toleransinya terhadap kesalahan angka nol.
 
 | Modul | Status di purwarupa |
 | --- | --- |
-| Dasbor | Lengkap |
-| Penjualan — pesanan, faktur, pelanggan | Lengkap, termasuk laci rekaman & persetujuan |
-| Pembelian — pesanan, pemasok | Register lengkap |
-| Inventaris — stok, mutasi | Register lengkap |
-| Produksi — perintah kerja | Papan lengkap |
-| Keuangan — piutang, jurnal | Lengkap |
-| SDM — karyawan | Register |
-| Sistem — peran & izin, pengaturan | Lengkap |
-| Laporan keuangan, BOM, penggajian | Dirancang di IA, belum dibuat layarnya |
+| Dasbor (termasuk AI Copilot) | Lengkap — 8 widget dapat dikustomisasi, sparkline, grafik SVG |
+| Kotak Persetujuan | Lengkap — antrean lintas modul, setujui/tolak mengubah data |
+| Data Master — produk & layanan | Register lengkap |
+| CRM — lead & peluang | Papan Kanban 6 tahap, KPI pipeline |
+| Penjualan — penawaran, pesanan, faktur, pelanggan | Lengkap, termasuk laci rekaman, persetujuan plafon kredit, modal pesanan baru |
+| POS / Kasir | Lengkap — shift kasir, transaksi, KPI harian |
+| Pembelian — permintaan, RFQ, pesanan, pemasok | Register lengkap, alur PR → RFQ → PO |
+| Inventaris — stok, mutasi | Register lengkap, pengurutan menurut masalah |
+| Rantai Pasok — pengiriman | Register lengkap |
+| Produksi — perintah kerja | Papan lengkap, saringan lini, penanda masalah |
+| Proyek — daftar & Gantt | Register + kartu proyek + Gantt chart |
+| Keuangan — bagan akun (COA) | Pohon hierarkis 47 akun, 5 kategori |
+| Keuangan — piutang usaha | KPI + ember umur + register faktur terbuka |
+| Keuangan — hutang usaha | Register + ember umur + kecocokan PO |
+| Keuangan — kas & bank | Register rekening, multi-mata uang |
+| Keuangan — jurnal umum | Register lengkap, posting otomatis & manual |
+| Keuangan — anggaran | 2 tab: per pusat biaya (8 CC) + per akun manajemen (15 akun) |
+| SDM — karyawan, kehadiran, penggajian | Register lengkap per sub-modul |
+| Aset — daftar aset, pemeliharaan | Register lengkap, relasi aset-perintah pemeliharaan |
+| Dokumen — repositori | Register dengan folder, versi, kedaluwarsa |
+| Alur Kerja — desainer | Register 7 template alur kerja |
+| Analitik — BI & laporan | Dasbor widget 7 widget, 10 laporan tersedia |
+| Analitik — Balanced Scorecard | Dasbor 4 perspektif Kaplan & Norton, 16 metrik |
+| Sistem — kepatuhan & GRC | Register 8 item kepatuhan |
+| Sistem — peran & izin | Matriks interaktif, 5 peran × 11 fitur |
+| Sistem — jejak audit | Register 10 entri |
+| Sistem — pengaturan | Halaman pengaturan perusahaan & tampilan |
+| Sistem — sistem desain | Referensi token & komponen |
+| Laporan keuangan (neraca, laba rugi) | Dirancang di IA, belum dibuat layarnya |
+| BOM & perencanaan kebutuhan bahan | Dirancang di IA, belum dibuat layarnya |
+| Gudang tingkat rak | Dirancang di IA, belum dibuat layarnya |
+| Multi-mata uang & kurs | Dirancang di IA, belum dibuat layarnya |
+| Portal pelanggan & pemasok | Dirancang di IA, belum dibuat layarnya |
