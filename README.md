@@ -18,7 +18,7 @@ dengan eliminasi rekening koran antar kantor.
 | `packages/ui` | `@erp/ui` — token desain dan CSS bersama (disinkronkan dari purwarupa lewat `tools/sync-ui.mjs`). |
 | `apps/api` | `@erp/api` — NestJS 11 + PostgreSQL 16: autentikasi (Argon2id, JWT + refresh cookie berotasi), izin granular, konteks cabang/periode, jurnal, buku besar, laporan, konsolidasi, rekonsiliasi, log audit berantai hash, migrasi SQL, seed, uji e2e. |
 | `apps/web` | `@erp/web` — Vue 3 + Vite + Pinia + Vue Router: masuk, dasbor, jurnal, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, integrasi & rekonsiliasi, cabang, bagan akun, rekening bank, log audit. |
-| `infra/` | Skrip penyiapan basis data, Dockerfile API & web, konfigurasi nginx. |
+| `infra/` | Skrip penyiapan basis data, Dockerfile API & web, konfigurasi nginx, `hosting/` (cPanel: .htaccess, runner cron, templat env). |
 | `docker-compose.yml` | Lingkungan lokal/staging: db + api + web pada satu origin (`http://localhost:8080`). |
 | `prototype/` | Purwarupa UI/UX (lihat bagian bawah). |
 | `docs/` | Dokumen desain (01–07) dan pra-pengembangan (08–13). |
@@ -82,6 +82,36 @@ pemakaian ulang), pembatasan konteks cabang, pemisahan tugas pembuat ≠
 pemosting, invarian basis data (jurnal seimbang, akun detail, periode
 terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
 konsolidasi yang seimbang, serta rekonsiliasi sub-buku dan rantai audit.
+
+## Pemasangan di shared hosting cPanel (erp.semestateknologiutama.com)
+
+Hosting tanpa Passenger: API berjalan sebagai proses Node pada `127.0.0.1:3620`
+yang dijaga cron, Apache memproksi `/api` ke sana dan menyajikan SPA statis.
+Tidak ada langkah build di server — artefak dikirim jadi lewat branch
+`deploy/hosting`.
+
+```bash
+npm run build:all
+node tools/build-hosting.mjs /tmp/hosting     # SPA + server/ (dist, node_modules produksi)
+# commit pohon /tmp/hosting sebagai branch deploy/hosting, push, lalu
+# cPanel → Git Deploy (branch deploy/hosting → document root subdomain)
+```
+
+Di server (sekali saja):
+
+1. cPanel → PostgreSQL Databases: basis data `semestat_erp`, pengguna
+   `semestat_erpowner` (pemilik skema) dan `semestat_erpapp` (aplikasi), keduanya
+   diberi hak pada basis data.
+2. Salin `~/erp-config/env.example` (dibuat otomatis oleh runner) menjadi
+   `~/erp-config/.env` dan isi kata sandi basis data serta `JWT_SECRET`.
+3. Cron `*/4 * * * * /bin/bash ~/erp.semestateknologiutama.com/server/erp-runner.sh`.
+   Runner menjalankan migrasi saat revisi berubah, lalu menyalakan API.
+4. Data contoh: buat `~/erp-config/seed.request` berisi satu baris kata sandi awal
+   (≥ 12 karakter) untuk pengguna seed; berkas dihapus setelah diproses.
+
+Berkas penanda lain: `~/erp-restart.request` (nyalakan ulang),
+`~/erp-migrate.request` (ulangi migrasi). Log: `~/erp-app.log`,
+`~/erp-install.log`, status ringkas di `~/erp-status.txt`.
 
 ## Catatan implementasi vs dokumen pra-pengembangan
 
