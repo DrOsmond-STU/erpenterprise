@@ -83,6 +83,12 @@
     'bar-chart': '<path d="M2 14h12"/><rect x="3.6" y="6" width="2" height="8" rx=".4"/><rect x="7" y="3" width="2" height="11" rx=".4"/><rect x="10.4" y="8" width="2" height="6" rx=".4"/>',
     'file-check': '<path d="M4 1.6h5.6L13 5v8.4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"/><path d="M9.6 1.6V5H13"/><path d="M6.4 9.4l1.4 1.4 2.8-2.8"/>',
     'tree': '<path d="M8 2v5M8 7H4.5M8 7h3.5M4.5 7v3M11.5 7v3M4.5 10H2.5v2.5h4V10H4.5zM11.5 10H9.5v2.5h4V10H11.5z"/>',
+    /* Ikon laporan keuangan & cabang */
+    book: '<path d="M2.6 2.6h4.2a1.6 1.6 0 0 1 1.2.6 1.6 1.6 0 0 1 1.2-.6h4.2v9.8H9.2a1.2 1.2 0 0 0-1.2.9 1.2 1.2 0 0 0-1.2-.9H2.6z"/><path d="M8 3.2v10"/>',
+    trending: '<path d="M1.8 11.6 6 7.4l2.8 2.8 5.4-5.4"/><path d="M10.4 4.8h3.8v3.8"/>',
+    columns: '<rect x="1.6" y="2.4" width="12.8" height="11.2" rx="1.4"/><path d="M8 2.4v11.2M1.6 6h12.8"/>',
+    layers: '<path d="m8 1.8 6.2 3.2L8 8.2 1.8 5z"/><path d="m1.8 8 6.2 3.2L14.2 8"/><path d="m1.8 11 6.2 3.2 6.2-3.2"/>',
+    'map-pin': '<path d="M8 14.4s-4.6-4.4-4.6-8a4.6 4.6 0 0 1 9.2 0c0 3.6-4.6 8-4.6 8z"/><circle cx="8" cy="6.4" r="1.7"/>',
   };
 
   const icon = (name, cls = '') =>
@@ -185,6 +191,10 @@
     analyticsWidgets: null,
     bscEditMode: false,
     bscWidgets: null,
+    ctx: { branch: DATA.org.branch, period: DATA.org.period },   // cabang & periode aktif
+    gl: { account: '1-1100', bank: null },                       // kartu buku besar
+    tbView: 'ringkas',
+    consTab: 'laba-rugi',
   };
 
   const regState = (id) => (state.reg[id] ||= {
@@ -200,6 +210,7 @@
     { id: 'w-approvals', type: 'approvals', label: 'Menunggu Persetujuan', w: 4, h: 5 },
     { id: 'w-inventory', type: 'inventory', label: 'Komposisi Persediaan', w: 6, h: 5 },
     { id: 'w-aging', type: 'aging', label: 'Umur Piutang', w: 6, h: 5 },
+    { id: 'w-branch-pl', type: 'branch-pl', label: 'Laba Rugi per Cabang', w: 6, h: 4 },
     { id: 'w-stock', type: 'stock-alerts', label: 'Stok Kritis', w: 6, h: 4 },
     { id: 'w-activity', type: 'activity', label: 'Aktivitas Hari Ini', w: 6, h: 4 },
   ];
@@ -213,6 +224,7 @@
     { type: 'stock-alerts', label: 'Stok Kritis', desc: 'Barang di bawah minimum', icon: 'alert', defaultW: 6, defaultH: 4 },
     { type: 'activity', label: 'Aktivitas Hari Ini', desc: 'Jejak audit ringkas', icon: 'scroll', defaultW: 6, defaultH: 4 },
     { type: 'ai-briefing', label: 'AI Briefing', desc: 'Ringkasan harian AI', icon: 'sparkle', defaultW: 12, defaultH: 3 },
+    { type: 'branch-pl', label: 'Laba Rugi per Cabang', desc: 'Pendapatan & laba bersih tiap cabang', icon: 'layers', defaultW: 6, defaultH: 4 },
   ];
 
   /* --- Analitik widgets --------------------------------------------------- */
@@ -429,7 +441,7 @@
       title: 'Stok Barang',
       sub: 'Posisi stok terhadap batas minimum, beserta nilai persediaannya.',
       rows: () => DATA.stockItems.map((r) => ({ ...r, status: stockStatus(r), nilai: r.onHand * r.cost })),
-      key: 'sku',
+      key: 'key',
       search: ['sku', 'name', 'category', 'wh'],
       statusKey: 'status',
       statuses: ['aman', 'menipis', 'habis'],
@@ -483,21 +495,22 @@
 
     jurnal: {
       title: 'Jurnal Umum',
-      sub: 'Entri buku besar periode berjalan beserta status postingnya.',
-      rows: () => DATA.journals,
+      sub: 'Seluruh jurnal berpasangan — posting otomatis dari modul operasional dan jurnal memorial manual.',
+      rows: () => Ledger.all().map(journalRow),
       key: 'id',
-      search: ['id', 'desc', 'account', 'by'],
+      search: ['id', 'desc', 'ref', 'by', 'accounts', 'sourceLabel'],
       statusKey: 'status',
       statuses: ['diposting', 'menunggu', 'ditolak'],
+      periodKey: 'date',
       selectable: true,
-      primary: { label: 'Jurnal baru', action: 'demo' },
+      primary: { label: 'Jurnal baru', action: 'new-journal' },
       sort: { key: 'date', dir: 'desc' },
       columns: [
         { key: 'id', label: 'Nomor', cls: 'code cell-strong' },
         { key: 'date', label: 'Tanggal', render: (r) => `<span class="num">${FMT.date(r.date)}</span>` },
-        { key: 'desc', label: 'Keterangan', render: (r) => `<span class="cell-strong">${esc(r.desc)}</span><span class="cell-sub code">${esc(r.account)}</span>` },
-        { key: 'debit', label: 'Debit', align: 'r', render: (r) => (r.debit ? money(r.debit) : '<span class="muted">—</span>') },
-        { key: 'credit', label: 'Kredit', align: 'r', render: (r) => (r.credit ? money(r.credit) : '<span class="muted">—</span>') },
+        { key: 'desc', label: 'Keterangan', render: (r) => `<span class="cell-strong">${esc(r.desc)}</span><span class="cell-sub">${esc(r.sourceLabel)}${r.ref ? ` · <span class="code">${esc(r.ref)}</span>` : ''} · ${r.lines.length} baris</span>` },
+        { key: 'debit', label: 'Debit', align: 'r', render: (r) => money(r.total) },
+        { key: 'credit', label: 'Kredit', align: 'r', render: (r) => money(r.total) },
         { key: 'by', label: 'Dibuat oleh' },
         { key: 'status', label: 'Status', render: (r) => pill(r.status) },
       ],
@@ -832,6 +845,18 @@
 
   const PAGE_SIZE = 10;
 
+  /* Register yang barisnya bercap cabang mendapat kolom "Cabang" (tampil saat
+     konteks = semua cabang) dan disaring mengikuti cabang aktif. */
+  const BRANCH_COL = { key: 'branch', label: 'Cabang', render: (r) => branchTag(r.branch) };
+  function installBranchColumns() {
+    Object.values(REGISTERS).forEach((cfg) => {
+      const sample = cfg.rows()[0];
+      if (sample && sample.branch && !cfg.columns.some((c) => c.key === 'branch')) cfg.columns.splice(1, 0, BRANCH_COL);
+    });
+  }
+  const regRows = (cfg) => cfg.rows().filter((r) => inScope(r) && (!cfg.periodKey || inPeriod(r[cfg.periodKey])));
+  const regColumns = (cfg) => cfg.columns.filter((c) => c.key !== 'branch' || state.ctx.branch === 'ALL');
+
   /* ====================================================================== */
   /* Kerangka: rail, topbar, context bar                                     */
   /* ====================================================================== */
@@ -843,7 +868,7 @@
     if (dashViews[id]) return dashViews[id];
     if (REGISTERS[id]) return { title: REGISTERS[id].title, sub: REGISTERS[id].sub };
     return ({
-      dasbor: { title: 'Dasbor', sub: `Ikhtisar operasi ${DATA.org.company} untuk periode ${DATA.org.period}.` },
+      dasbor: { title: 'Dasbor', sub: `Ikhtisar operasi ${DATA.org.company} — ${branchName(state.ctx.branch)}, periode ${periodLabel()}.` },
       'perintah-kerja': { title: 'Perintah Kerja', sub: 'Papan produksi lintas lini, dari antrean hingga selesai.' },
       piutang: { title: 'Piutang Usaha', sub: 'Sebaran umur piutang dan faktur yang perlu ditagih.' },
       peran: { title: 'Peran & Izin', sub: 'Matriks hak akses tiap peran terhadap modul dan tindakan.' },
@@ -859,6 +884,13 @@
       'rantai-pasok': { title: 'Rantai Pasok', sub: 'Pengiriman aktif, logistik, dan pelacakan barang.' },
       analitik: { title: 'Analitik & BI', sub: 'Ringkasan kinerja bisnis, tren, dan perbandingan antar departemen.' },
       bsc: { title: 'Balanced Scorecard', sub: 'Kinerja empat perspektif: keuangan, pelanggan, proses, dan pertumbuhan.' },
+      'buku-besar': { title: 'Kartu Buku Besar', sub: 'Mutasi dan saldo berjalan tiap akun.' },
+      'neraca-saldo': { title: 'Neraca Saldo', sub: 'Saldo awal, mutasi, dan saldo akhir seluruh akun.' },
+      'laba-rugi': { title: 'Laba Rugi', sub: 'Pendapatan, beban, dan laba periode berjalan.' },
+      neraca: { title: 'Neraca', sub: 'Posisi aset, liabilitas, dan ekuitas.' },
+      konsolidasi: { title: 'Laporan Konsolidasi', sub: 'Gabungan seluruh cabang dengan eliminasi antar kantor.' },
+      integrasi: { title: 'Integrasi & Rekonsiliasi', sub: 'Posting antar modul dan kecocokan sub-buku dengan buku besar.' },
+      cabang: { title: 'Manajemen Cabang', sub: 'Profil, kinerja, dan pengaturan tiap cabang.' },
     })[id] || { title: 'Halaman', sub: '' };
   }
 
@@ -930,8 +962,8 @@
     return `
       <div class="contextbar">
         ${f('Perusahaan', DATA.org.company, 'switch-company')}
-        ${f('Cabang', DATA.org.branch, 'switch-branch')}
-        ${f('Periode', DATA.org.period, 'switch-period')}
+        ${f('Cabang', branchName(state.ctx.branch), 'switch-branch')}
+        ${f('Periode', periodLabel() + (periodOf().closed ? ' · ditutup' : ''), 'switch-period')}
         <div class="ctx-field">
           <span class="micro">Mata uang</span>
           <span class="ctx-static">IDR — Rupiah</span>
@@ -958,11 +990,11 @@
         </div>
         <div class="kpi-metric">${FMT.value(k.value, k.format)}${k.unit ? `<span class="kpi-unit"> ${esc(k.unit)}</span>` : ''}</div>
         <div class="kpi-row">
-          <span class="kpi-delta" data-tone="${tone}">
+          ${k.delta == null ? `<span class="kpi-delta"><span class="kpi-basis">${esc(k.basis || '')}</span></span>` : `<span class="kpi-delta" data-tone="${tone}">
             ${icon(k.delta >= 0 ? 'arrow-up' : 'arrow-down')}<span>${FMT.signedPct(k.delta)}</span>
-            <span class="kpi-basis">vs bulan lalu</span>
-          </span>
-          <div class="kpi-spark" data-spark="${k.id}"></div>
+            <span class="kpi-basis">${esc(k.basis || 'vs bulan lalu')}</span>
+          </span>`}
+          ${k.spark ? `<div class="kpi-spark" data-spark="${k.id}"></div>` : ''}
         </div>
         <div class="kpi-foot">${esc(k.foot)}</div>
       </article>`;
@@ -972,16 +1004,17 @@
     const type = widget.type;
 
     if (type === 'kpi') {
-      return '<section class="grid grid-kpi" aria-label="Indikator utama">' + DATA.kpis.map(kpiTile).join('') + '</section>';
+      return '<section class="grid grid-kpi" aria-label="Indikator utama">' + computeKpis().map(kpiTile).join('') + '</section>';
     }
 
     if (type === 'revenue') {
+      const tr = revenueTrend();
       const trenTable =
         '<div class="table-scroll"><table class="table">' +
         '<thead><tr><th>Bulan</th><th class="ta-r">Pendapatan</th><th class="ta-r">Target</th><th class="ta-r">Selisih</th></tr></thead>' +
         '<tbody>' +
-        DATA.revenueTrend.labels.map((l, i) => {
-          const a = DATA.revenueTrend.actual[i], t = DATA.revenueTrend.target[i];
+        tr.labels.map((l, i) => {
+          const a = tr.actual[i], t = tr.target[i];
           const d = a - t;
           return '<tr><td class="num">' + esc(l) + ' 2026</td><td class="ta-r num">' + FMT.rpCompact(a * 1e9) + '</td><td class="ta-r num">' + FMT.rpCompact(t * 1e9) + '</td><td class="ta-r num ' + (d >= 0 ? 'pos' : 'neg') + '">' + (d >= 0 ? '+' : '') + FMT.rpCompact(d * 1e9) + '</td></tr>';
         }).join('') +
@@ -990,7 +1023,7 @@
       const pressed = function(k) { return state.chartView.tren === k ? 'true' : 'false'; };
       return '<div class="card-head"><div class="card-head-text">' +
         '<h2 class="card-title">Pendapatan terhadap target</h2>' +
-        '<span class="card-note">12 bulan terakhir &middot; nilai dalam rupiah</span></div>' +
+        '<span class="card-note">Jan&ndash;Agu 2026 dari buku besar &middot; ' + esc(branchShort(state.ctx.branch)) + ' &middot; target per cabang</span></div>' +
         '<div class="card-tools"><div class="segmented" role="group" aria-label="Tampilan pendapatan">' +
         '<button data-chart-view="tren:grafik" aria-pressed="' + pressed('grafik') + '">Grafik</button>' +
         '<button data-chart-view="tren:tabel" aria-pressed="' + pressed('tabel') + '">Tabel</button>' +
@@ -1020,11 +1053,12 @@
     }
 
     if (type === 'inventory') {
-      const mixTotal = DATA.inventoryMix.reduce(function(s, d) { return s + d.value; }, 0);
+      const mix = inventoryMix();
+      const mixTotal = mix.reduce(function(s, d) { return s + d.value; }, 0);
       const mixTable =
         '<div class="table-scroll"><table class="table">' +
         '<thead><tr><th>Kategori</th><th class="ta-r">Nilai</th><th class="ta-r">Porsi</th></tr></thead><tbody>' +
-        DATA.inventoryMix.map(function(d) {
+        mix.map(function(d) {
           return '<tr><td>' + esc(d.label) + '</td><td class="ta-r num">' + FMT.rpCompact(d.value) + '</td><td class="ta-r num">' + FMT.pct((d.value / mixTotal) * 100) + '</td></tr>';
         }).join('') +
         '</tbody></table></div>';
@@ -1032,7 +1066,7 @@
       const pressed = function(k) { return state.chartView.mix === k ? 'true' : 'false'; };
       return '<div class="card-head"><div class="card-head-text">' +
         '<h2 class="card-title">Komposisi nilai persediaan</h2>' +
-        '<span class="card-note">Total ' + FMT.rpCompact(mixTotal) + ' per ' + esc(DATA.org.period) + '</span></div>' +
+        '<span class="card-note">Total ' + FMT.rpCompact(mixTotal) + ' &middot; kartu stok ' + esc(branchShort(state.ctx.branch)) + '</span></div>' +
         '<div class="card-tools"><div class="segmented" role="group" aria-label="Tampilan persediaan">' +
         '<button data-chart-view="mix:grafik" aria-pressed="' + pressed('grafik') + '">Grafik</button>' +
         '<button data-chart-view="mix:tabel" aria-pressed="' + pressed('tabel') + '">Tabel</button>' +
@@ -1080,6 +1114,23 @@
         '</div></div>';
     }
 
+    if (type === 'branch-pl') {
+      const rows = activeBranches().map(function(b) { return { b: b, k: Ledger.branchKpis(b.id, state.ctx.period) }; });
+      const all = Ledger.branchKpis('ALL', state.ctx.period);
+      return '<div class="card-head"><div class="card-head-text">' +
+        '<h2 class="card-title">Laba rugi per cabang</h2>' +
+        '<span class="card-note">' + esc(periodLabel()) + ' &middot; konsolidasi ' + FMT.rpCompact(all.net) + '</span></div>' +
+        '<div class="card-tools"><button class="btn btn-sm" data-nav="konsolidasi">Konsolidasi</button></div></div>' +
+        '<div class="table-scroll"><table class="table">' +
+        '<thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th></tr></thead><tbody>' +
+        rows.map(function(x) {
+          return '<tr data-nav-branch="laba-rugi|' + esc(x.b.id) + '"><td class="cell-strong">' + esc(x.b.short) + '</td>' +
+            '<td class="ta-r num">' + FMT.rpCompact(x.k.revenue) + '</td>' +
+            '<td class="ta-r num' + (x.k.net < 0 ? ' neg' : '') + '">' + FMT.rpCompact(x.k.net) + '</td>' +
+            '<td class="ta-r num">' + FMT.pct(x.k.netMargin) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
     if (type === 'ai-briefing') {
       return '<div class="card-head"><div class="card-head-text">' +
         '<h2 class="card-title">' + icon('sparkle') + ' AI Briefing Harian</h2>' +
@@ -1120,8 +1171,8 @@
 
     if (type === 'a-tren') {
       return '<div class="card-head"><div class="card-head-text">' +
-        '<h2 class="card-title">Tren Pendapatan 12 Bulan</h2>' +
-        '<span class="card-note">Aktual vs target dalam miliar rupiah</span></div></div>' +
+        '<h2 class="card-title">Tren Pendapatan Jan&ndash;Agu 2026</h2>' +
+        '<span class="card-note">Aktual (buku besar) vs target cabang dalam miliar rupiah</span></div></div>' +
         '<div class="card-body"><div class="chart" data-chart="analytics-tren"></div></div>';
     }
 
@@ -1328,7 +1379,7 @@
       '<div class="dash-edit-bar" style="display:flex;align-items:flex-start;gap:var(--sp-4);margin-bottom:var(--sp-4)">' +
       '<div style="flex:1">' +
       '<h1 class="page-title">Selamat pagi, ' + esc(DATA.org.user.name.split(' ')[0]) + '</h1>' +
-      '<p class="page-sub">' + esc(DATA.org.branch) + ' &middot; ' + esc(DATA.org.period) + ' &middot; 5 dokumen menunggu keputusan Anda.</p></div>' +
+      '<p class="page-sub">' + esc(branchName(state.ctx.branch)) + ' &middot; ' + esc(periodLabel()) + ' &middot; ' + DATA.approvals.length + ' dokumen menunggu keputusan Anda.</p></div>' +
       '<div class="page-actions" style="display:flex;gap:var(--sp-2)">' +
       (editMode
         ? '<button class="btn" data-action="widget-add">' + icon('plus') + ' Tambah Widget</button>' +
@@ -1354,18 +1405,19 @@
   }
 
   function mountDashboard(root) {
-    DATA.kpis.forEach((k) => {
+    computeKpis().forEach((k) => {
       const node = $(`[data-spark="${k.id}"]`, root);
-      if (node) Charts.sparkline(node, k.spark);
+      if (node && k.spark) Charts.sparkline(node, k.spark);
     });
 
     const tren = $('[data-chart="tren"]', root);
     if (tren) {
+      const tr = revenueTrend();
       Charts.lineChart(tren, {
         title: 'Pendapatan terhadap target',
-        labels: DATA.revenueTrend.labels,
-        actual: DATA.revenueTrend.actual,
-        target: DATA.revenueTrend.target,
+        labels: tr.labels,
+        actual: tr.actual,
+        target: tr.target,
         format: 'rp-compact',
         scale: 1e9,
       });
@@ -1378,16 +1430,17 @@
     if (bar) {
       Charts.compositionBar(bar, $('[data-stacklegend="mix"]', root), {
         title: 'Komposisi nilai persediaan',
-        items: DATA.inventoryMix,
+        items: inventoryMix(),
       });
     }
 
     const aging = $('[data-chart="aging"]', root);
     if (aging) {
+      const ag = arAging();
       Charts.columnChart(aging, {
         title: 'Umur piutang',
-        ariaLabel: 'Umur piutang per ember: ' + DATA.arAging.map((d) => `${d.label} ${FMT.rpCompact(d.value)}`).join(', '),
-        items: DATA.arAging,
+        ariaLabel: 'Umur piutang per ember: ' + ag.map((d) => `${d.label} ${FMT.rpCompact(d.value)}`).join(', '),
+        items: ag,
         height: 214,
       });
     }
@@ -1399,7 +1452,7 @@
   function sortedRows(id) {
     const cfg = REGISTERS[id];
     const st = regState(id);
-    let rows = cfg.rows().slice();
+    let rows = regRows(cfg);
 
     if (st.q) {
       const q = st.q.toLowerCase();
@@ -1432,7 +1485,8 @@
     st.page = Math.min(st.page, pages);
     const slice = rows.slice((st.page - 1) * PAGE_SIZE, st.page * PAGE_SIZE);
     const sort = st.sort || cfg.sort;
-    const all = cfg.rows();
+    const all = regRows(cfg);
+    const cols = regColumns(cfg);
 
     const chips = cfg.statusKey ? `
       <div class="chips" role="group" aria-label="Saring status">
@@ -1449,7 +1503,7 @@
     const head = `
       <tr>
         ${cfg.selectable ? `<th class="col-check"><input type="checkbox" data-check-all aria-label="Pilih semua baris di halaman ini" ${slice.length && slice.every((r) => st.selected.has(r[cfg.key])) ? 'checked' : ''}></th>` : ''}
-        ${cfg.columns.map((c) => `
+        ${cols.map((c) => `
           <th class="${c.align === 'r' ? 'ta-r' : ''}">
             <button class="th-sort" data-sort="${esc(c.key)}" data-active="${sort && sort.key === c.key}">
               ${esc(c.label)}
@@ -1462,10 +1516,10 @@
       const k = r[cfg.key];
       return `<tr data-row="${esc(k)}" ${st.selected.has(k) ? 'aria-selected="true"' : ''}>
         ${cfg.selectable ? `<td class="col-check"><input type="checkbox" data-check="${esc(k)}" aria-label="Pilih ${esc(k)}" ${st.selected.has(k) ? 'checked' : ''}></td>` : ''}
-        ${cfg.columns.map((c) => `<td class="${c.align === 'r' ? 'ta-r ' : ''}${c.cls || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}
+        ${cols.map((c) => `<td class="${c.align === 'r' ? 'ta-r ' : ''}${c.cls || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}
       </tr>`;
     }).join('') : `
-      <tr><td colspan="${cfg.columns.length + (cfg.selectable ? 1 : 0)}" style="padding:0">
+      <tr><td colspan="${cols.length + (cfg.selectable ? 1 : 0)}" style="padding:0">
         <div class="empty">
           <div class="empty-card">
             <span class="empty-title">Tidak ada yang cocok</span>
@@ -1495,8 +1549,8 @@
           </div>
           ${chips}
           <div class="toolbar-spacer"></div>
-          <span class="pager-info">${FMT.int(rows.length)} baris</span>
-          <button class="btn btn-sm btn-icon btn-ghost" data-action="demo" aria-label="Atur kolom">${icon('filter')}</button>
+          <span class="pager-info">${FMT.int(rows.length)} baris · ${esc(branchShort(state.ctx.branch))}${cfg.periodKey ? ` · ${esc(periodLabel())}` : ''}</span>
+          <button class="btn btn-sm btn-icon btn-ghost" data-action="switch-branch" aria-label="Ganti cabang" title="Ganti cabang">${icon('filter')}</button>
         </div>
 
         ${st.selected.size ? `
@@ -1597,9 +1651,13 @@
   /* Halaman piutang (ikhtisar + daftar faktur tertunggak)                   */
   /* ====================================================================== */
   function renderReceivables() {
-    const total = DATA.arAging.reduce((s, d) => s + d.value, 0);
-    const overdue = DATA.arAging.slice(1).reduce((s, d) => s + d.value, 0);
-    const late = DATA.invoices.filter((i) => i.overdue > 0).sort((a, b) => b.overdue - a.overdue);
+    const ag = arAging();
+    const total = ag.reduce((s, d) => s + d.value, 0);
+    const overdue = ag.slice(1).reduce((s, d) => s + d.value, 0);
+    const late = DATA.invoices.filter((i) => inScope(i) && i.amount > i.paid && i.dueDate < Ledger.TODAY)
+      .map((i) => ({ ...i, overdue: Ledger.daysBetween(i.dueDate, Ledger.TODAY) })).sort((a, b) => b.overdue - a.overdue);
+    const collected = DATA.invoices.filter((i) => inScope(i) && i.paid && inPeriod(i.paidDate || i.date)).reduce((s, i) => s + i.paid, 0);
+    const glAr = Ledger.balanceSheet(state.ctx).assets.find((a) => a.code === '1-1200');
 
     const tile = (label, value, foot) => `
       <article class="card kpi">
@@ -1621,10 +1679,10 @@
       </div>
 
       <section class="grid grid-kpi">
-        ${tile('Total piutang', `<span class="num">${FMT.rpCompact(total)}</span>`, `${DATA.arAging.reduce((s, d) => s + d.count, 0)} faktur beredar`)}
-        ${tile('Lewat jatuh tempo', `<span class="num neg">${FMT.rpCompact(overdue)}</span>`, `${FMT.pct((overdue / total) * 100)} dari total piutang`)}
-        ${tile('Rata-rata umur', '<span class="num">38 hari</span>', 'Termin rata-rata Net 34')}
-        ${tile('Tertagih bulan ini', `<span class="num">${FMT.rpCompact(2_418_500_000)}</span>`, 'Target Rp 2,60 M')}
+        ${tile('Total piutang', `<span class="num">${FMT.rpCompact(total)}</span>`, `${ag.reduce((s, d) => s + d.count, 0)} faktur beredar · ${branchShort(state.ctx.branch)}`)}
+        ${tile('Lewat jatuh tempo', `<span class="num neg">${FMT.rpCompact(overdue)}</span>`, `${FMT.pct(total ? (overdue / total) * 100 : 0)} dari total piutang`)}
+        ${tile('Saldo buku besar 1-1200', `<span class="num">${FMT.rpCompact(glAr ? glAr.amount : 0)}</span>`, glAr && Math.abs(glAr.amount - total) < 1 ? 'Cocok dengan sub-buku faktur' : 'Per akhir periode laporan')}
+        ${tile('Tertagih periode ini', `<span class="num">${FMT.rpCompact(collected)}</span>`, `Penerimaan pelanggan ${periodLabel()}`)}
       </section>
 
       <article class="card">
@@ -1645,7 +1703,7 @@
             <h2 class="card-title">Faktur lewat jatuh tempo</h2>
             <span class="card-note">Diurutkan dari keterlambatan terlama</span>
           </div>
-          <div class="card-tools"><button class="btn btn-sm" data-nav="faktur">Semua faktur</button></div>
+          <div class="card-tools"><button class="btn btn-sm" data-gl="1-1200">${icon('book')} Buku besar piutang</button><button class="btn btn-sm" data-nav="faktur">Semua faktur</button></div>
         </div>
         <div class="table-scroll">
           <table class="table">
@@ -1951,7 +2009,7 @@
             <dt>Tanggal pesan</dt><dd class="num">${FMT.date(row.date)}</dd>
             <dt>Jatuh tempo</dt><dd class="num">${FMT.date(row.due)}</dd>
             <dt>Termin</dt><dd class="num">${esc(cust ? cust.terms : 'Net 30')}</dd>
-            <dt>Gudang kirim</dt><dd>${esc(DATA.org.branch)}</dd>
+            <dt>Cabang / gudang kirim</dt><dd>${esc(branchName(row.branch))}</dd>
             <dt>Penanggung jawab</dt><dd>${esc(row.pic)}</dd>
           </dl>
         </div>
@@ -2022,20 +2080,23 @@
   function genericDrawer(cfg, row) {
     const title = row.name || row.customer || row.supplier || row.desc || row[cfg.key];
     return {
-      eyebrow: `<span class="code">${esc(row[cfg.key])}</span>${cfg.statusKey ? pill(row[cfg.statusKey]) : ''}`,
+      eyebrow: `<span class="code">${esc(row[cfg.key])}</span>${cfg.statusKey ? pill(row[cfg.statusKey]) : ''}${row.branch ? branchTag(row.branch) : ''}`,
       title: esc(title),
       subtitle: esc(cfg.title),
       body: `
+        ${relatedJournalsSection(String(row.id || row[cfg.key]))}
         <div class="section">
           <span class="section-title">Rincian</span>
           <dl class="deflist">
-            ${cfg.columns.filter((c) => c.key !== cfg.statusKey).map((c) => {
+            ${cfg.columns.filter((c) => c.key !== cfg.statusKey && c.key !== 'branch').map((c) => {
               const raw = c.value ? c.value(row) : row[c.key];
               const val = typeof raw === 'number' && /amount|cost|nilai|limit|debit|credit|sisa|used/.test(c.key)
                 ? FMT.rp(raw)
                 : (c.key.includes('date') || ['date', 'due', 'eta', 'join', 'dueDate'].includes(c.key)) && typeof raw === 'string' && raw.includes('-')
                   ? FMT.date(raw)
-                  : typeof raw === 'number' ? FMT.int(raw) : String(raw ?? '—');
+                  : typeof raw === 'number' ? FMT.int(raw)
+                  : typeof raw === 'boolean' ? (raw ? 'Ya' : 'Tidak')
+                  : String(raw ?? '—');
               return `<dt>${esc(c.label)}</dt><dd>${esc(val)}</dd>`;
             }).join('')}
           </dl>
@@ -2165,7 +2226,7 @@
             </div>
             <div class="field">
               <label for="so-wh">Gudang kirim</label>
-              <select class="select" id="so-wh">${DATA.org.branches.map((b) => `<option ${b === DATA.org.branch ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
+              <select class="select" id="so-wh">${activeBranches().map((b) => `<option value="${esc(b.id)}" ${b.id === (state.ctx.branch === 'ALL' ? 'CKR' : state.ctx.branch) ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
             </div>
             <div class="field"><label for="so-ref">Nomor PO pelanggan</label><input class="input code" id="so-ref" placeholder="Opsional"></div>
             <div class="field form-grid-full">
@@ -2281,11 +2342,25 @@
       const docs = DATA.documents.filter((r) => match(r.name) || match(r.id) || match(r.type)).slice(0, 4)
         .map((r) => ({ label: r.name, hint: r.type, icon: 'folder', go: () => setView('dokumen') }));
       if (docs.length) groups.push({ label: 'Dokumen', items: docs });
+
+      const jvs = Ledger.all().filter((j) => match(j.id) || match(j.desc) || match(j.ref)).slice(-4).reverse()
+        .map((j) => ({ label: `${j.id} — ${j.desc}`, hint: FMT.rpCompact(j.total), icon: 'ledger', go: () => { setView('jurnal'); openDrawer(journalDrawer(j)); } }));
+      if (jvs.length) groups.push({ label: 'Jurnal', items: jvs });
+
+      const accs = DATA.chartOfAccounts.filter((a) => a.type === 'Detail' && (match(a.code) || match(a.name))).slice(0, 4)
+        .map((a) => ({ label: `${a.code} — ${a.name}`, hint: 'Kartu buku besar', icon: 'book', go: () => { state.gl.account = a.code; state.gl.bank = null; setView('buku-besar'); } }));
+      if (accs.length) groups.push({ label: 'Akun', items: accs });
+
+      const brs = DATA.branches.filter((b) => match(b.name) || match(b.id)).slice(0, 4)
+        .map((b) => ({ label: b.name, hint: 'Jadikan cabang aktif', icon: 'map-pin', go: () => { state.ctx.branch = b.id; saveCtx(); render(); } }));
+      if (brs.length) groups.push({ label: 'Cabang', items: brs });
     } else {
       groups.push({
         label: 'Tindakan cepat',
         items: [
           { label: 'Buat pesanan penjualan', hint: 'Ctrl N', icon: 'plus', go: () => openNewOrderModal() },
+          { label: 'Buat jurnal memorial', hint: 'Keuangan', icon: 'ledger', go: () => openNewJournalModal() },
+          { label: 'Lihat semua cabang (konsolidasi)', hint: 'Konteks', icon: 'layers', go: () => { state.ctx.branch = 'ALL'; saveCtx(); setView('konsolidasi'); } },
           { label: 'Lihat persetujuan tertunda', hint: '5 dokumen', icon: 'check', go: () => setView('dasbor') },
           { label: 'Ganti tema tampilan', hint: state.theme, icon: 'sun', go: () => setView('pengaturan') },
         ],
@@ -2536,7 +2611,7 @@
         <div class="card-head"><h3 class="card-title">${icon('users')} Shift Aktif</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr><th>Shift</th><th>Kasir</th><th>Toko</th><th>Waktu</th><th class="r">Kas Awal</th><th class="r">Kas Saat Ini</th><th class="r">Transaksi</th><th class="r">Penjualan</th><th>Status</th></tr></thead>
-          <tbody>${DATA.posShifts.map((s) => `<tr>
+          <tbody>${DATA.posShifts.filter(inScope).map((s) => `<tr>
             <td class="code">${esc(s.id)}</td>
             <td class="cell-strong">${esc(s.cashier)}</td>
             <td>${esc(s.store)}</td>
@@ -2555,7 +2630,7 @@
         <div class="card-head"><h3 class="card-title">${icon('cart')} Transaksi Terakhir</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr><th>No. Transaksi</th><th>Waktu</th><th>Kasir</th><th class="r">Item</th><th class="r">Total</th><th>Pembayaran</th><th>Status</th></tr></thead>
-          <tbody>${DATA.posTransactions.map((t) => `<tr>
+          <tbody>${DATA.posTransactions.filter(inScope).map((t) => `<tr>
             <td class="code cell-strong">${esc(t.id)}</td>
             <td class="num">${esc(t.time)}</td>
             <td>${esc(t.cashier)}</td>
@@ -2657,9 +2732,16 @@
   function renderChartOfAccounts() {
     const coa = DATA.chartOfAccounts;
     const categories = ['Aset', 'Liabilitas', 'Ekuitas', 'Pendapatan', 'Beban'];
+    const bal = Ledger.balances(state.ctx);
+    const profit = Ledger.ytdProfit(state.ctx.branch, periodOf().to);
+    const balanceOf = (a) => {
+      if (a.computed) return profit;
+      if (a.type === 'Detail') return bal[a.code] ? bal[a.code].ending : 0;
+      return coa.filter((x) => x.parent === a.code).reduce((s, x) => s + balanceOf(x), 0);
+    };
     const catTotals = categories.map((cat) => {
       const items = coa.filter((a) => a.category === cat && a.type === 'Detail');
-      return { cat, total: items.reduce((s, a) => s + a.balance, 0), count: items.length };
+      return { cat, total: items.reduce((s, a) => s + balanceOf(a), 0), count: items.length };
     });
 
     const summaryCards = `
@@ -2675,11 +2757,12 @@
     const rows = coa.map((a) => {
       const indent = a.level * 24;
       const isHeader = a.type === 'Header';
-      return `<tr class="${isHeader ? 'coa-header-row' : ''}">
+      const v = balanceOf(a);
+      return `<tr class="${isHeader ? 'coa-header-row' : ''}" ${!isHeader && !a.computed ? `data-gl="${esc(a.code)}"` : ''}>
         <td class="code" style="padding-left:${indent + 12}px">${esc(a.code)}</td>
-        <td class="${isHeader ? 'cell-strong' : ''}" style="padding-left:${indent + 12}px">${esc(a.name)}</td>
+        <td class="${isHeader ? 'cell-strong' : ''}" style="padding-left:${indent + 12}px">${esc(a.name)}${a.interco ? ' <span class="micro">antar kantor</span>' : ''}${a.computed ? ' <span class="micro">dihitung</span>' : ''}</td>
         <td>${isHeader ? '' : esc(a.type)}</td>
-        <td class="r num">${isHeader ? '' : FMT.rpCompact(a.balance)}</td>
+        <td class="r num${v < 0 ? ' neg' : ''}">${FMT.rpCompact(v)}</td>
         <td>${pill(a.status)}</td>
       </tr>`;
     }).join('');
@@ -2687,8 +2770,9 @@
     return `
       <div class="page-head"><div class="page-head-text">
         <h1 class="page-title">Bagan Akun (Chart of Accounts)</h1>
-        <p class="page-sub">Struktur akun buku besar perusahaan.</p>
-      </div><div class="page-head-actions">
+        <p class="page-sub">Struktur akun buku besar beserta saldo per ${FMT.date(periodOf().to)} · ${esc(branchName(state.ctx.branch))}. Klik akun detail untuk membuka kartu buku besar.</p>
+      </div><div class="page-actions">
+        <button class="btn" data-nav="neraca-saldo">${icon('scale')} Neraca saldo</button>
         <button class="btn" data-action="demo">${icon('plus')} Akun Baru</button>
         <button class="btn btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
       </div></div>
@@ -2803,7 +2887,13 @@
 
   /* --- Budget per Akun (Management Budget) ------------------------------ */
   function renderAccountBudget() {
-    const acctBudgets = DATA.accountBudgets;
+    const amounts = Ledger.incomeStatement({ branch: state.ctx.branch, period: '2026' }).amounts;
+    const share = state.ctx.branch === 'ALL' ? 1 : (branchOf(state.ctx.branch) || { budgetShare: 0 }).budgetShare;
+    const acctBudgets = DATA.accountBudgets.map((a) => {
+      const actual = Math.abs(amounts[a.accountCode] || 0);
+      const budget = Math.round(a.budget * share), forecast = Math.round(a.forecast * share);
+      return { ...a, budget, forecast, actual, variance: forecast - budget };
+    });
     const expenseItems = acctBudgets.filter((a) => a.accountCode.startsWith('5'));
     const revenueItems = acctBudgets.filter((a) => a.accountCode.startsWith('4'));
 
@@ -2876,7 +2966,8 @@
     const table = `
       <section class="card">
         <div class="card-head">
-          <h3 class="card-title">${icon('ledger')} Anggaran per Akun — Periode 2026</h3>
+          <h3 class="card-title">${icon('ledger')} Anggaran per Akun — TA 2026 · ${esc(branchShort(state.ctx.branch))}</h3>
+          <span class="card-note">Realisasi diambil dari buku besar (Jan s.d. Agu 2026)${share < 1 ? `; anggaran cabang = ${FMT.pct(share * 100, 0)} anggaran perusahaan` : ''}</span>
           <div class="card-tools">
             <button class="btn btn-sm btn-ghost" data-action="demo">${icon('download')} Ekspor</button>
           </div>
@@ -2957,8 +3048,10 @@
   /* Kas & Bank                                                              */
   /* ====================================================================== */
   function renderCashBank() {
-    const accounts = DATA.bankAccounts;
+    const asOf = periodOf().to;
+    const accounts = DATA.bankAccounts.filter(inScope).map((a) => ({ ...a, balance: a.currency === 'IDR' ? Ledger.bankBalance(a.id, asOf) : a.opening }));
     const totalIDR = accounts.filter((a) => a.currency === 'IDR').reduce((s, a) => s + a.balance, 0);
+    const glCash = Ledger.balanceSheet(state.ctx).assets.find((a) => a.code === '1-1100');
 
     const summary = `
       <div class="kpi-row">
@@ -2977,12 +3070,18 @@
           <div class="kpi-value">${FMT.rpCompact(accounts.filter((a) => a.bank === 'Kas').reduce((s, a) => s + a.balance, 0))}</div>
           <div class="kpi-foot">${accounts.filter((a) => a.bank === 'Kas').length} lokasi</div>
         </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Buku besar 1-1100</div>
+          <div class="kpi-value">${FMT.rpCompact(glCash ? glCash.amount : 0)}</div>
+          <div class="kpi-foot">${glCash && Math.abs(glCash.amount - totalIDR) < 1 ? 'Cocok dengan sub-buku bank' : 'Per ' + FMT.date(asOf)}</div>
+        </div>
       </div>`;
 
     const rows = accounts.map((a) => `
-      <tr>
+      <tr data-gl-bank="${esc(a.id)}" title="Buka kartu buku besar rekening ini">
         <td class="code">${esc(a.id)}</td>
         <td><span class="cell-strong">${esc(a.name)}</span><span class="cell-sub">${esc(a.bank)} · ${esc(a.accountNo)}</span></td>
+        <td>${branchTag(a.branch)}</td>
         <td>${esc(a.currency)}</td>
         <td class="r"><span class="num">${a.currency === 'IDR' ? FMT.rpCompact(a.balance) : 'USD ' + FMT.int(a.balance)}</span></td>
         <td><span class="num">${FMT.date(a.lastRecon)}</span></td>
@@ -2995,7 +3094,7 @@
         <div class="card-head"><h3 class="card-title">${icon('wallet')} Daftar Rekening</h3></div>
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr>
-            <th>Kode</th><th>Nama Rekening</th><th>Mata Uang</th>
+            <th>Kode</th><th>Nama Rekening</th><th>Cabang</th><th>Mata Uang</th>
             <th class="r">Saldo</th><th>Rekonsiliasi Terakhir</th>
             <th class="r">Unrecon</th><th>Status</th>
           </tr></thead>
@@ -3006,7 +3105,7 @@
     return `
       <div class="page-head"><div class="page-head-text">
         <h1 class="page-title">Kas &amp; Bank</h1>
-        <p class="page-sub">Kelola rekening bank, kas kecil, dan rekonsiliasi.</p>
+        <p class="page-sub">Saldo rekening dihitung dari jurnal kas per ${FMT.date(asOf)} · ${esc(branchName(state.ctx.branch))}. Klik rekening untuk melihat mutasinya.</p>
       </div><div class="page-actions">
         <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
         <button class="btn btn-primary" data-action="demo">${icon('plus')} Rekening Baru</button>
@@ -3179,37 +3278,1139 @@
   function renderAnalytics() {
     return renderWidgetDashboard('analitik',
       'Analitik &amp; BI',
-      'Ikhtisar kinerja bisnis ' + esc(DATA.org.company) + ' &middot; ' + esc(DATA.org.period),
+      'Ikhtisar kinerja bisnis ' + esc(DATA.org.company) + ' &middot; ' + esc(branchShort(state.ctx.branch)) + ' &middot; ' + esc(periodLabel()),
       renderAnalyticsWidgetContent);
   }
 
   function mountAnalytics(root) {
     var tren = $('[data-chart="analytics-tren"]', root);
     if (tren) {
+      var tr = revenueTrend();
       Charts.lineChart(tren, {
         title: 'Tren pendapatan',
-        labels: DATA.revenueTrend.labels,
-        actual: DATA.revenueTrend.actual,
-        target: DATA.revenueTrend.target,
+        labels: tr.labels,
+        actual: tr.actual,
+        target: tr.target,
         format: 'rp-compact',
         scale: 1e9,
       });
     }
     var aging = $('[data-chart="analytics-aging"]', root);
     if (aging) {
+      var ag = arAging();
       Charts.columnChart(aging, {
         title: 'Umur piutang',
-        ariaLabel: 'Umur piutang per ember: ' + DATA.arAging.map(function(d) { return d.label + ' ' + FMT.rpCompact(d.value); }).join(', '),
-        items: DATA.arAging,
+        ariaLabel: 'Umur piutang per ember: ' + ag.map(function(d) { return d.label + ' ' + FMT.rpCompact(d.value); }).join(', '),
+        items: ag,
         height: 214,
       });
     }
   }
 
+  /* ====================================================================== */
+  /* Konteks: cabang & periode                                               */
+  /* ====================================================================== */
+  function initCtx() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('erp-ctx') || 'null');
+      if (saved && (saved.branch === 'ALL' || DATA.branches.some((b) => b.id === saved.branch))) state.ctx.branch = saved.branch;
+      if (saved && DATA.periods.some((p) => p.id === saved.period)) state.ctx.period = saved.period;
+    } catch { /* sandbox */ }
+  }
+  function saveCtx() { try { localStorage.setItem('erp-ctx', JSON.stringify(state.ctx)); } catch { /* sandbox */ } }
+
+  const ctx = () => state.ctx;
+  const branchOf = (id) => DATA.branches.find((b) => b.id === id);
+  const branchName = (id) => (id === 'ALL' ? 'Semua cabang (konsolidasi)' : (branchOf(id) || { name: id }).name);
+  const branchShort = (id) => (id === 'ALL' ? 'Konsolidasi' : (branchOf(id) || { short: id }).short);
+  const branchTag = (id) => `<span class="branch-tag" title="${esc(branchName(id))}">${esc(branchShort(id))}</span>`;
+  const periodOf = () => Ledger.period(state.ctx.period);
+  const periodLabel = () => periodOf().label;
+  const activeBranches = () => DATA.branches.filter((b) => b.status !== 'nonaktif');
+  const inScope = (r) => state.ctx.branch === 'ALL' || !r.branch || r.branch === state.ctx.branch;
+  const inPeriod = (d) => { const p = periodOf(); return !d || (d >= p.from && d <= p.to); };
+  const ctxNote = () => `${branchName(state.ctx.branch)} · ${periodLabel()}`;
+
+  /** Angka laporan: rupiah penuh, negatif dalam kurung. */
+  const amt = (v, opts = {}) => {
+    const n = Math.round(v || 0);
+    if (!n && !opts.zero) return '<span class="muted">—</span>';
+    return n < 0 ? `<span class="num neg">(${FMT.int(-n)})</span>` : `<span class="num">${FMT.int(n)}</span>`;
+  };
+  const amtCompact = (v) => `<span class="num${v < 0 ? ' neg' : ''}">${FMT.rpCompact(v)}</span>`;
+
+  function openBranchMenu(anchor) {
+    const item = (id, label, sub) => `
+      <button class="menu-item" role="menuitemradio" aria-checked="${state.ctx.branch === id}" data-set-branch="${esc(id)}">
+        ${icon(id === 'ALL' ? 'layers' : 'map-pin')}
+        <span style="flex:1;display:flex;flex-direction:column;min-width:0"><span>${esc(label)}</span>${sub ? `<span class="micro">${esc(sub)}</span>` : ''}</span>
+        ${state.ctx.branch === id ? icon('check') : ''}
+      </button>`;
+    openPopover(anchor, `
+      <div class="popover" role="menu" aria-label="Pilih cabang">
+        <div class="popover-head"><div class="card-head-text">
+          <span class="card-title">Cabang</span>
+          <span class="card-note">Membatasi register, dasbor, dan laporan keuangan</span>
+        </div></div>
+        <div class="menu">
+          ${item('ALL', 'Semua cabang', 'Konsolidasi dengan eliminasi RK antar kantor')}
+          <div class="menu-sep"></div>
+          ${activeBranches().map((b) => item(b.id, b.name, b.type)).join('')}
+          <div class="menu-sep"></div>
+          <button class="menu-item" data-nav="cabang">${icon('gear')} Kelola cabang</button>
+        </div>
+      </div>`);
+  }
+
+  function openPeriodMenu(anchor) {
+    const item = (p) => `
+      <button class="menu-item" role="menuitemradio" aria-checked="${state.ctx.period === p.id}" data-set-period="${esc(p.id)}">
+        ${icon('calendar')}<span style="flex:1">${esc(p.label)}</span>
+        ${p.closed ? '<span class="micro">ditutup</span>' : ''}${state.ctx.period === p.id ? icon('check') : ''}
+      </button>`;
+    const months = DATA.periods.filter((p) => !p.group);
+    const others = DATA.periods.filter((p) => p.group);
+    openPopover(anchor, `
+      <div class="popover" role="menu" aria-label="Pilih periode">
+        <div class="popover-head"><div class="card-head-text">
+          <span class="card-title">Periode akuntansi</span>
+          <span class="card-note">Berlaku untuk laporan keuangan, jurnal, dan dasbor</span>
+        </div></div>
+        <div class="menu" style="max-height:60vh;overflow:auto">
+          <div class="palette-group-label">Bulan</div>${months.map(item).join('')}
+          <div class="palette-group-label">Kuartal &amp; tahun</div>${others.map(item).join('')}
+        </div>
+      </div>`);
+  }
+
+  /* ====================================================================== */
+  /* Jurnal berpasangan: baris register, laci, modal jurnal baru             */
+  /* ====================================================================== */
+  const SOURCE_LABEL = {
+    penjualan: 'Penjualan', pembelian: 'Pembelian', persediaan: 'Persediaan', produksi: 'Produksi',
+    penggajian: 'Penggajian', aset: 'Aset tetap', pemeliharaan: 'Pemeliharaan', pos: 'POS / Kasir',
+    'kas-bank': 'Kas & Bank', pajak: 'Pajak', 'saldo-awal': 'Saldo awal', manual: 'Manual',
+  };
+  const SOURCE_VIEW = {
+    penjualan: 'faktur', pembelian: 'hutang', persediaan: 'mutasi', produksi: 'perintah-kerja',
+    penggajian: 'penggajian', aset: 'aset', pemeliharaan: 'pemeliharaan', pos: 'kasir',
+    'kas-bank': 'kas-bank', pajak: 'kepatuhan', 'saldo-awal': 'neraca', manual: 'jurnal',
+  };
+
+  const journalRow = (j) => ({
+    ...j,
+    debit: j.total, credit: j.total,
+    sourceLabel: SOURCE_LABEL[j.source] || j.source,
+    accounts: j.lines.map((l) => `${l.account} ${Ledger.acctName(l.account)}`).join(' '),
+  });
+
+  function linesTable(lines) {
+    const dr = lines.reduce((s, l) => s + l.debit, 0), cr = lines.reduce((s, l) => s + l.credit, 0);
+    return `
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>Akun</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th></tr></thead>
+          <tbody>
+            ${lines.map((l) => `
+              <tr>
+                <td style="${l.credit ? 'padding-left:var(--sp-6)' : ''}">
+                  <button class="link-btn" data-gl="${esc(l.account)}" title="Buka kartu buku besar">
+                    <span class="code">${esc(l.account)}</span> ${esc(Ledger.acctName(l.account))}
+                  </button>
+                  ${l.bank ? `<span class="cell-sub">${esc((DATA.bankAccounts.find((b) => b.id === l.bank) || {}).name || l.bank)}</span>` : ''}
+                  ${l.party ? `<span class="cell-sub">${esc(l.party)}</span>` : ''}
+                </td>
+                <td class="ta-r">${l.debit ? amt(l.debit) : '<span class="muted">—</span>'}</td>
+                <td class="ta-r">${l.credit ? amt(l.credit) : '<span class="muted">—</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+          <tfoot><tr class="report-total"><td>Total</td><td class="ta-r">${amt(dr)}</td><td class="ta-r">${amt(cr)}</td></tr></tfoot>
+        </table>
+      </div>
+      <div style="display:flex;gap:var(--sp-2);align-items:center;margin-top:var(--sp-2)">
+        ${Math.abs(dr - cr) < 1
+          ? '<span class="pill" data-tone="ok"><i class="pill-dot"></i>Seimbang — debit = kredit</span>'
+          : `<span class="pill" data-tone="danger"><i class="pill-dot"></i>Tidak seimbang — selisih ${FMT.rp(Math.abs(dr - cr))}</span>`}
+      </div>`;
+  }
+
+  function journalDrawer(j) {
+    const pending = j.status === 'menunggu';
+    const p = DATA.periods.find((x) => !x.group && j.date >= x.from && j.date <= x.to);
+    return {
+      eyebrow: `<span class="code">${esc(j.id)}</span>${pill(j.status)}${branchTag(j.branch)}`,
+      title: esc(j.desc),
+      subtitle: `${FMT.date(j.date)} · ${esc(SOURCE_LABEL[j.source] || j.source)} · dibuat oleh ${esc(j.by)}${p && p.closed ? ' · periode ditutup' : ''}`,
+      body: `
+        ${pending ? `
+          <div class="section" style="background:var(--warn-soft);border-bottom:1px solid var(--warn-line)">
+            <div style="display:flex;gap:var(--sp-3);align-items:flex-start">
+              <span class="wl-icon" data-tone="warn">${icon('alert')}</span>
+              <div class="setting-text">
+                <span class="setting-name">Menunggu persetujuan</span>
+                <span class="setting-note">Jurnal memorial manual belum memengaruhi buku besar sampai diposting oleh akuntan berwenang.</span>
+              </div>
+            </div>
+          </div>` : ''}
+        ${j.status === 'ditolak' ? `
+          <div class="section" style="background:var(--danger-soft);border-bottom:1px solid var(--danger-line)">
+            <span class="setting-note">Jurnal ini ditolak dan tidak diposting. Buat jurnal baru bila koreksi masih diperlukan.</span>
+          </div>` : ''}
+        <div class="section">
+          <span class="section-title">Rincian jurnal</span>
+          <dl class="deflist">
+            <dt>Tanggal</dt><dd class="num">${FMT.date(j.date)}</dd>
+            <dt>Cabang</dt><dd>${esc(branchName(j.branch))}</dd>
+            <dt>Sumber</dt><dd>${esc(SOURCE_LABEL[j.source] || j.source)}</dd>
+            <dt>Referensi</dt><dd class="code">${esc(j.ref || '—')}</dd>
+            <dt>Nilai</dt><dd class="num">${FMT.rp(j.total)}</dd>
+          </dl>
+        </div>
+        <div class="section">
+          <span class="section-title">Baris jurnal (${j.lines.length})</span>
+          ${linesTable(j.lines)}
+        </div>
+        ${j.ref && j.source !== 'manual' && j.source !== 'saldo-awal' ? `
+        <div class="section">
+          <span class="section-title">Dokumen sumber</span>
+          <div class="worklist">
+            <button class="worklist-item" data-open-ref="${esc(j.ref)}" data-source="${esc(j.source)}">
+              <span class="wl-icon" data-tone="info">${icon('external')}</span>
+              <span class="worklist-body">
+                <span class="worklist-title">${esc(j.ref)}</span>
+                <span class="worklist-meta">Buka dokumen asal di modul ${esc(SOURCE_LABEL[j.source] || j.source)}</span>
+              </span>
+              <span class="worklist-side">${icon('chevron-right')}</span>
+            </button>
+          </div>
+        </div>` : ''}`,
+      foot: pending
+        ? `<button class="btn btn-primary" data-action="post-journal" data-id="${esc(j.id)}">${icon('check')} Posting</button>
+           <button class="btn btn-danger" data-action="reject-journal" data-id="${esc(j.id)}">${icon('x')} Tolak</button>
+           <div class="toolbar-spacer"></div>
+           <button class="btn btn-ghost" data-close>Tutup</button>`
+        : `<button class="btn" data-action="demo">${icon('print')} Cetak</button>
+           <button class="btn" data-gl="${esc(j.lines[0] ? j.lines[0].account : '1-1100')}">${icon('book')} Kartu buku besar</button>
+           <div class="toolbar-spacer"></div>
+           <button class="btn btn-ghost" data-close>Tutup</button>`,
+    };
+  }
+
+  function relatedJournalsSection(ref) {
+    const list = Ledger.byRef(ref);
+    if (!list.length) return '';
+    return `
+      <div class="section">
+        <span class="section-title">Jurnal buku besar (${list.length})</span>
+        <div class="worklist">
+          ${list.map((j) => `
+            <button class="worklist-item" data-journal="${esc(j.id)}">
+              <span class="wl-icon" data-tone="${j.status === 'diposting' ? 'ok' : 'warn'}">${icon('ledger')}</span>
+              <span class="worklist-body">
+                <span class="worklist-title">${esc(j.desc)}</span>
+                <span class="worklist-meta"><span class="code">${esc(j.id)}</span><span>${FMT.date(j.date)} · ${esc(STATUS[j.status]?.label || j.status)}</span></span>
+              </span>
+              <span class="worklist-side"><b class="num">${FMT.rpCompact(j.total)}</b>${icon('chevron-right')}</span>
+            </button>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  function openSourceDoc(ref, source) {
+    const firstRef = String(ref).split(', ')[0];
+    const tryOpen = (view, rows, key = 'id') => {
+      const row = rows.find((r) => r[key] === firstRef);
+      if (!row) return false;
+      setView(view);
+      openDrawer(view === 'pesanan-penjualan' ? salesOrderDrawer(row) : genericDrawer(REGISTERS[view], row));
+      return true;
+    };
+    if (tryOpen('faktur', DATA.invoices)) return;
+    if (tryOpen('hutang', DATA.payables)) return;
+    if (tryOpen('mutasi', DATA.stockMoves)) return;
+    if (tryOpen('pemeliharaan', DATA.maintenanceOrders)) return;
+    if (tryOpen('pesanan-penjualan', DATA.salesOrders)) return;
+    setView(SOURCE_VIEW[source] || 'jurnal');
+    toast('Dokumen sumber', `${firstRef} — dibuka modul ${SOURCE_LABEL[source] || source}.`, 'accent');
+  }
+
+  const JV_LINES = 5;
+  function openNewJournalModal() {
+    state.lastFocus = document.activeElement;
+    state.overlay = { kind: 'modal' };
+    const detail = DATA.chartOfAccounts.filter((a) => a.type === 'Detail' && !a.computed);
+    const cats = [...new Set(detail.map((a) => a.category))];
+    const options = `<option value="">— pilih akun —</option>` + cats.map((c) => `<optgroup label="${esc(c)}">${detail.filter((a) => a.category === c).map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</optgroup>`).join('');
+    const defaultBranch = state.ctx.branch === 'ALL' ? activeBranches()[0].id : state.ctx.branch;
+    const bankOptions = `<option value="">— rekening (wajib untuk 1-1100) —</option>` + activeBranches().map((b) =>
+      `<optgroup label="${esc(b.short)}">${DATA.bankAccounts.filter((k) => k.branch === b.id && k.currency === 'IDR').map((k) => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('')}</optgroup>`).join('');
+    const lineRow = (i) => `
+      <tr data-jv-line="${i}">
+        <td>
+          <select class="select" data-jv-acc aria-label="Akun baris ${i + 1}">${options}</select>
+          <select class="select" data-jv-bank aria-label="Rekening kas/bank baris ${i + 1}" hidden style="margin-top:4px">${bankOptions}</select>
+        </td>
+        <td><input class="input input-num" data-jv-debit type="number" min="0" step="1000" placeholder="0" aria-label="Debit baris ${i + 1}"></td>
+        <td><input class="input input-num" data-jv-credit type="number" min="0" step="1000" placeholder="0" aria-label="Kredit baris ${i + 1}"></td>
+      </tr>`;
+
+    overlays().innerHTML = `
+      <div class="scrim" data-close></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="jv-title">
+        <header class="modal-head">
+          <div style="flex:1 1 auto">
+            <h2 class="modal-title" id="jv-title">Jurnal memorial baru</h2>
+            <span class="card-note">Jurnal berpasangan: total debit harus sama dengan total kredit. Hanya akun detail yang dapat dipilih.</span>
+          </div>
+          <button class="btn btn-icon btn-ghost" data-close aria-label="Tutup">${icon('x')}</button>
+        </header>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="field"><label for="jv-date">Tanggal</label><input class="input num" id="jv-date" type="date" value="${Ledger.TODAY}"></div>
+            <div class="field">
+              <label for="jv-branch">Cabang</label>
+              <select class="select" id="jv-branch">${activeBranches().map((b) => `<option value="${esc(b.id)}" ${b.id === defaultBranch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
+            </div>
+            <div class="field form-grid-full"><label for="jv-desc">Keterangan</label><input class="input" id="jv-desc" placeholder="Mis. Reklasifikasi beban sewa Agu 2026"></div>
+            <div class="field"><label for="jv-ref">Referensi dokumen</label><input class="input code" id="jv-ref" placeholder="Opsional"></div>
+            <div class="field form-grid-full">
+              <label>Baris jurnal</label>
+              <div class="lines">
+                <div class="table-scroll">
+                  <table class="table jv-lines">
+                    <thead><tr><th>Akun</th><th class="ta-r" style="width:160px">Debit</th><th class="ta-r" style="width:160px">Kredit</th></tr></thead>
+                    <tbody id="jv-body">${Array.from({ length: JV_LINES }, (_, i) => lineRow(i)).join('')}</tbody>
+                  </table>
+                </div>
+              </div>
+              <button class="btn btn-sm" data-action="jv-add-line" style="align-self:flex-start">${icon('plus')} Tambah baris</button>
+            </div>
+            <div class="field form-grid-full">
+              <div class="totals">
+                <div class="totals-row"><span>Total debit</span><b class="num" data-jv-total-debit>Rp 0</b></div>
+                <div class="totals-row"><span>Total kredit</span><b class="num" data-jv-total-credit>Rp 0</b></div>
+                <div class="totals-row totals-grand"><span>Selisih</span><b class="num" data-jv-diff>Rp 0</b></div>
+              </div>
+              <div class="field-hint" data-jv-errors role="alert"></div>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn btn-primary" data-action="submit-journal" data-mode="diposting">${icon('check')} Simpan &amp; posting</button>
+          <button class="btn" data-action="submit-journal" data-mode="menunggu">Kirim untuk persetujuan</button>
+          <div class="toolbar-spacer"></div>
+          <button class="btn btn-ghost" data-close>Batal</button>
+        </footer>
+      </div>`;
+    $('#jv-desc').focus();
+  }
+
+  function jvAddLine() {
+    const body = $('#jv-body');
+    if (!body) return;
+    const i = body.children.length;
+    const tpl = body.firstElementChild.cloneNode(true);
+    tpl.dataset.jvLine = i;
+    $$('input', tpl).forEach((el) => { el.value = ''; });
+    $$('select', tpl).forEach((el) => { el.value = ''; });
+    $('[data-jv-bank]', tpl).hidden = true;
+    body.appendChild(tpl);
+  }
+
+  function jvCollect() {
+    return {
+      date: $('#jv-date').value,
+      branch: $('#jv-branch').value,
+      desc: $('#jv-desc').value.trim(),
+      ref: $('#jv-ref').value.trim() || null,
+      lines: $$('#jv-body tr').map((tr) => ({
+        account: $('[data-jv-acc]', tr).value,
+        bank: $('[data-jv-acc]', tr).value === '1-1100' ? ($('[data-jv-bank]', tr).value || null) : undefined,
+        debit: Number($('[data-jv-debit]', tr).value) || 0,
+        credit: Number($('[data-jv-credit]', tr).value) || 0,
+      })).filter((l) => l.account || l.debit || l.credit),
+    };
+  }
+
+  function jvRefreshTotals() {
+    if (!$('#jv-body')) return;
+    const j = jvCollect();
+    const dr = j.lines.reduce((s, l) => s + l.debit, 0), cr = j.lines.reduce((s, l) => s + l.credit, 0);
+    $('[data-jv-total-debit]').textContent = FMT.rp(dr);
+    $('[data-jv-total-credit]').textContent = FMT.rp(cr);
+    const diff = $('[data-jv-diff]');
+    diff.textContent = FMT.rp(Math.abs(dr - cr));
+    diff.className = Math.abs(dr - cr) < 1 ? 'num pos' : 'num neg';
+  }
+
+  function submitJournal(mode) {
+    const j = jvCollect();
+    const errs = Ledger.validate(j);
+    if (!j.desc) errs.unshift('Keterangan wajib diisi.');
+    const box = $('[data-jv-errors]');
+    if (errs.length) {
+      box.className = 'field-hint neg';
+      box.innerHTML = errs.map((e) => `• ${esc(e)}`).join('<br>');
+      return;
+    }
+    const nj = Ledger.addJournal({ ...j, status: mode });
+    closeOverlay();
+    setView('jurnal');
+    toast(mode === 'diposting' ? 'Jurnal diposting' : 'Jurnal dikirim untuk persetujuan',
+      `${nj.id} · ${branchShort(nj.branch)} · ${FMT.rpCompact(nj.total)}`, 'ok');
+  }
+
+  /* ====================================================================== */
+  /* Kepala laporan & tabel laporan bersama                                  */
+  /* ====================================================================== */
+  function reportHead(title, sub, actions = '') {
+    return `
+      <div class="page-head">
+        <div class="page-head-text">
+          <h1 class="page-title">${title}</h1>
+          <p class="page-sub">${sub}</p>
+        </div>
+        <div class="page-actions">
+          <span class="ctx-chip">${icon('map-pin')} ${esc(branchName(state.ctx.branch))}</span>
+          <span class="ctx-chip">${icon('calendar')} ${esc(periodLabel())}</span>
+          ${actions}
+          <button class="btn" data-action="demo">${icon('print')} Cetak</button>
+          <button class="btn" data-action="demo">${icon('download')} Ekspor</button>
+        </div>
+      </div>`;
+  }
+
+  function reportTiles(tiles) {
+    return `<div class="kpi-row" style="margin-bottom:var(--sp-4)">${tiles.map((t) => `
+      <div class="kpi-tile">
+        <span class="kpi-label">${esc(t.label)}</span>
+        <span class="kpi-value${t.tone ? ` ${t.tone}` : ''}">${t.value}</span>
+        ${t.foot ? `<span class="kpi-foot">${t.foot}</span>` : ''}
+      </div>`).join('')}</div>`;
+  }
+
+  /** Kolom laporan: satu cabang, atau per cabang + eliminasi + konsolidasi. */
+  function reportColumns(kind, forceAll) {
+    const scope = forceAll ? 'ALL' : state.ctx.branch;
+    const fn = kind === 'pl' ? Ledger.incomeStatement : Ledger.balanceSheet;
+    if (scope !== 'ALL') return { multi: false, cols: [{ id: scope, label: branchShort(scope), report: fn({ ...state.ctx, branch: scope }) }] };
+    const cols = activeBranches().map((b) => ({ id: b.id, label: b.short, report: fn({ ...state.ctx, branch: b.id }) }));
+    return { multi: true, cols, combined: fn({ ...state.ctx, branch: 'ALL' }) };
+  }
+
+  /* ====================================================================== */
+  /* Kartu buku besar                                                        */
+  /* ====================================================================== */
+  function renderGeneralLedger() {
+    const detail = DATA.chartOfAccounts.filter((a) => a.type === 'Detail' && !a.computed);
+    if (!detail.some((a) => a.code === state.gl.account)) state.gl.account = '1-1100';
+    const code = state.gl.account;
+    const bank = code === '1-1100' ? state.gl.bank : null;
+    const gl = Ledger.glCard(state.ctx, code, bank);
+    const acc = detail.find((a) => a.code === code);
+    const cats = [...new Set(detail.map((a) => a.category))];
+    const banks = DATA.bankAccounts.filter((b) => b.currency === 'IDR' && inScope(b));
+    const showBranch = state.ctx.branch === 'ALL';
+
+    const rows = gl.rows.map((l) => `
+      <tr data-journal="${esc(l.jid)}">
+        <td class="num">${FMT.date(l.date)}</td>
+        <td class="code">${esc(l.jid)}</td>
+        <td><span class="cell-strong">${esc(l.desc)}</span><span class="cell-sub">${esc(SOURCE_LABEL[l.source] || l.source)}${l.ref ? ` · ${esc(l.ref)}` : ''}</span></td>
+        ${showBranch ? `<td>${branchTag(l.branch)}</td>` : ''}
+        <td class="ta-r">${l.debit ? amt(l.debit) : '<span class="muted">—</span>'}</td>
+        <td class="ta-r">${l.credit ? amt(l.credit) : '<span class="muted">—</span>'}</td>
+        <td class="ta-r">${amt(l.balance, { zero: true })}</td>
+      </tr>`).join('');
+
+    return reportHead('Kartu Buku Besar',
+      'Mutasi setiap akun dengan saldo berjalan. Klik baris untuk membuka jurnal asalnya.',
+      `<button class="btn btn-primary" data-action="new-journal">${icon('plus')} Jurnal baru</button>`) + `
+      <article class="card">
+        <div class="toolbar" style="flex-wrap:wrap">
+          <div class="field" style="min-width:320px;flex:1 1 320px">
+            <label for="gl-account">Akun</label>
+            <select class="select" id="gl-account" data-gl-select>
+              ${cats.map((c) => `<optgroup label="${esc(c)}">${detail.filter((a) => a.category === c).map((a) => `<option value="${esc(a.code)}" ${a.code === code ? 'selected' : ''}>${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</optgroup>`).join('')}
+            </select>
+          </div>
+          ${code === '1-1100' ? `
+          <div class="field" style="min-width:240px">
+            <label for="gl-bank">Rekening</label>
+            <select class="select" id="gl-bank" data-gl-bank-select>
+              <option value="">Semua rekening</option>
+              ${banks.map((b) => `<option value="${esc(b.id)}" ${b.id === bank ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
+            </select>
+          </div>` : ''}
+          <div class="toolbar-spacer"></div>
+          <span class="pager-info">${FMT.int(gl.rows.length)} mutasi · ${esc(ctxNote())}</span>
+        </div>
+        ${reportTiles([
+          { label: 'Saldo awal', value: amtCompact(gl.opening), foot: `per ${FMT.date(periodOf().from)}` },
+          { label: 'Mutasi debit', value: amtCompact(gl.debit) },
+          { label: 'Mutasi kredit', value: amtCompact(gl.credit) },
+          { label: 'Saldo akhir', value: amtCompact(gl.ending), foot: `${Ledger.isDebitNormal(code) ? 'Saldo normal debit' : 'Saldo normal kredit'} · per ${FMT.date(periodOf().to)}` },
+        ])}
+        <div class="table-scroll">
+          <table class="table report">
+            <thead><tr><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th>${showBranch ? '<th>Cabang</th>' : ''}<th class="ta-r">Debit</th><th class="ta-r">Kredit</th><th class="ta-r">Saldo</th></tr></thead>
+            <tbody>
+              <tr class="report-subtotal"><td class="num">${FMT.date(periodOf().from)}</td><td></td><td>Saldo awal ${esc(acc ? acc.name : code)}</td>${showBranch ? '<td></td>' : ''}<td></td><td></td><td class="ta-r">${amt(gl.opening, { zero: true })}</td></tr>
+              ${rows || `<tr><td colspan="${showBranch ? 7 : 6}"><div class="empty"><div class="empty-card"><span class="empty-title">Tidak ada mutasi</span><span class="empty-note">Akun ini tidak bergerak pada ${esc(ctxNote())}.</span></div></div></td></tr>`}
+            </tbody>
+            <tfoot><tr class="report-total"><td colspan="${showBranch ? 4 : 3}">Total mutasi &amp; saldo akhir</td><td class="ta-r">${amt(gl.debit, { zero: true })}</td><td class="ta-r">${amt(gl.credit, { zero: true })}</td><td class="ta-r">${amt(gl.ending, { zero: true })}</td></tr></tfoot>
+          </table>
+        </div>
+      </article>`;
+  }
+
+  /* ====================================================================== */
+  /* Neraca saldo                                                            */
+  /* ====================================================================== */
+  function renderTrialBalance(forceAll) {
+    const scope = forceAll ? 'ALL' : state.ctx.branch;
+    const c = { ...state.ctx, branch: scope };
+    const perBranch = scope === 'ALL' && (forceAll || state.tbView === 'cabang');
+    const tb = Ledger.trialBalance(c);
+    const ok = Math.abs(tb.totals.endD - tb.totals.endK) < 1;
+    const cats = ['Aset', 'Liabilitas', 'Ekuitas', 'Pendapatan', 'Beban'];
+
+    let table;
+    if (!perBranch) {
+      const body = cats.map((cat) => {
+        const rows = tb.rows.filter((r) => r.category === cat);
+        if (!rows.length) return '';
+        return `<tr class="report-section"><td colspan="8">${esc(cat)}</td></tr>` + rows.map((r) => `
+          <tr data-gl="${esc(r.code)}">
+            <td class="code">${esc(r.code)}</td>
+            <td>${esc(r.name)}${r.interco ? ' <span class="micro">(antar kantor)</span>' : ''}</td>
+            <td class="ta-r">${amt(r.open.d)}</td><td class="ta-r">${amt(r.open.k)}</td>
+            <td class="ta-r">${amt(r.debit)}</td><td class="ta-r">${amt(r.credit)}</td>
+            <td class="ta-r">${amt(r.end.d)}</td><td class="ta-r">${amt(r.end.k)}</td>
+          </tr>`).join('');
+      }).join('');
+      table = `
+        <table class="table report">
+          <thead>
+            <tr><th rowspan="2">Kode</th><th rowspan="2">Nama akun</th><th colspan="2" class="ta-c">Saldo awal</th><th colspan="2" class="ta-c">Mutasi periode</th><th colspan="2" class="ta-c">Saldo akhir</th></tr>
+            <tr><th class="ta-r">Debit</th><th class="ta-r">Kredit</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th></tr>
+          </thead>
+          <tbody>${body}</tbody>
+          <tfoot><tr class="report-total"><td colspan="2">Total</td>
+            <td class="ta-r">${amt(tb.totals.openD, { zero: true })}</td><td class="ta-r">${amt(tb.totals.openK, { zero: true })}</td>
+            <td class="ta-r">${amt(tb.totals.debit, { zero: true })}</td><td class="ta-r">${amt(tb.totals.credit, { zero: true })}</td>
+            <td class="ta-r">${amt(tb.totals.endD, { zero: true })}</td><td class="ta-r">${amt(tb.totals.endK, { zero: true })}</td></tr></tfoot>
+        </table>`;
+    } else {
+      const branches = activeBranches();
+      const bal = branches.map((b) => Ledger.balances({ ...c, branch: b.id }));
+      const signed = (code, v) => (Ledger.isDebitNormal(code) ? v : -v); // + = debit, − = kredit
+      const rowsByCat = cats.map((cat) => {
+        const rows = tb.rows.filter((r) => r.category === cat);
+        if (!rows.length) return '';
+        return `<tr class="report-section"><td colspan="${branches.length + 4}">${esc(cat)}</td></tr>` + rows.map((r) => {
+          const vals = bal.map((bb) => signed(r.code, bb[r.code] ? bb[r.code].ending : 0));
+          const combined = vals.reduce((s, v) => s + v, 0);
+          const elim = r.interco ? -combined : 0;
+          return `<tr data-gl="${esc(r.code)}">
+            <td class="code">${esc(r.code)}</td>
+            <td>${esc(r.name)}${r.interco ? ' <span class="micro">(dieliminasi)</span>' : ''}</td>
+            ${vals.map((v) => `<td class="ta-r">${amt(v)}</td>`).join('')}
+            <td class="ta-r">${amt(elim)}</td>
+            <td class="ta-r">${amt(combined + elim)}</td>
+          </tr>`;
+        }).join('');
+      }).join('');
+      const sums = (f) => branches.map((b, i) => tb.rows.reduce((s, r) => s + f(signed(r.code, bal[i][r.code] ? bal[i][r.code].ending : 0)), 0));
+      const dSum = sums((v) => Math.max(v, 0)), kSum = sums((v) => Math.max(-v, 0));
+      const intercoSigned = tb.rows.filter((r) => r.interco).map((r) => bal.reduce((ss, bb) => ss + signed(r.code, bb[r.code] ? bb[r.code].ending : 0), 0));
+      const elimD = intercoSigned.reduce((s, v) => s + Math.max(v, 0), 0);
+      const elimK = intercoSigned.reduce((s, v) => s + Math.max(-v, 0), 0);
+      table = `
+        <table class="table report">
+          <thead><tr><th>Kode</th><th>Nama akun</th>${branches.map((b) => `<th class="ta-r">${esc(b.short)}</th>`).join('')}<th class="ta-r">Eliminasi</th><th class="ta-r">Konsolidasi</th></tr></thead>
+          <tbody>${rowsByCat}</tbody>
+          <tfoot>
+            <tr class="report-total"><td colspan="2">Total debit</td>${dSum.map((v) => `<td class="ta-r">${amt(v, { zero: true })}</td>`).join('')}<td class="ta-r">${amt(-elimD)}</td><td class="ta-r">${amt(tb.totals.endD - elimD, { zero: true })}</td></tr>
+            <tr class="report-total"><td colspan="2">Total kredit</td>${kSum.map((v) => `<td class="ta-r">${amt(v, { zero: true })}</td>`).join('')}<td class="ta-r">${amt(-elimK)}</td><td class="ta-r">${amt(tb.totals.endK - elimK, { zero: true })}</td></tr>
+          </tfoot>
+        </table>
+        <p class="card-note" style="padding:var(--sp-3)">Nilai positif = saldo debit, nilai dalam kurung = saldo kredit. Akun RK Cabang (kantor pusat) dan RK Kantor Pusat (cabang) saling dieliminasi sehingga tidak muncul pada kolom konsolidasi.</p>`;
+    }
+
+    const toggle = scope === 'ALL' && !forceAll ? `
+      <div class="segmented" role="group" aria-label="Tampilan neraca saldo">
+        <button data-tb-view="ringkas" aria-pressed="${state.tbView !== 'cabang'}">Gabungan</button>
+        <button data-tb-view="cabang" aria-pressed="${state.tbView === 'cabang'}">Per cabang</button>
+      </div>` : '';
+
+    const head = forceAll ? '' : reportHead('Neraca Saldo',
+      'Saldo awal, mutasi periode, dan saldo akhir seluruh akun detail — dasar penyusunan laba rugi dan neraca.',
+      `<button class="btn" data-nav="buku-besar">${icon('book')} Kartu buku besar</button>`);
+    return head + `
+      <article class="card">
+        <div class="toolbar">
+          ${toggle}
+          <div class="toolbar-spacer"></div>
+          ${ok ? '<span class="pill" data-tone="ok"><i class="pill-dot"></i>Seimbang — Σ debit = Σ kredit</span>' : `<span class="pill" data-tone="danger"><i class="pill-dot"></i>Tidak seimbang — selisih ${FMT.rp(Math.abs(tb.totals.endD - tb.totals.endK))}</span>`}
+          <span class="pager-info">${FMT.int(tb.rows.length)} akun · ${esc(forceAll ? `Semua cabang · ${periodLabel()}` : ctxNote())}</span>
+        </div>
+        <div class="table-scroll">${table}</div>
+      </article>`;
+  }
+
+  /* ====================================================================== */
+  /* Laba rugi                                                               */
+  /* ====================================================================== */
+  function plTable(forceAll) {
+    const { multi, cols, combined } = reportColumns('pl', forceAll);
+    const last = multi ? combined : cols[0].report;
+    const ncol = cols.length + (multi ? 1 : 1);
+    const cell = (v) => `<td class="ta-r">${amt(v)}</td>`;
+    const pctCell = (v) => `<td class="ta-r"><span class="num muted">${last.revenue ? FMT.pct((v / last.revenue) * 100) : '—'}</span></td>`;
+    const rowCells = (f) => cols.map((c) => cell(f(c.report))).join('') + (multi ? cell(f(combined)) : pctCell(f(last)));
+    const line = (label, f, cls = '', code) => `<tr class="${cls}" ${code ? `data-gl="${esc(code)}"` : ''}><td ${code ? 'class="report-indent"' : ''}>${code ? `<span class="code">${esc(code)}</span> ` : ''}${esc(label)}</td>${rowCells(f)}</tr>`;
+    const section = (label) => `<tr class="report-section"><td colspan="${ncol + 1}">${esc(label)}</td></tr>`;
+    const accountsOf = (gid) => {
+      const grp = Ledger.PL_GROUPS.find((g) => g.id === gid);
+      return grp.accounts.filter((code) => cols.some((c) => c.report.amounts[code]) || (multi && combined.amounts[code]));
+    };
+    const amountOf = (code, sign) => (r) => sign * (r.amounts[code] || 0);
+    const body =
+      section('Pendapatan') + accountsOf('pendapatan').map((code) => line(Ledger.acctName(code), amountOf(code, 1), '', code)).join('') +
+      line('Total pendapatan', (r) => r.revenue, 'report-subtotal') +
+      section('Harga pokok penjualan') + accountsOf('hpp').map((code) => line(Ledger.acctName(code), amountOf(code, -1), '', code)).join('') +
+      line('Laba kotor', (r) => r.gross, 'report-subtotal') +
+      section('Beban operasional') + accountsOf('opex').map((code) => line(Ledger.acctName(code), amountOf(code, -1), '', code)).join('') +
+      line('Total beban operasional', (r) => r.opex, 'report-subtotal') +
+      section('Beban umum & administrasi') + accountsOf('ga').map((code) => line(Ledger.acctName(code), amountOf(code, -1), '', code)).join('') +
+      line('Total beban umum & administrasi', (r) => r.ga, 'report-subtotal') +
+      line('Laba operasional', (r) => r.operating, 'report-subtotal') +
+      section('Pendapatan (beban) lain-lain') + accountsOf('lain').map((code) => line(Ledger.acctName(code), amountOf(code, 1), '', code)).join('') +
+      line('Laba (rugi) bersih', (r) => r.net, 'report-total');
+    return `
+      <table class="table report report-stmt">
+        <thead><tr><th>Keterangan</th>${cols.map((c) => `<th class="ta-r">${esc(c.label)}</th>`).join('')}<th class="ta-r">${multi ? 'Konsolidasi' : '% pendapatan'}</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      ${multi ? '<p class="card-note" style="padding:var(--sp-3)">Transfer barang antar cabang dicatat pada harga pokok melalui rekening koran antar kantor sehingga tidak menimbulkan pendapatan antar cabang; laba rugi konsolidasi adalah penjumlahan seluruh cabang.</p>' : ''}`;
+  }
+
+  function renderIncomeStatement() {
+    const pl = Ledger.incomeStatement(state.ctx);
+    return reportHead('Laporan Laba Rugi',
+      'Pendapatan, harga pokok, beban operasional, dan laba bersih periode berjalan — disusun dari neraca saldo.',
+      `<button class="btn" data-nav="neraca">${icon('columns')} Neraca</button>`) +
+      reportTiles([
+        { label: 'Pendapatan', value: amtCompact(pl.revenue) },
+        { label: 'Laba kotor', value: amtCompact(pl.gross), foot: `Margin ${FMT.pct(pl.grossMargin)}` },
+        { label: 'Laba operasional', value: amtCompact(pl.operating), tone: pl.operating < 0 ? 'neg' : '' },
+        { label: 'Laba bersih', value: amtCompact(pl.net), tone: pl.net < 0 ? 'neg' : 'pos', foot: `Margin bersih ${FMT.pct(pl.netMargin)}` },
+      ]) + `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text">
+          <h2 class="card-title">${esc(DATA.org.company)} — ${esc(branchName(state.ctx.branch))}</h2>
+          <span class="card-note">Periode ${esc(periodLabel())} (${FMT.date(periodOf().from)} s.d. ${FMT.date(periodOf().to)}) · dalam rupiah</span>
+        </div></div>
+        <div class="table-scroll">${plTable(false)}</div>
+      </article>`;
+  }
+
+  /* ====================================================================== */
+  /* Neraca                                                                  */
+  /* ====================================================================== */
+  function bsTable(forceAll) {
+    const { multi, cols, combined } = reportColumns('bs', forceAll);
+    const reports = multi ? [...cols.map((c) => c.report), combined] : [cols[0].report];
+    const ncol = reports.length + (multi ? 1 : 0);
+    const find = (r, list, code) => { const x = r[list].find((a) => a.code === code); return x ? x.amount : 0; };
+    const codes = (list, parent) => {
+      const set = new Set();
+      reports.forEach((r) => r[list].forEach((a) => { if (!parent || a.parent === parent) set.add(a.code); }));
+      return DATA.chartOfAccounts.filter((a) => set.has(a.code)).map((a) => a.code);
+    };
+    const isInterco = (code) => Ledger.INTERCO.has(code);
+    const rowCells = (f, code) => {
+      if (!multi) return `<td class="ta-r">${amt(f(cols[0].report))}</td>`;
+      const vals = cols.map((c) => f(c.report));
+      const comb = f(combined);
+      const elim = code && isInterco(code) ? -comb : (code ? 0 : null);
+      return vals.map((v) => `<td class="ta-r">${amt(v)}</td>`).join('') +
+        `<td class="ta-r">${elim === null ? '' : amt(elim)}</td><td class="ta-r">${amt(comb + (elim || 0))}</td>`;
+    };
+    const line = (label, f, cls = '', code) => `<tr class="${cls}" ${code ? `data-gl="${esc(code)}"` : ''}><td ${code ? 'class="report-indent"' : ''}>${code ? `<span class="code">${esc(code)}</span> ` : ''}${esc(label)}${code && isInterco(code) && multi ? ' <span class="micro">(dieliminasi)</span>' : ''}</td>${rowCells(f, code)}</tr>`;
+    const section = (label) => `<tr class="report-section"><td colspan="${ncol + 1}">${esc(label)}</td></tr>`;
+    const group = (list, parent, label, subtotalLabel) => {
+      const cs = codes(list, parent);
+      if (!cs.length) return '';
+      return section(label) + cs.map((code) => line(Ledger.acctName(code), (r) => find(r, list, code), '', code)).join('') +
+        line(subtotalLabel, (r) => cs.reduce((s, code) => s + find(r, list, code), 0), 'report-subtotal');
+    };
+    const elimAssets = (r) => r.assets.filter((a) => isInterco(a.code)).reduce((s, a) => s + a.amount, 0);
+    const elimEquity = (r) => r.equity.filter((a) => isInterco(a.code)).reduce((s, a) => s + a.amount, 0);
+    const totalRow = (label, f, elimF) => {
+      if (!multi) return `<tr class="report-total"><td>${esc(label)}</td><td class="ta-r">${amt(f(cols[0].report), { zero: true })}</td></tr>`;
+      const e = -elimF(combined);
+      return `<tr class="report-total"><td>${esc(label)}</td>${cols.map((c) => `<td class="ta-r">${amt(f(c.report), { zero: true })}</td>`).join('')}<td class="ta-r">${amt(e)}</td><td class="ta-r">${amt(f(combined) + e, { zero: true })}</td></tr>`;
+    };
+    const body =
+      group('assets', '1-1000', 'Aset lancar', 'Total aset lancar') +
+      group('assets', '1-2000', 'Aset tetap', 'Total aset tetap (neto)') +
+      group('assets', '1-3000', 'Rekening koran antar kantor', 'Total RK antar kantor') +
+      totalRow('TOTAL ASET', (r) => r.totalAssets, elimAssets) +
+      group('liabilities', '2-1000', 'Liabilitas jangka pendek', 'Total liabilitas jangka pendek') +
+      group('liabilities', '2-2000', 'Liabilitas jangka panjang', 'Total liabilitas jangka panjang') +
+      totalRow('TOTAL LIABILITAS', (r) => r.totalLiab, () => 0) +
+      section('Ekuitas') +
+      codes('equity').map((code) => line(Ledger.acctName(code), (r) => find(r, 'equity', code), '', code)).join('') +
+      line('Laba (rugi) periode berjalan', (r) => r.profit, '') +
+      totalRow('TOTAL EKUITAS', (r) => r.totalEquity, elimEquity) +
+      totalRow('TOTAL LIABILITAS & EKUITAS', (r) => r.totalLiabEquity, elimEquity);
+    return `
+      <table class="table report report-stmt">
+        <thead><tr><th>Keterangan</th>${cols.map((c) => `<th class="ta-r">${esc(c.label)}</th>`).join('')}${multi ? '<th class="ta-r">Eliminasi</th><th class="ta-r">Konsolidasi</th>' : ''}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      ${multi ? '<p class="card-note" style="padding:var(--sp-3)">Eliminasi: RK Cabang pada buku kantor pusat dihapus terhadap RK Kantor Pusat pada buku tiap cabang. Setelah eliminasi, total aset konsolidasi sama dengan total liabilitas &amp; ekuitas konsolidasi.</p>' : ''}`;
+  }
+
+  function renderBalanceSheet() {
+    const bs = Ledger.balanceSheet(state.ctx);
+    return reportHead('Neraca',
+      'Posisi keuangan pada akhir periode: aset, liabilitas, dan ekuitas termasuk laba periode berjalan.',
+      `<button class="btn" data-nav="laba-rugi">${icon('trending')} Laba rugi</button>`) +
+      reportTiles([
+        { label: 'Total aset', value: amtCompact(bs.totalAssets), foot: `Lancar ${FMT.rpCompact(bs.currentAssets)} · tetap ${FMT.rpCompact(bs.fixedAssets)}` },
+        { label: 'Total liabilitas', value: amtCompact(bs.totalLiab) },
+        { label: 'Total ekuitas', value: amtCompact(bs.totalEquity), foot: `Termasuk laba berjalan ${FMT.rpCompact(bs.profit)}` },
+        { label: 'Keseimbangan', value: bs.balanced ? '<span class="pill" data-tone="ok"><i class="pill-dot"></i>Aset = Liabilitas + Ekuitas</span>' : `<span class="pill" data-tone="danger"><i class="pill-dot"></i>Selisih ${FMT.rpCompact(bs.totalAssets - bs.totalLiabEquity)}</span>`, foot: `per ${FMT.date(bs.asOf)}` },
+      ]) + `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text">
+          <h2 class="card-title">${esc(DATA.org.company)} — ${esc(branchName(state.ctx.branch))}</h2>
+          <span class="card-note">Per ${FMT.date(bs.asOf)} · dalam rupiah · laba periode berjalan dihitung sejak ${FMT.date(Ledger.FISCAL_START)}</span>
+        </div></div>
+        <div class="table-scroll">${bsTable(false)}</div>
+      </article>`;
+  }
+
+  /* ====================================================================== */
+  /* Laporan konsolidasi                                                     */
+  /* ====================================================================== */
+  function renderConsolidation() {
+    const tab = state.consTab || 'laba-rugi';
+    const branches = activeBranches();
+    const kpis = branches.map((b) => ({ b, k: Ledger.branchKpis(b.id, state.ctx.period) }));
+    const all = Ledger.branchKpis('ALL', state.ctx.period);
+    const bs = Ledger.balanceSheet({ ...state.ctx, branch: 'ALL' });
+    const elim = bs.assets.filter((a) => Ledger.INTERCO.has(a.code)).reduce((s, a) => s + a.amount, 0);
+
+    const contribution = `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text">
+          <h2 class="card-title">Kontribusi per cabang</h2>
+          <span class="card-note">Periode ${esc(periodLabel())} · klik cabang untuk membatasi seluruh aplikasi ke cabang tersebut</span>
+        </div></div>
+        <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba kotor</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th><th class="ta-r">Kas</th><th class="ta-r">Total aset</th><th></th></tr></thead>
+            <tbody>
+              ${kpis.map(({ b, k }) => `
+                <tr>
+                  <td><span class="cell-strong">${esc(b.name)}</span><span class="cell-sub">${esc(b.type)}</span></td>
+                  <td class="ta-r">${amt(k.revenue)}</td><td class="ta-r">${amt(k.gross)}</td><td class="ta-r">${amt(k.net)}</td>
+                  <td class="ta-r"><span class="num ${k.net < 0 ? 'neg' : ''}">${FMT.pct(k.netMargin)}</span></td>
+                  <td class="ta-r">${amt(k.cash)}</td><td class="ta-r">${amt(k.totalAssets)}</td>
+                  <td class="ta-r"><button class="btn btn-sm" data-set-branch="${esc(b.id)}">Pilih</button></td>
+                </tr>`).join('')}
+            </tbody>
+            <tfoot><tr class="report-total"><td>Konsolidasi (setelah eliminasi)</td><td class="ta-r">${amt(all.revenue, { zero: true })}</td><td class="ta-r">${amt(all.gross, { zero: true })}</td><td class="ta-r">${amt(all.net, { zero: true })}</td><td class="ta-r"><span class="num">${FMT.pct(all.netMargin)}</span></td><td class="ta-r">${amt(all.cash, { zero: true })}</td><td class="ta-r">${amt(all.totalAssets - elim, { zero: true })}</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      </article>`;
+
+    const tabs = `
+      <div class="tab-bar" style="margin:var(--sp-4) 0">
+        <button class="tab-btn${tab === 'laba-rugi' ? ' active' : ''}" data-cons-tab="laba-rugi">${icon('trending')} Laba rugi konsolidasi</button>
+        <button class="tab-btn${tab === 'neraca' ? ' active' : ''}" data-cons-tab="neraca">${icon('columns')} Neraca konsolidasi</button>
+        <button class="tab-btn${tab === 'neraca-saldo' ? ' active' : ''}" data-cons-tab="neraca-saldo">${icon('scale')} Neraca saldo per cabang</button>
+      </div>`;
+    const report = tab === 'neraca' ? `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text"><h2 class="card-title">Neraca konsolidasi — per ${FMT.date(periodOf().to)}</h2><span class="card-note">Kolom per cabang, eliminasi RK antar kantor, dan hasil konsolidasi · dalam rupiah</span></div></div>
+        <div class="table-scroll">${bsTable(true)}</div>
+      </article>` : tab === 'neraca-saldo' ? renderTrialBalance(true) : `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text"><h2 class="card-title">Laba rugi konsolidasi — ${esc(periodLabel())}</h2><span class="card-note">Kolom per cabang dan penjumlahan konsolidasi · dalam rupiah</span></div></div>
+        <div class="table-scroll">${plTable(true)}</div>
+      </article>`;
+
+    return reportHead('Laporan Konsolidasi',
+      `Gabungan ${branches.length} cabang ${esc(DATA.org.company)} dengan eliminasi rekening koran antar kantor.`) +
+      reportTiles([
+        { label: 'Pendapatan konsolidasi', value: amtCompact(all.revenue) },
+        { label: 'Laba bersih konsolidasi', value: amtCompact(all.net), tone: all.net < 0 ? 'neg' : 'pos', foot: `Margin ${FMT.pct(all.netMargin)}` },
+        { label: 'Total aset konsolidasi', value: amtCompact(bs.totalAssets - elim), foot: `per ${FMT.date(bs.asOf)}` },
+        { label: 'Eliminasi RK antar kantor', value: amtCompact(elim), foot: 'RK Cabang ↔ RK Kantor Pusat' },
+      ]) + contribution + tabs + report;
+  }
+
+  /* ====================================================================== */
+  /* Integrasi antar modul & rekonsiliasi                                    */
+  /* ====================================================================== */
+  const POSTING_MAP = [
+    { module: 'Penjualan', view: 'faktur', trigger: 'Faktur terbit / penerimaan pelanggan', journal: 'Piutang, pendapatan, PPN keluaran, HPP; kas & piutang saat dibayar', accounts: '1-1200 · 4-1000 · 2-1400 · 5-1000 · 1-1500 · 1-1100' },
+    { module: 'POS / Kasir', view: 'kasir', trigger: 'Tutup shift / rekap harian', journal: 'Kas, pendapatan, PPN keluaran, HPP', accounts: '1-1100 · 4-1000 · 2-1400 · 5-1000 · 1-1500' },
+    { module: 'Pembelian', view: 'hutang', trigger: 'Tagihan pemasok / pembayaran', journal: 'Persediaan atau beban, PPN masukan, utang usaha; utang & kas saat dibayar', accounts: '1-1400 · 1-1700 · 2-1100 · 1-1100' },
+    { module: 'Persediaan', view: 'mutasi', trigger: 'Pemakaian produksi, hasil produksi, opname, transfer', journal: 'Bahan baku → WIP → barang jadi; selisih opname; RK antar kantor untuk transfer', accounts: '1-1400 · 1-1450 · 1-1500 · 5-1900 · 3-1500' },
+    { module: 'Produksi', view: 'perintah-kerja', trigger: 'Perintah kerja selesai', journal: 'Barang dalam proses ke barang jadi', accounts: '1-1450 · 1-1500' },
+    { module: 'Penggajian', view: 'penggajian', trigger: 'Slip gaji diproses / dibayar', journal: 'Beban gaji & TKL, utang pajak, utang gaji; pembayaran terpusat lewat RK', accounts: '5-2100 · 5-2200 · 2-1300 · 2-1200 · 1-3100' },
+    { module: 'Aset tetap', view: 'aset', trigger: 'Tutup bulan', journal: 'Beban penyusutan & akumulasi penyusutan per cabang', accounts: '5-3200 · 1-2900' },
+    { module: 'Pemeliharaan', view: 'pemeliharaan', trigger: 'Order pemeliharaan selesai', journal: 'Beban pemeliharaan dari kas kecil cabang', accounts: '5-3400 · 1-1100' },
+    { module: 'Kas & Bank', view: 'kas-bank', trigger: 'Beban rutin, angsuran, setoran cabang', journal: 'Beban operasional, utang bank, RK antar kantor', accounts: '5-3xxx · 2-2100 · 1-3100 · 3-1500' },
+    { module: 'Pajak', view: 'kepatuhan', trigger: 'Setoran masa bulanan', journal: 'PPN keluaran dikurangi PPN masukan & PPh disetor lewat kantor pusat', accounts: '2-1400 · 1-1700 · 2-1300 · 1-1100' },
+  ];
+
+  function renderIntegration() {
+    const checks = Ledger.checks(state.ctx);
+    const okCount = checks.filter((c) => c.ok).length;
+    const summary = Ledger.postingSummary(state.ctx);
+    const pending = Ledger.all().filter((j) => j.status === 'menunggu' && inScope(j)).length;
+    const auto = summary.filter((s) => s.source !== 'manual').reduce((s, x) => s + x.count, 0);
+    const manual = summary.filter((s) => s.source === 'manual').reduce((s, x) => s + x.count, 0);
+    const fmtCheck = (c, v) => (c.count ? FMT.int(v) : FMT.rp(v));
+
+    return reportHead('Integrasi Antar Modul &amp; Rekonsiliasi',
+      'Setiap dokumen operasional diposting otomatis ke buku besar; sub-buku tiap modul dicocokkan dengan saldo akun kontrolnya.') +
+      reportTiles([
+        { label: 'Rekonsiliasi', value: `<span class="num ${okCount === checks.length ? 'pos' : 'neg'}">${okCount} / ${checks.length}</span>`, foot: okCount === checks.length ? 'Seluruh sub-buku cocok dengan buku besar' : 'Ada selisih yang perlu ditindaklanjuti' },
+        { label: 'Jurnal otomatis', value: `<span class="num">${FMT.int(auto)}</span>`, foot: `dari ${summary.filter((s) => s.source !== 'manual').length} modul sumber · ${esc(periodLabel())}` },
+        { label: 'Jurnal manual', value: `<span class="num">${FMT.int(manual)}</span>`, foot: 'memorial melalui alur persetujuan' },
+        { label: 'Menunggu posting', value: `<span class="num ${pending ? 'neg' : ''}">${FMT.int(pending)}</span>`, foot: pending ? 'Belum memengaruhi laporan keuangan' : 'Tidak ada antrean' },
+      ]) + `
+      <article class="card">
+        <div class="card-head"><div class="card-head-text">
+          <h2 class="card-title">Rekonsiliasi sub-buku terhadap buku besar</h2>
+          <span class="card-note">${esc(ctxNote())} · per ${FMT.date(periodOf().to)}</span>
+        </div></div>
+        <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>Pemeriksaan</th><th>Sumber sub-buku</th><th class="ta-r">Nilai sub-buku</th><th class="ta-r">Nilai buku besar</th><th class="ta-r">Selisih</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${checks.map((c) => `
+                <tr>
+                  <td><span class="cell-strong">${esc(c.label)}</span><span class="cell-sub">${esc(c.note)}</span></td>
+                  <td>${esc(c.source)}</td>
+                  <td class="ta-r num">${fmtCheck(c, c.sub)}</td>
+                  <td class="ta-r num">${fmtCheck(c, c.gl)}</td>
+                  <td class="ta-r"><span class="num ${c.ok ? 'muted' : 'neg'}">${c.ok ? '—' : fmtCheck(c, c.diff)}</span></td>
+                  <td>${c.ok ? '<span class="pill" data-tone="ok"><i class="pill-dot"></i>Cocok</span>' : '<span class="pill" data-tone="danger"><i class="pill-dot"></i>Selisih</span>'}</td>
+                  <td class="ta-r"><button class="btn btn-sm btn-ghost" data-nav="${esc(c.module)}">Buka</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <div class="grid grid-1-1">
+        <article class="card">
+          <div class="card-head"><div class="card-head-text">
+            <h2 class="card-title">Ringkasan posting per modul</h2>
+            <span class="card-note">Jurnal yang terbentuk pada ${esc(periodLabel())}</span>
+          </div></div>
+          <div class="table-scroll">
+            <table class="table">
+              <thead><tr><th>Modul sumber</th><th class="ta-r">Jurnal</th><th class="ta-r">Diposting</th><th class="ta-r">Menunggu</th><th class="ta-r">Nilai</th></tr></thead>
+              <tbody>
+                ${summary.sort((a, b) => b.amount - a.amount).map((s) => `
+                  <tr data-nav="jurnal">
+                    <td class="cell-strong">${esc(SOURCE_LABEL[s.source] || s.source)}</td>
+                    <td class="ta-r num">${FMT.int(s.count)}</td>
+                    <td class="ta-r num">${FMT.int(s.posted)}</td>
+                    <td class="ta-r"><span class="num ${s.pending ? 'neg' : 'muted'}">${s.pending ? FMT.int(s.pending) : '—'}</span></td>
+                    <td class="ta-r num">${FMT.rpCompact(s.amount)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div class="card-head-text">
+            <h2 class="card-title">Alur dokumen ke laporan</h2>
+            <span class="card-note">Semua modul bermuara pada empat laporan inti</span>
+          </div></div>
+          <div class="card-body">
+            <div class="flow">
+              <div class="flow-step"><span class="flow-num">1</span><div><b>Dokumen sumber</b><span class="card-note">Faktur, tagihan, slip gaji, mutasi stok, order pemeliharaan, shift POS</span></div></div>
+              <div class="flow-step"><span class="flow-num">2</span><div><b>Jurnal berpasangan</b><span class="card-note">Posting otomatis per cabang, Σ debit = Σ kredit; jurnal manual lewat persetujuan</span></div></div>
+              <div class="flow-step"><span class="flow-num">3</span><div><b>Kartu buku besar</b><span class="card-note">Mutasi & saldo berjalan per akun, per cabang atau gabungan</span></div></div>
+              <div class="flow-step"><span class="flow-num">4</span><div><b>Neraca saldo → Laba rugi → Neraca</b><span class="card-note">Konsolidasi dengan eliminasi RK Cabang ↔ RK Kantor Pusat</span></div></div>
+            </div>
+            <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
+              <button class="btn btn-sm" data-nav="jurnal">${icon('ledger')} Jurnal</button>
+              <button class="btn btn-sm" data-nav="buku-besar">${icon('book')} Buku besar</button>
+              <button class="btn btn-sm" data-nav="neraca-saldo">${icon('scale')} Neraca saldo</button>
+              <button class="btn btn-sm" data-nav="laba-rugi">${icon('trending')} Laba rugi</button>
+              <button class="btn btn-sm" data-nav="neraca">${icon('columns')} Neraca</button>
+              <button class="btn btn-sm" data-nav="konsolidasi">${icon('layers')} Konsolidasi</button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <article class="card">
+        <div class="card-head"><div class="card-head-text">
+          <h2 class="card-title">Peta posting antar modul</h2>
+          <span class="card-note">Aturan posting yang dijalankan mesin buku besar</span>
+        </div></div>
+        <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>Modul</th><th>Pemicu</th><th>Jurnal yang dibentuk</th><th>Akun</th><th></th></tr></thead>
+            <tbody>
+              ${POSTING_MAP.map((m) => `
+                <tr>
+                  <td class="cell-strong">${esc(m.module)}</td>
+                  <td>${esc(m.trigger)}</td>
+                  <td>${esc(m.journal)}</td>
+                  <td class="code">${esc(m.accounts)}</td>
+                  <td class="ta-r"><button class="btn btn-sm btn-ghost" data-nav="${esc(m.view)}">Buka</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </article>`;
+  }
+
+  /* ====================================================================== */
+  /* Manajemen cabang                                                        */
+  /* ====================================================================== */
+  function branchDrawer(b) {
+    const k = Ledger.branchKpis(b.id, state.ctx.period);
+    const banks = DATA.bankAccounts.filter((x) => x.branch === b.id);
+    const staff = DATA.employees.filter((e) => e.branch === b.id);
+    const assets = DATA.assets.filter((a) => a.branch === b.id && a.status === 'aktif');
+    return {
+      eyebrow: `<span class="code">${esc(b.id)}</span>${pill(b.status)}${b.id === Ledger.HO ? '<span class="pill" data-tone="accent"><i class="pill-dot"></i>Kantor pusat</span>' : ''}`,
+      title: esc(b.name),
+      subtitle: `${esc(b.type)} · ${esc(b.city)} · dibuka ${FMT.date(b.openedAt)}`,
+      body: `
+        <div class="section">
+          <span class="section-title">Profil cabang</span>
+          <dl class="deflist">
+            <dt>Alamat</dt><dd>${esc(b.address || '—')}</dd>
+            <dt>Kepala cabang</dt><dd>${esc(b.manager)}</dd>
+            <dt>Telepon</dt><dd class="num">${esc(b.phone || '—')}</dd>
+            <dt>Target bulanan</dt><dd class="num">${FMT.rp(b.targetMonthly)}</dd>
+            <dt>Porsi anggaran</dt><dd class="num">${FMT.pct(b.budgetShare * 100, 0)}</dd>
+          </dl>
+        </div>
+        <div class="section">
+          <span class="section-title">Kinerja ${esc(periodLabel())}</span>
+          <div class="totals">
+            <div class="totals-row"><span>Pendapatan</span><b>${FMT.rp(k.revenue)}</b></div>
+            <div class="totals-row"><span>Laba kotor</span><b>${FMT.rp(k.gross)} (${FMT.pct(k.grossMargin)})</b></div>
+            <div class="totals-row totals-grand"><span>Laba bersih</span><b class="${k.net < 0 ? 'neg' : ''}">${FMT.rp(k.net)}</b></div>
+            <div class="totals-row"><span>Kas &amp; bank</span><b>${FMT.rp(k.cash)}</b></div>
+            <div class="totals-row"><span>Piutang usaha</span><b>${FMT.rp(k.ar)}</b></div>
+            <div class="totals-row"><span>Hutang usaha</span><b>${FMT.rp(k.ap)}</b></div>
+            <div class="totals-row"><span>Persediaan</span><b>${FMT.rp(k.inventory)}</b></div>
+          </div>
+        </div>
+        <div class="section">
+          <span class="section-title">Rekening kas &amp; bank (${banks.length})</span>
+          <div class="worklist">
+            ${banks.map((x) => `
+              <button class="worklist-item" data-gl-bank="${esc(x.id)}">
+                <span class="wl-icon" data-tone="info">${icon('vault')}</span>
+                <span class="worklist-body"><span class="worklist-title">${esc(x.name)}</span><span class="worklist-meta"><span class="code">${esc(x.accountNo)}</span>${x.id === b.mainBank ? '<span>rekening utama</span>' : ''}${x.id === b.pettyCash ? '<span>kas kecil</span>' : ''}</span></span>
+                <span class="worklist-side"><b class="num">${x.currency === 'IDR' ? FMT.rpCompact(Ledger.bankBalance(x.id, periodOf().to)) : `USD ${FMT.int(x.opening)}`}</b></span>
+              </button>`).join('') || '<p class="card-note" style="padding:var(--sp-3)">Belum ada rekening.</p>'}
+          </div>
+        </div>
+        <div class="section">
+          <span class="section-title">Sumber daya</span>
+          <dl class="deflist">
+            <dt>Karyawan</dt><dd>${staff.length} orang${staff.length ? ` — ${esc(staff.map((e) => e.name.split(' ')[0]).join(', '))}` : ''}</dd>
+            <dt>Aset tetap aktif</dt><dd>${assets.length} unit · ${FMT.rpCompact(assets.reduce((s, a) => s + a.bookValue, 0))}</dd>
+            <dt>Gudang / toko</dt><dd>${[...new Set(DATA.stockItems.filter((s) => s.branch === b.id).map((s) => s.wh))].join(', ') || '—'}${DATA.posShifts.some((s) => s.branch === b.id) ? ' · POS aktif' : ''}</dd>
+          </dl>
+        </div>`,
+      foot: `
+        <button class="btn btn-primary" data-set-branch="${esc(b.id)}">${icon('map-pin')} Jadikan cabang aktif</button>
+        <button class="btn" data-nav-branch="laba-rugi|${esc(b.id)}">${icon('trending')} Laba rugi</button>
+        <div class="toolbar-spacer"></div>
+        ${b.id === Ledger.HO ? '' : `<button class="btn btn-ghost" data-action="toggle-branch" data-id="${esc(b.id)}">${b.status === 'nonaktif' ? 'Aktifkan' : 'Nonaktifkan'}</button>`}`,
+    };
+  }
+
+  function renderBranches() {
+    const branches = DATA.branches;
+    const all = Ledger.branchKpis('ALL', state.ctx.period);
+    const cards = branches.map((b) => {
+      const k = Ledger.branchKpis(b.id, state.ctx.period);
+      const months = Math.max(1, Math.round((Ledger.daysBetween(periodOf().from, periodOf().to) + 1) / 30));
+      const target = b.targetMonthly * months;
+      const ach = target ? (k.revenue / target) * 100 : 0;
+      return `
+        <article class="card branch-card" data-branch="${esc(b.id)}" style="cursor:pointer" data-current="${state.ctx.branch === b.id}">
+          <div style="display:flex;gap:var(--sp-2);align-items:flex-start">
+            <span class="wl-icon" data-tone="${b.status === 'nonaktif' ? '' : 'accent'}">${icon(b.id === Ledger.HO ? 'building' : 'map-pin')}</span>
+            <div style="flex:1;min-width:0">
+              <div class="cell-strong">${esc(b.name)}</div>
+              <div class="card-note">${esc(b.type)} · ${esc(b.city)} · ${esc(b.manager)}</div>
+            </div>
+            ${pill(b.status)}
+          </div>
+          <div class="branch-kpis">
+            <div class="branch-kpi"><span class="micro">Pendapatan</span><b class="num">${FMT.rpCompact(k.revenue)}</b></div>
+            <div class="branch-kpi"><span class="micro">Laba bersih</span><b class="num ${k.net < 0 ? 'neg' : ''}">${FMT.rpCompact(k.net)}</b></div>
+            <div class="branch-kpi"><span class="micro">Kas &amp; bank</span><b class="num">${FMT.rpCompact(k.cash)}</b></div>
+            <div class="branch-kpi"><span class="micro">Piutang</span><b class="num">${FMT.rpCompact(k.ar)}</b></div>
+            <div class="branch-kpi"><span class="micro">Persediaan</span><b class="num">${FMT.rpCompact(k.inventory)}</b></div>
+            <div class="branch-kpi"><span class="micro">Karyawan</span><b class="num">${k.employees}</b></div>
+          </div>
+          <div class="meter" style="min-width:0">
+            <span class="meter-track" style="height:6px"><span class="meter-fill"${ach < 70 ? ' data-tone="warn"' : ''} style="width:${Math.min(100, ach)}%"></span></span>
+            <span class="meter-val">${FMT.pct(ach, 0)} target</span>
+          </div>
+          <div style="display:flex;gap:var(--sp-2)">
+            <button class="btn btn-sm ${state.ctx.branch === b.id ? 'btn-primary' : ''}" data-set-branch="${esc(b.id)}">${state.ctx.branch === b.id ? icon('check') + ' Aktif' : 'Pilih'}</button>
+            <button class="btn btn-sm btn-ghost" data-nav-branch="laba-rugi|${esc(b.id)}">Laba rugi</button>
+            <button class="btn btn-sm btn-ghost" data-nav-branch="neraca|${esc(b.id)}">Neraca</button>
+          </div>
+        </article>`;
+    }).join('');
+
+    return reportHead('Manajemen Cabang',
+      'Setiap cabang berbuku sendiri (kas, piutang, persediaan, laba rugi) dan dikonsolidasikan melalui rekening koran antar kantor.',
+      `<button class="btn" data-nav="konsolidasi">${icon('layers')} Laporan konsolidasi</button>
+       <button class="btn btn-primary" data-action="new-branch">${icon('plus')} Tambah cabang</button>`) +
+      reportTiles([
+        { label: 'Cabang aktif', value: `<span class="num">${activeBranches().length}</span>`, foot: `${branches.length - activeBranches().length} nonaktif` },
+        { label: 'Pendapatan konsolidasi', value: amtCompact(all.revenue), foot: esc(periodLabel()) },
+        { label: 'Laba bersih konsolidasi', value: amtCompact(all.net), tone: all.net < 0 ? 'neg' : 'pos' },
+        { label: 'Cabang aktif di aplikasi', value: `<span>${esc(branchShort(state.ctx.branch))}</span>`, foot: 'ubah lewat strip konteks di atas' },
+      ]) +
+      `<div class="branch-grid">${cards}</div>`;
+  }
+
+  function openNewBranchModal() {
+    state.lastFocus = document.activeElement;
+    state.overlay = { kind: 'modal' };
+    overlays().innerHTML = `
+      <div class="scrim" data-close></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="br-title" style="max-width:640px">
+        <header class="modal-head">
+          <div style="flex:1 1 auto">
+            <h2 class="modal-title" id="br-title">Cabang baru</h2>
+            <span class="card-note">Cabang baru langsung mendapat buku besar sendiri, rekening giro, dan kas kecil dengan saldo awal nol.</span>
+          </div>
+          <button class="btn btn-icon btn-ghost" data-close aria-label="Tutup">${icon('x')}</button>
+        </header>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="field"><label for="br-id">Kode (3 huruf)</label><input class="input code" id="br-id" maxlength="3" placeholder="BDG" style="text-transform:uppercase"></div>
+            <div class="field"><label for="br-city">Kota</label><input class="input" id="br-city" placeholder="Bandung"></div>
+            <div class="field form-grid-full"><label for="br-name">Nama cabang</label><input class="input" id="br-name" placeholder="Bandung — Cabang"></div>
+            <div class="field">
+              <label for="br-type">Tipe</label>
+              <select class="select" id="br-type"><option>Cabang penjualan</option><option>Gudang distribusi</option><option>Pabrik & gudang utama</option><option>Toko ritel</option></select>
+            </div>
+            <div class="field">
+              <label for="br-manager">Kepala cabang</label>
+              <select class="select" id="br-manager">${DATA.employees.map((e) => `<option>${esc(e.name)}</option>`).join('')}</select>
+            </div>
+            <div class="field"><label for="br-target">Target pendapatan bulanan (Rp)</label><input class="input input-num" id="br-target" type="number" step="1000000" value="150000000"></div>
+            <div class="field"><label for="br-bank">Bank rekening utama</label><input class="input" id="br-bank" value="BCA"></div>
+            <div class="field form-grid-full"><label for="br-address">Alamat</label><input class="input" id="br-address" placeholder="Jalan, nomor, kota"></div>
+            <div class="field form-grid-full"><div class="field-hint" data-br-errors role="alert"></div></div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn btn-primary" data-action="submit-branch">${icon('check')} Simpan cabang</button>
+          <div class="toolbar-spacer"></div>
+          <button class="btn btn-ghost" data-close>Batal</button>
+        </footer>
+      </div>`;
+    $('#br-id').focus();
+  }
+
+  function submitBranch() {
+    const id = $('#br-id').value.trim().toUpperCase();
+    const name = $('#br-name').value.trim();
+    const city = $('#br-city').value.trim();
+    const errs = [];
+    if (!/^[A-Z]{3}$/.test(id)) errs.push('Kode cabang harus tepat 3 huruf.');
+    else if (DATA.branches.some((b) => b.id === id)) errs.push(`Kode ${id} sudah dipakai.`);
+    if (!name) errs.push('Nama cabang wajib diisi.');
+    if (!city) errs.push('Kota wajib diisi.');
+    const box = $('[data-br-errors]');
+    if (errs.length) { box.className = 'field-hint neg'; box.innerHTML = errs.map((e) => `• ${esc(e)}`).join('<br>'); return; }
+    const n = DATA.bankAccounts.length;
+    const giro = { id: `BNK-${String(100 + n + 1).padStart(3, '0')}`, name: `${$('#br-bank').value.trim() || 'Bank'} — Giro Cabang ${city}`, bank: $('#br-bank').value.trim() || 'Bank', accountNo: 'baru', currency: 'IDR', branch: id, opening: 0, lastRecon: Ledger.TODAY, unrecon: 0, status: 'aktif' };
+    const petty = { id: `BNK-${String(100 + n + 2).padStart(3, '0')}`, name: `Kas Kecil — ${city}`, bank: 'Kas', accountNo: '—', currency: 'IDR', branch: id, opening: 0, lastRecon: Ledger.TODAY, unrecon: 0, status: 'aktif' };
+    DATA.bankAccounts.push(giro, petty);
+    DATA.branches.push({
+      id, name, short: name.split(' — ')[0], type: $('#br-type').value, city, address: $('#br-address').value.trim(),
+      manager: $('#br-manager').value, phone: '—', openedAt: Ledger.TODAY, mainBank: giro.id, pettyCash: petty.id,
+      targetMonthly: Number($('#br-target').value) || 0, budgetShare: 0, status: 'aktif',
+    });
+    Ledger.invalidate();
+    closeOverlay();
+    setView('cabang');
+    toast('Cabang ditambahkan', `${id} · ${name} · buku besar, giro, dan kas kecil dibuat.`, 'ok');
+  }
+
+  /* ====================================================================== */
+  /* KPI dasbor & data turunan buku besar                                    */
+  /* ====================================================================== */
+  function monthIndexOfPeriod() {
+    const p = periodOf();
+    return p.group ? null : Number(p.to.slice(5, 7)) - 1;
+  }
+
+  function computeKpis() {
+    const c = state.ctx;
+    const pl = Ledger.incomeStatement(c);
+    const bs = Ledger.balanceSheet(c);
+    const monthly = Ledger.monthlyRevenue(c.branch);
+    const mi = monthIndexOfPeriod();
+    const prevRev = mi !== null && mi > 0 ? monthly[mi - 1] : 0;
+    const delta = (cur, prev) => (prev ? ((cur - prev) / Math.abs(prev)) * 100 : 0);
+    const months = Math.max(1, Math.round((Ledger.daysBetween(periodOf().from, periodOf().to) + 1) / 30));
+    const target = activeBranches().filter((b) => c.branch === 'ALL' || b.id === c.branch).reduce((s, b) => s + b.targetMonthly, 0) * months;
+    const cash = bs.assets.find((a) => a.code === '1-1100');
+    const overdue = DATA.invoices.filter((i) => inScope(i) && i.amount > i.paid && i.dueDate < Ledger.TODAY);
+    const overdueVal = overdue.reduce((s, i) => s + i.amount - i.paid, 0);
+    const prevMonthly = mi !== null && mi > 0 ? monthly[mi - 1] : null;
+    return [
+      { id: 'pendapatan', label: `Pendapatan (${periodLabel()})`, value: pl.revenue, format: 'rp-compact', delta: prevMonthly === null ? null : delta(pl.revenue, prevRev), dir: 'up', foot: `Target ${FMT.rpCompact(target)} · tercapai ${FMT.pct(target ? (pl.revenue / target) * 100 : 0, 0)}${periodOf().to > Ledger.TODAY ? ` · s.d. ${FMT.date(Ledger.TODAY)}` : ''}`, spark: monthly.map((v) => v / 1e9), basis: 'vs bulan lalu' },
+      { id: 'laba-kotor', label: 'Laba kotor', value: pl.gross, format: 'rp-compact', delta: null, dir: 'up', basis: `laba bersih ${FMT.rpCompact(pl.net)}`, foot: `Margin kotor ${FMT.pct(pl.grossMargin)} · margin bersih ${FMT.pct(pl.netMargin)}` },
+      { id: 'kas', label: 'Kas & bank', value: cash ? cash.amount : 0, format: 'rp-compact', delta: null, dir: 'up', basis: 'saldo buku besar 1-1100', foot: `Per ${FMT.date(periodOf().to)} · ${DATA.bankAccounts.filter((b) => inScope(b) && b.currency === 'IDR').length} rekening IDR` },
+      { id: 'piutang', label: 'Piutang jatuh tempo', value: overdueVal, format: 'rp-compact', delta: null, dir: 'down', basis: `per ${FMT.date(Ledger.TODAY)}`, foot: `${overdue.length} faktur lewat tempo · ${esc(branchShort(c.branch))}` },
+    ];
+  }
+
+  function inventoryMix() {
+    const map = {};
+    DATA.stockItems.filter(inScope).forEach((s) => { map[s.category] = (map[s.category] || 0) + s.onHand * s.cost; });
+    return Object.entries(map).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }
+
+  function revenueTrend() {
+    const c = state.ctx;
+    const actual = Ledger.monthlyRevenue(c.branch).map((v) => v / 1e9);
+    const target = activeBranches().filter((b) => c.branch === 'ALL' || b.id === c.branch).reduce((s, b) => s + b.targetMonthly, 0) / 1e9;
+    return { labels: Ledger.monthLabels(), actual, target: actual.map(() => target) };
+  }
+
+  const arAging = () => Ledger.aging('ar', state.ctx.branch);
+
   const viewExists = (id) => Boolean(REGISTERS[id]) ||
     ['dasbor', 'perintah-kerja', 'piutang', 'peran', 'pengaturan', 'sistem-desain',
      'lead', 'kasir', 'proyek', 'anggaran', 'persetujuan', 'kas-bank', 'rantai-pasok',
-     'analitik', 'bsc', 'bagan-akun'].includes(id);
+     'analitik', 'bsc', 'bagan-akun',
+     'buku-besar', 'neraca-saldo', 'laba-rugi', 'neraca', 'konsolidasi', 'integrasi', 'cabang'].includes(id);
 
   function renderView() {
     const id = state.view;
@@ -3231,6 +4432,13 @@
       case 'persetujuan': return renderApprovalInbox();
       case 'kas-bank': return renderCashBank();
       case 'rantai-pasok': return renderSupplyChain();
+      case 'buku-besar': return renderGeneralLedger();
+      case 'neraca-saldo': return renderTrialBalance(false);
+      case 'laba-rugi': return renderIncomeStatement();
+      case 'neraca': return renderBalanceSheet();
+      case 'konsolidasi': return renderConsolidation();
+      case 'integrasi': return renderIntegration();
+      case 'cabang': return renderBranches();
       default: return renderDashboard();
     }
   }
@@ -3255,10 +4463,11 @@
     if (state.view === 'analitik') mountAnalytics(root);
     if (state.view === 'piutang') {
       const node = $('[data-chart="aging-lg"]', root);
+      const ag = arAging();
       if (node) Charts.columnChart(node, {
         title: 'Umur piutang',
-        ariaLabel: 'Umur piutang per ember: ' + DATA.arAging.map((d) => `${d.label} ${FMT.rpCompact(d.value)}`).join(', '),
-        items: DATA.arAging,
+        ariaLabel: 'Umur piutang per ember: ' + ag.map((d) => `${d.label} ${FMT.rpCompact(d.value)}`).join(', '),
+        items: ag,
         height: 260,
       });
     }
@@ -3431,11 +4640,65 @@
       return;
     }
 
+    /* --- Konteks cabang & periode ------------------------------------------ */
+    const setBranch = t.closest('[data-set-branch]');
+    if (setBranch) {
+      state.ctx.branch = setBranch.dataset.setBranch;
+      saveCtx();
+      Object.values(state.reg).forEach((st) => { st.page = 1; st.selected.clear(); });
+      closeOverlay();
+      render();
+      toast('Cabang aktif diubah', `${branchName(state.ctx.branch)} — register, dasbor, dan laporan mengikuti konteks ini.`, 'ok');
+      return;
+    }
+    const setPeriod = t.closest('[data-set-period]');
+    if (setPeriod) {
+      state.ctx.period = setPeriod.dataset.setPeriod;
+      saveCtx();
+      closeOverlay();
+      render();
+      toast('Periode diubah', `${periodLabel()}${periodOf().closed ? ' · periode sudah ditutup (hanya baca)' : ''}`, 'ok');
+      return;
+    }
+    const navBranch = t.closest('[data-nav-branch]');
+    if (navBranch) {
+      const [view, branch] = navBranch.dataset.navBranch.split('|');
+      state.ctx.branch = branch; saveCtx(); closeOverlay(); setView(view);
+      return;
+    }
+
+    /* --- Jurnal, kartu buku besar, cabang ------------------------------------ */
+    const jv = t.closest('[data-journal]');
+    if (jv) {
+      const j = Ledger.all().find((x) => x.id === jv.dataset.journal);
+      if (j) { closeOverlay(); openDrawer(journalDrawer(j)); }
+      return;
+    }
+    const gl = t.closest('[data-gl]');
+    if (gl) { state.gl.account = gl.dataset.gl; state.gl.bank = null; closeOverlay(); setView('buku-besar'); return; }
+    const glBank = t.closest('[data-gl-bank]');
+    if (glBank) { state.gl.account = '1-1100'; state.gl.bank = glBank.dataset.glBank; closeOverlay(); setView('buku-besar'); return; }
+    const openRef = t.closest('[data-open-ref]');
+    if (openRef) { closeOverlay(); openSourceDoc(openRef.dataset.openRef, openRef.dataset.source); return; }
+    const tbv = t.closest('[data-tb-view]');
+    if (tbv) { state.tbView = tbv.dataset.tbView; render(); return; }
+    const ctab = t.closest('[data-cons-tab]');
+    if (ctab) { state.consTab = ctab.dataset.consTab; render(); return; }
+    const brCard = t.closest('[data-branch]');
+    if (brCard && !t.closest('button')) {
+      const b = branchOf(brCard.dataset.branch);
+      if (b) openDrawer(branchDrawer(b));
+      return;
+    }
+
     const approval = t.closest('[data-approval]');
     if (approval) {
-      const row = DATA.salesOrders.find((r) => r.id === approval.dataset.approval);
+      const id = approval.dataset.approval;
+      const row = DATA.salesOrders.find((r) => r.id === id);
+      const j = id.startsWith('JV-') ? Ledger.all().find((x) => x.id === id) : null;
       if (row) { setView('pesanan-penjualan'); openDrawer(salesOrderDrawer(row)); }
-      else toast('Belum tersedia di purwarupa', `Rekaman ${approval.dataset.approval} berada di modul lain.`, 'warn');
+      else if (j) { setView('jurnal'); openDrawer(journalDrawer(j)); }
+      else toast('Belum tersedia di purwarupa', `Rekaman ${id} berada di modul lain.`, 'warn');
       return;
     }
 
@@ -3520,7 +4783,9 @@
       if (tr) {
         const row = cfg.rows().find((r) => String(r[cfg.key]) === tr.dataset.row);
         if (!row) return;
-        openDrawer(state.view === 'pesanan-penjualan' ? salesOrderDrawer(row) : genericDrawer(cfg, row));
+        openDrawer(state.view === 'pesanan-penjualan' ? salesOrderDrawer(row)
+          : state.view === 'jurnal' ? journalDrawer(row)
+          : genericDrawer(cfg, row));
         return;
       }
     }
@@ -3545,10 +4810,10 @@
       case 'submit-so': {
         const mode = act.dataset.mode;
         const customer = $('#so-cust').value;
-        const next = `SO-2026-${String(422 + DATA.salesOrders.filter((r) => r.id > 'SO-2026-0421').length).padStart(4, '0')}`;
+        const next = `SO-2026-${String(424 + DATA.salesOrders.filter((r) => r.id > 'SO-2026-0423').length).padStart(4, '0')}`;
         const { total } = lineTotals(DATA.defaultLines);
         DATA.salesOrders.unshift({
-          id: next, date: $('#so-date').value || '2026-08-14', customer,
+          id: next, branch: $('#so-wh').value, date: $('#so-date').value || '2026-08-14', customer,
           pic: DATA.org.user.name, amount: Math.round(total),
           status: mode === 'draf' ? 'draf' : 'menunggu',
           due: $('#so-due').value || '2026-09-13', channel: $('#so-channel').value,
@@ -3608,9 +4873,46 @@
         toast('Pengaturan tersimpan', 'Kebijakan dokumen berlaku untuk semua cabang.', 'ok');
         break;
 
-      case 'switch-company': case 'switch-branch': case 'switch-period':
-        toast('Pemilih konteks', 'Pada purwarupa ini konteks perusahaan, cabang, dan periode belum dapat diganti.', 'warn');
+      case 'switch-company':
+        toast('Pemilih perusahaan', `Purwarupa ini memuat data satu entitas: ${DATA.org.company}. Entitas lain dalam grup memakai basis data terpisah.`, 'warn');
         break;
+      case 'switch-branch': openBranchMenu(act); break;
+      case 'switch-period': openPeriodMenu(act); break;
+
+      case 'new-journal': closeOverlay(); openNewJournalModal(); break;
+      case 'jv-add-line': jvAddLine(); break;
+      case 'submit-journal': submitJournal(act.dataset.mode); break;
+      case 'post-journal': {
+        const j = Ledger.setStatus(id, 'diposting');
+        if (j) {
+          DATA.approvals = DATA.approvals.filter((a) => a.id !== id);
+          closeOverlay(); render();
+          toast('Jurnal diposting', `${id} kini memengaruhi buku besar ${branchShort(j.branch)}.`, 'ok');
+        }
+        break;
+      }
+      case 'reject-journal': {
+        const j = Ledger.setStatus(id, 'ditolak');
+        if (j) {
+          DATA.approvals = DATA.approvals.filter((a) => a.id !== id);
+          closeOverlay(); render();
+          toast('Jurnal ditolak', `${id} dikembalikan ke pembuat dokumen.`, 'danger');
+        }
+        break;
+      }
+
+      case 'new-branch': closeOverlay(); openNewBranchModal(); break;
+      case 'submit-branch': submitBranch(); break;
+      case 'toggle-branch': {
+        const b = branchOf(id);
+        if (b) {
+          b.status = b.status === 'nonaktif' ? 'aktif' : 'nonaktif';
+          if (b.status === 'nonaktif' && state.ctx.branch === b.id) { state.ctx.branch = 'ALL'; saveCtx(); }
+          Ledger.invalidate(); closeOverlay(); render();
+          toast(b.status === 'nonaktif' ? 'Cabang dinonaktifkan' : 'Cabang diaktifkan', `${b.name} ${b.status === 'nonaktif' ? 'tidak lagi masuk laporan konsolidasi.' : 'kembali masuk laporan konsolidasi.'}`, 'ok');
+        }
+        break;
+      }
 
       case 'toggle-copilot':
         state.aiCopilotOpen = !state.aiCopilotOpen;
@@ -3687,7 +4989,18 @@
     }
   }
 
+  function onChange(ev) {
+    if (ev.target.matches('[data-jv-acc]')) {
+      const bank = $('[data-jv-bank]', ev.target.closest('tr'));
+      if (bank) bank.hidden = ev.target.value !== '1-1100';
+      return;
+    }
+    if (ev.target.matches('[data-gl-select]')) { state.gl.account = ev.target.value; state.gl.bank = null; render(); }
+    else if (ev.target.matches('[data-gl-bank-select]')) { state.gl.bank = ev.target.value || null; render(); }
+  }
+
   function onInput(ev) {
+    if (ev.target.closest('.jv-lines')) { jvRefreshTotals(); return; }
     if (ev.target.matches('[data-search]')) {
       const st = regState(state.view);
       st.q = ev.target.value;
@@ -3782,12 +5095,15 @@
 
   function start() {
     initTheme();
+    initCtx();
+    installBranchColumns();
     const hash = location.hash.replace('#/', '');
     state.view = viewExists(hash) ? hash : 'dasbor';
     render();
 
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
+    document.addEventListener('change', onChange);
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('dragstart', onDragStart);
     document.addEventListener('dragover', onDragOver);

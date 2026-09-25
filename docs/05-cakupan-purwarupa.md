@@ -99,15 +99,34 @@ mencoba.
 - Gantt chart inline per proyek (bilah tugas, persentase kemajuan)
 
 ### Keuangan
-- **Bagan Akun (COA)**: pohon hierarkis 47 akun dalam 5 kategori (Aset,
-  Liabilitas, Ekuitas, Pendapatan, Beban), kartu ringkasan per kategori
-- **Piutang Usaha**: KPI tiles + grafik ember umur piutang (4 ember) +
-  register faktur terbuka
-- **Hutang Usaha**: register 8 tagihan + ember umur + kecocokan PO
-- **Kas & Bank**: KPI tiles + register 6 rekening, multi-mata uang
-- **Jurnal Umum**: register 10 jurnal, saringan posting otomatis/manual
-- **Anggaran**: 2 tab — per pusat biaya (8 CC) dan per akun manajemen
-  (15 akun), masing-masing dengan KPI tiles + register + gauge realisasi
+- **Bagan Akun (COA)**: pohon hierarkis 57 akun dalam 5 kategori; saldo
+  dihitung dari buku besar per cabang/periode; klik akun → kartu buku besar
+- **Piutang Usaha**: ember umur piutang dihitung dari sub-buku faktur,
+  dicocokkan dengan saldo 1-1200
+- **Hutang Usaha**: register 11 tagihan bercap cabang; tagihan jasa diposting
+  ke akun beban, tagihan barang ke persediaan + PPN masukan
+- **Kas & Bank**: 11 rekening bercap cabang; saldo = saldo awal + jurnal kas;
+  klik rekening → kartu buku besar tersaring rekening
+- **Jurnal Umum**: ±550 jurnal berpasangan (otomatis + manual) dengan laci
+  baris debit/kredit, dokumen sumber, aksi posting/tolak, dan modal jurnal
+  memorial dengan validasi
+- **Anggaran**: realisasi per akun diambil dari buku besar TA 2026; anggaran
+  cabang = porsi anggaran perusahaan
+
+### Laporan keuangan
+- **Kartu Buku Besar**: pilih akun (dan rekening untuk 1-1100), saldo awal,
+  mutasi dengan saldo berjalan, klik baris → jurnal asal
+- **Neraca Saldo**: saldo awal / mutasi / saldo akhir D–K; mode per cabang
+  dengan kolom eliminasi & konsolidasi
+- **Laba Rugi** dan **Neraca**: per cabang (dengan % pendapatan) atau
+  konsolidasi (kolom per cabang · eliminasi · konsolidasi)
+- **Laporan Konsolidasi**: kontribusi per cabang + tiga laporan konsolidasi
+- **Integrasi & Rekonsiliasi**: 11 pemeriksaan sub-buku vs buku besar,
+  ringkasan posting per modul, peta aturan posting
+
+### Cabang
+- **Manajemen Cabang**: kartu KPI 4 cabang (pusat, pabrik, gudang, cabang
+  penjualan), laci profil & rekening, tambah cabang baru, nonaktifkan cabang
 
 ### SDM
 - **Karyawan**: register 12 karyawan, saringan departemen/status
@@ -145,7 +164,7 @@ mencoba.
 Butir-butir ini ada di arsitektur informasi dan alur, tetapi belum punya layar
 di purwarupa:
 
-- Laporan keuangan (neraca, laba rugi, arus kas)
+- Laporan arus kas (metode tidak langsung)
 - Bill of Materials dan perencanaan kebutuhan bahan
 - Manajemen gudang tingkat lokasi rak
 - Multi-mata uang dan penjabaran kurs
@@ -157,7 +176,9 @@ di purwarupa:
 | --- | --- |
 | **Data di memori** | Menyegarkan halaman mengembalikan keadaan awal. Purwarupa menguji desain, bukan ketahanan data. |
 | **Tanpa peladen & tanpa autentikasi** | Layar masuk tidak memengaruhi keputusan desain yang sedang diuji. |
-| **Pemilih konteks belum aktif** | Perusahaan, cabang, dan periode tampil sebagai kendali tetapi belum dapat diganti; menggantinya memerlukan set data lengkap per kombinasi. |
+| **Pemilih perusahaan belum aktif** | Cabang dan periode dapat diganti dan memengaruhi seluruh angka; pemilih perusahaan tetap informatif karena purwarupa memuat data satu entitas hukum. |
+| **Saldo awal hasil migrasi** | Saldo awal 1 Jan 2026 per cabang diturunkan dari sub-buku (bank, kartu stok, register aset) dan pos eksplisit; ekuitas cabang menjadi penyeimbang (RK Kantor Pusat). Ini meniru migrasi data, bukan pembukuan tahun sebelumnya. |
+| **Rekening valas tidak dikonsolidasi** | Giro USD ditampilkan apa adanya; penjabaran kurs berada di luar cakupan. |
 | **Baris barang di modal tidak dapat diubah** | Tabel baris sudah menunjukkan bentuk dan perhitungannya; penyuntingan sel adalah pekerjaan implementasi, bukan pekerjaan desain. |
 | **Ekspor, cetak, dan aksi massal** | Menjawab lewat toast "belum tersedia di purwarupa" — jujur, bukan diam atau tampak rusak. |
 | **Tanpa webfont** | Tumpukan muka sistem menghilangkan risiko kegagalan pemuatan; peran mono/sans yang dipasangkan sudah membawa kepribadian tipografinya. |
@@ -166,10 +187,13 @@ di purwarupa:
 
 `tools/smoke.mjs` menjalankan pemeriksaan berikut pada setiap build:
 
-- **37 layar** × 2 tema dibuka; galat konsol dan galat halaman ditangkap
+- **36 layar** × 2 tema dibuka; galat konsol dan galat halaman ditangkap
 - badan halaman tidak meluap menyamping pada 1440 px maupun 390 px
 - setiap layar menghasilkan konten (bukan kanvas kosong)
 - laci rekaman, palet perintah, modal, dan toast terbuka serta berfungsi
+- pemilih cabang mengubah konteks; neraca cabang seimbang; laci jurnal
+  menautkan ke kartu buku besar; jurnal memorial baru terposting; seluruh
+  rekonsiliasi sub-buku tetap cocok sesudahnya
 - tangkapan layar disimpan ke `dist/shots/` untuk ditinjau mata
 
 Palet kategorikal diverifikasi terpisah dengan validator palet — pita
@@ -183,5 +207,5 @@ terhadap permukaan — untuk kedua tema.
 2. Uji register stok di perangkat gudang yang sebenarnya, sambil berdiri.
 3. Terjemahkan token ke dalam kerangka kerja yang dipilih tim rekayasa;
    `tokens.css` sengaja dibuat agar dapat diekspor apa adanya.
-4. Rancang layar laporan keuangan — satu-satunya wilayah yang bentuknya belum
-   dapat diturunkan dari keempat arketipe yang ada.
+4. Tambahkan laporan arus kas dan tutup buku periode (penutupan akun nominal
+   ke laba ditahan) di atas mesin buku besar yang sudah ada.

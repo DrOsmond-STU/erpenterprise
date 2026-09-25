@@ -25,9 +25,40 @@ dikelompokkan menurut domain bisnis, sesuai pengelompokan navigasi.
 | `currency` | string | Mata uang utama (IDR) |
 | `user` | object | Pengguna masuk: `name`, `initials`, `role`, `email` |
 
-**Aturan bisnis:** Setiap transaksi dicap dengan `company`, `branch`, dan
-`period`. Pemilih konteks di strip kepala dokumen mengubah cakupan data
-yang ditampilkan.
+**Aturan bisnis:** Setiap dokumen transaksi dicap `branch`. Pemilih cabang dan
+periode di strip kepala dokumen mengubah cakupan register, dasbor, dan laporan.
+
+### `branches` — Cabang (unit pelaporan)
+
+| Bidang | Tipe | Keterangan |
+|--------|------|------------|
+| `id` | PK | Kode 3 huruf (`JKT`, `CKR`, `SBY`, `MDN`) |
+| `name`, `short` | string | Nama lengkap dan nama pendek |
+| `type`, `city`, `address`, `phone` | string | Profil |
+| `manager` | string | Kepala cabang |
+| `mainBank`, `pettyCash` | FK | → `bankAccounts.id` rekening utama & kas kecil |
+| `targetMonthly` | number | Target pendapatan bulanan (Rp) |
+| `budgetShare` | number | Porsi anggaran perusahaan |
+| `status` | enum | `aktif` \| `nonaktif` |
+
+`JKT` adalah kantor pusat: memegang akun `1-3100 RK Cabang`. Cabang lain
+memegang `3-1500 RK Kantor Pusat`. Keduanya dieliminasi saat konsolidasi.
+
+### `periods` — Periode akuntansi
+
+`id`, `label`, `from`, `to`, `closed` (periode terkunci menolak jurnal baru),
+`group` (Kuartal / Tahun). Bulan Jan–Agu 2026, Kuartal I–III, TA 2026.
+
+### Tabel pendukung buku besar
+
+| Tabel | Isi |
+|-------|-----|
+| `openingBalances` | Saldo awal eksplisit per cabang untuk pos tanpa sub-buku (tanah, bangunan, pinjaman, modal, dibayar di muka) |
+| `salesRecap` | Rekap bulanan per cabang: penjualan tunai, pembelian tunai, produksi (pabrik), setoran kas ke pusat |
+| `recurringExpenses` | Beban rutin bulanan per cabang (sewa, utilitas, pemasaran, bunga, …) |
+| `posSummary` | Rekap penjualan POS per toko per bulan |
+| `manualJournals` | Jurnal memorial buatan pengguna beserta status persetujuan |
+| `loanInstallment` | Angsuran pokok utang bank bulanan (kantor pusat) |
 
 ---
 
@@ -480,29 +511,47 @@ Dikunci per `projects.id`. Setiap tugas:
 | `type` | enum | `Header` \| `Detail` |
 | `category` | string | Aset \| Liabilitas \| Ekuitas \| Pendapatan \| Beban |
 | `level` | number | Kedalaman hierarki (0–2) |
-| `balance` | number | Saldo (Rp) |
 | `parent` | FK | → `chartOfAccounts.code` (null untuk root) |
 | `status` | enum | `aktif` \| `nonaktif` |
+| `interco` | boolean | Akun antar kantor yang dieliminasi (`1-3100`, `3-1500`) |
+| `contra` | boolean | Akun kontra (akumulasi penyusutan) |
+| `computed` | boolean | Laba periode berjalan — dihitung, tidak dijurnal |
 
-**Struktur:** 5 kategori utama, 47 akun (15 header + 32 detail).
+Saldo tidak disimpan; dihitung `Ledger.balances({branch, period})`.
+
+**Struktur:** 5 kategori utama, 57 akun (17 header + 40 detail).
 Hierarki: kategori (level 0) → sub-kategori (level 1) → akun detail (level 2).
 
-### `journals` — Jurnal umum
+### Jurnal — dihasilkan `Ledger.all()` (ledger.js)
 
 | Bidang | Tipe | Keterangan |
 |--------|------|------------|
-| `id` | PK | `JV-YYYY-NNNN` |
+| `id` | PK | `JV-YYYY-NNNN` (urut tanggal; manual/pengguna ber-ID tetap) |
 | `date` | date | Tanggal jurnal |
-| `desc` | string | Deskripsi |
-| `account` | string | Kode dan nama akun |
-| `debit` | number | Nilai debit (Rp) |
-| `credit` | number | Nilai kredit (Rp) |
+| `branch` | FK | → `branches.id` |
+| `source` | enum | `penjualan` \| `pembelian` \| `persediaan` \| `produksi` \| `penggajian` \| `aset` \| `pemeliharaan` \| `pos` \| `kas-bank` \| `pajak` \| `saldo-awal` \| `manual` |
+| `ref` | string | Dokumen sumber (`INV-…`, `APV-…`, `PAY-…`, `MOV-…`, …) |
+| `desc` | string | Keterangan |
+| `lines[]` | array | `{ account, debit, credit, bank?, party?, interBranch? }` |
+| `total` | number | Σ debit (= Σ kredit) |
+| `balanced` | boolean | Hasil validasi keseimbangan |
 | `status` | enum | `diposting` \| `menunggu` \| `ditolak` |
-| `by` | string | Dibuat oleh |
+| `by` | string | `Sistem`, `Migrasi`, atau nama pengguna |
+
+Hanya jurnal `diposting` yang memengaruhi saldo. `bank` pada baris `1-1100`
+menautkan ke sub-buku rekening; wajib diisi pada jurnal manual.
+
+**Aturan posting per dokumen** (lihat `docs/07`, bagian Integrasi): faktur →
+piutang/pendapatan/PPN keluaran/HPP; tagihan pemasok → persediaan atau
+beban/PPN masukan/utang usaha; slip gaji → beban gaji/utang pajak/utang gaji
+lalu dibayar pusat lewat RK; aset → penyusutan bulanan; mutasi stok →
+bahan baku/WIP/barang jadi/selisih/transfer via RK; POS → kas/pendapatan/HPP;
+pajak → setoran PPN & PPh bulanan lewat kantor pusat.
 
 ### `invoices` — Faktur penjualan
 
-(Lihat bagian Penjualan di atas)
+(Lihat bagian Penjualan di atas.) Bidang tambahan: `branch`, `cogs` (harga
+pokok yang dijurnal saat terbit), `paidDate`, `bank` (rekening penerimaan).
 
 ### `payables` — Hutang usaha
 
@@ -517,6 +566,9 @@ Hierarki: kategori (level 0) → sub-kategori (level 1) → akun detail (level 2
 | `dueDate` | date | Tanggal jatuh tempo |
 | `status` | enum | `belum-dibayar` \| `sebagian` \| `lunas` |
 | `matched` | boolean | Sudah dicocokkan dengan PO? |
+| `branch` | FK | → `branches.id` |
+| `paidDate`, `bank` | date, FK | Tanggal & rekening pembayaran |
+| `kind`, `account` | enum, FK | `jasa` → diposting ke akun beban `account`; selain itu ke persediaan |
 
 ### `apAging` — Ember umur hutang
 

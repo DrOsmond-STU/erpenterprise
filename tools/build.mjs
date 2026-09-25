@@ -14,17 +14,18 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFile(resolve(root, p), 'utf8');
 
-const [html, tokens, appCss, dataJs, chartsJs, appJs] = await Promise.all([
+const [html, tokens, appCss, dataJs, chartsJs, ledgerJs, appJs] = await Promise.all([
   read('prototype/index.html'),
   read('prototype/assets/tokens.css'),
   read('prototype/assets/app.css'),
   read('prototype/assets/data.js'),
   read('prototype/assets/charts.js'),
+  read('prototype/assets/ledger.js'),
   read('prototype/assets/app.js'),
 ]);
 
 const styles = `<style>\n${tokens}\n${appCss}\n</style>`;
-const scripts = `<script>\n${dataJs}\n${chartsJs}\n${appJs}\n</script>`;
+const scripts = `<script>\n${dataJs}\n${chartsJs}\n${ledgerJs}\n${appJs}\n</script>`;
 
 /* Penggantian memakai fungsi, bukan string: pola `$$`/`$&` di dalam kode
    sumber akan ditafsirkan sebagai rujukan khusus bila dilewatkan sebagai
@@ -35,7 +36,7 @@ const standalone = html
     () => styles,
   )
   .replace(
-    /<script src="assets\/data\.js"><\/script>\s*<script src="assets\/charts\.js"><\/script>\s*<script src="assets\/app\.js"><\/script>/,
+    /<script src="assets\/data\.js"><\/script>\s*<script src="assets\/charts\.js"><\/script>\s*<script src="assets\/ledger\.js"><\/script>\s*<script src="assets\/app\.js"><\/script>/,
     () => scripts,
   );
 

@@ -8,6 +8,12 @@ wajib — cukup buka satu berkas.
 Repositori ini berisi **desain**, bukan aplikasi produksi. Seluruh data bersifat
 fiktif dan disimpan di memori; menyegarkan halaman mengembalikan keadaan awal.
 
+Sejak versi ini seluruh modul operasional **bermuara pada buku besar**: setiap
+faktur, tagihan pemasok, slip gaji, mutasi stok, order pemeliharaan, dan shift
+POS diposting otomatis sebagai jurnal berpasangan per cabang, lalu diturunkan
+menjadi kartu buku besar, neraca saldo, laba rugi, dan neraca — per cabang
+maupun konsolidasi dengan eliminasi rekening koran antar kantor.
+
 ## Menjalankan
 
 ```bash
@@ -27,10 +33,11 @@ python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
 | `prototype/assets/app.css` | Shell dan seluruh komponen |
 | `prototype/assets/data.js` | Data contoh (tenant peraga PT Karya Nusantara Mandiri) |
 | `prototype/assets/charts.js` | Pemformat angka id-ID dan mesin grafik SVG |
-| `prototype/assets/app.js` | Perutean, layar, register, laci rekaman, overlay |
+| `prototype/assets/ledger.js` | Mesin buku besar: posting otomatis per modul, saldo, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, rekonsiliasi sub-buku |
+| `prototype/assets/app.js` | Perutean, layar, register, laci rekaman, overlay, konteks cabang & periode |
 | `docs/` | Dokumen desain — produk, arsitektur informasi, alur, sistem desain |
 | `tools/build.mjs` | Menggabungkan purwarupa menjadi berkas tunggal di `dist/` |
-| `tools/smoke.mjs` | Uji asap: 15 layar × 2 tema + interaksi + tampilan sempit |
+| `tools/smoke.mjs` | Uji asap: 36 layar × 2 tema + interaksi (konteks cabang, jurnal, buku besar, rekonsiliasi) + tampilan sempit |
 
 ## Dokumen desain
 
@@ -50,11 +57,28 @@ node tools/smoke.mjs        # -> lulus/gagal + tangkapan layar di dist/shots/
 
 Uji asap membuka setiap layar pada tema terang dan gelap, menangkap galat
 konsol, memastikan tidak ada luapan horizontal pada badan halaman, lalu menguji
-laci rekaman, palet perintah, modal, dan toast.
+laci rekaman, palet perintah, modal, toast, pergantian cabang, keseimbangan
+neraca cabang, laci jurnal → kartu buku besar, jurnal memorial baru, dan
+rekonsiliasi sub-buku terhadap buku besar.
 
 ## Yang sudah dapat dicoba
 
-- Navigasi 15 layar, tertaut lewat URL (`#/pesanan-penjualan`, `#/piutang`, …)
+- Navigasi 44 layar, tertaut lewat URL (`#/pesanan-penjualan`, `#/neraca`, …)
+- **Pemilih cabang & periode** di strip konteks yang benar-benar membatasi
+  register, dasbor, dan laporan (tersimpan di `localStorage`)
+- **Jurnal umum berpasangan** (Σ debit = Σ kredit) yang dibentuk otomatis dari
+  faktur, hutang, penggajian, penyusutan aset, pemeliharaan, POS, mutasi stok,
+  pajak, dan beban rutin — plus jurnal memorial manual dengan validasi
+  (periode terkunci, akun header, rekening kas wajib) dan alur posting/tolak
+- **Kartu buku besar** per akun dengan saldo berjalan, saringan rekening bank,
+  klik baris → jurnal asal → dokumen sumber
+- **Neraca saldo, laba rugi, neraca** per cabang; **laporan konsolidasi** dengan
+  kolom per cabang, eliminasi RK Cabang ↔ RK Kantor Pusat, dan hasil gabungan
+- **Integrasi & rekonsiliasi**: peta posting antar modul dan 11 pemeriksaan
+  sub-buku (piutang, hutang, bank, persediaan, aset, utang gaji, neraca saldo,
+  neraca, RK antar kantor, keseimbangan jurnal) terhadap buku besar
+- **Manajemen cabang**: profil & KPI tiap cabang, tambah cabang baru (langsung
+  mendapat buku besar, giro, kas kecil), nonaktifkan cabang
 - Register: cari, saring status, urutkan kolom, pilih baris, aksi massal, paginasi
 - Laci rekaman pesanan penjualan lengkap dengan baris barang, posisi kredit
   pelanggan, linimasa, serta tindakan setujui/tolak yang benar-benar mengubah data

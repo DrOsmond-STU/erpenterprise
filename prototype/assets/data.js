@@ -9,13 +9,122 @@ const DATA = (() => {
   const org = {
     company: 'PT Karya Nusantara Mandiri',
     companies: ['PT Karya Nusantara Mandiri', 'PT Nusantara Logistik Prima', 'PT KNM Trading'],
-    branch: 'Cikarang — Pabrik',
-    branches: ['Jakarta — Pusat', 'Cikarang — Pabrik', 'Surabaya — Gudang', 'Medan — Cabang'],
-    period: 'Agu 2026',
-    periods: ['Jun 2026', 'Jul 2026', 'Agu 2026', 'Kuartal III 2026', 'TA 2026'],
+    branch: 'ALL',
+    period: '2026-08',
+    today: '2026-08-14',
     currency: 'IDR',
     user: { name: 'Osmond Pratama', initials: 'OP', role: 'Manajer Operasional', email: 'osmond@knm.co.id' },
   };
+
+  /* --- Cabang (unit pelaporan) ----------------------------------------- */
+  /* Kantor pusat (JKT) memegang RK Cabang; tiap cabang memegang RK Kantor
+     Pusat. Keduanya dieliminasi saat konsolidasi. */
+  const branches = [
+    { id: 'JKT', name: 'Jakarta — Pusat', short: 'Jakarta', type: 'Kantor pusat', city: 'Jakarta Selatan', address: 'Jl. Gatot Subroto Kav. 21, Jakarta Selatan', manager: 'Osmond Pratama', phone: '021-5201-880', openedAt: '2012-03-01', mainBank: 'BNK-001', pettyCash: 'BNK-007', targetMonthly: 780_000_000, budgetShare: 0.22, status: 'aktif' },
+    { id: 'CKR', name: 'Cikarang — Pabrik', short: 'Cikarang', type: 'Pabrik & gudang utama', city: 'Cikarang', address: 'Kawasan Industri Jababeka II Blok C-12, Cikarang', manager: 'Slamet Riyadi', phone: '021-8983-4410', openedAt: '2014-07-15', mainBank: 'BNK-008', pettyCash: 'BNK-005', targetMonthly: 1_950_000_000, budgetShare: 0.48, status: 'aktif' },
+    { id: 'SBY', name: 'Surabaya — Gudang', short: 'Surabaya', type: 'Gudang distribusi', city: 'Surabaya', address: 'Jl. Margomulyo Indah No. 8, Surabaya', manager: 'Fitri Ramadhani', phone: '031-749-2210', openedAt: '2018-02-01', mainBank: 'BNK-009', pettyCash: 'BNK-006', targetMonthly: 1_150_000_000, budgetShare: 0.22, status: 'aktif' },
+    { id: 'MDN', name: 'Medan — Cabang', short: 'Medan', type: 'Cabang penjualan', city: 'Medan', address: 'Jl. Sisingamangaraja No. 140, Medan', manager: 'Taufik Hidayat', phone: '061-786-3320', openedAt: '2024-11-01', mainBank: 'BNK-010', pettyCash: 'BNK-011', targetMonthly: 380_000_000, budgetShare: 0.08, status: 'aktif' },
+  ];
+
+  /* --- Periode akuntansi ------------------------------------------------ */
+  const periods = [
+    { id: '2026-01', label: 'Jan 2026', from: '2026-01-01', to: '2026-01-31', closed: true },
+    { id: '2026-02', label: 'Feb 2026', from: '2026-02-01', to: '2026-02-28', closed: true },
+    { id: '2026-03', label: 'Mar 2026', from: '2026-03-01', to: '2026-03-31', closed: true },
+    { id: '2026-04', label: 'Apr 2026', from: '2026-04-01', to: '2026-04-30', closed: true },
+    { id: '2026-05', label: 'Mei 2026', from: '2026-05-01', to: '2026-05-31', closed: true },
+    { id: '2026-06', label: 'Jun 2026', from: '2026-06-01', to: '2026-06-30', closed: true },
+    { id: '2026-07', label: 'Jul 2026', from: '2026-07-01', to: '2026-07-31', closed: true },
+    { id: '2026-08', label: 'Agu 2026', from: '2026-08-01', to: '2026-08-31', closed: false },
+    { id: '2026-Q1', label: 'Kuartal I 2026', from: '2026-01-01', to: '2026-03-31', closed: true, group: 'Kuartal' },
+    { id: '2026-Q2', label: 'Kuartal II 2026', from: '2026-04-01', to: '2026-06-30', closed: true, group: 'Kuartal' },
+    { id: '2026-Q3', label: 'Kuartal III 2026', from: '2026-07-01', to: '2026-09-30', closed: false, group: 'Kuartal' },
+    { id: '2026', label: 'TA 2026', from: '2026-01-01', to: '2026-12-31', closed: false, group: 'Tahun' },
+  ];
+
+  /* --- Saldo awal eksplisit per cabang, 1 Jan 2026 (Rp) ------------------ */
+  /* Kas & bank, persediaan, dan aset tetap diturunkan dari sub-buku masing-
+     masing; yang tercantum di sini hanya pos yang tidak punya sub-buku.
+     Nilai positif = sisi normal akun (aset debit, liabilitas kredit). */
+  const openingBalances = {
+    JKT: [['1-1300', 84_600_000], ['1-1600', 120_000_000], ['1-2200', 1_200_000_000], ['2-2100', 5_000_000_000], ['3-1000', 10_000_000_000]],
+    CKR: [['1-1600', 60_000_000], ['1-2100', 3_200_000_000], ['1-2200', 3_600_000_000], ['2-1500', 264_000_000], ['2-2200', 840_000_000]],
+    SBY: [['1-1600', 16_800_000]],
+    MDN: [['1-1600', 9_000_000]],
+  };
+
+  /* Rekap operasional bulanan per cabang Jan–Agu (Agu = s.d. tanggal 13):
+     penjualan tunai/counter, pembelian tunai, hasil produksi (pabrik), dan
+     setoran kas cabang ke kantor pusat. Nilai kotor termasuk PPN, dalam Rp. */
+  const M = 1_000_000;
+  const salesRecap = [
+    { branch: 'CKR', cogsRatio: 0.66, producer: true, remit: 600 * M,
+      sales: [1650, 1720, 1680, 1790, 1760, 1810, 1840, 820].map((v) => v * M),
+      purchases: [1150, 1200, 1180, 1250, 1230, 1260, 1280, 560].map((v) => v * M) },
+    { branch: 'JKT', cogsRatio: 0.60, remit: 0,
+      sales: [780, 810, 830, 820, 860, 840, 880, 400].map((v) => v * M),
+      purchases: [470, 490, 500, 495, 520, 505, 530, 240].map((v) => v * M) },
+    { branch: 'SBY', cogsRatio: 0.67, remit: 220 * M,
+      sales: [980, 1010, 990, 1060, 1040, 1080, 1100, 500].map((v) => v * M),
+      purchases: [690, 710, 700, 740, 730, 760, 770, 350].map((v) => v * M) },
+    { branch: 'MDN', cogsRatio: 0.68, remit: 50 * M,
+      sales: [250, 270, 265, 290, 285, 300, 310, 140].map((v) => v * M),
+      purchases: [170, 185, 180, 200, 195, 205, 210, 95].map((v) => v * M) },
+  ];
+
+  /* Beban rutin bulanan per cabang, dibayar dari rekening utama cabang. */
+  const recurringExpenses = [
+    { branch: 'JKT', account: '5-3300', desc: 'Sewa kantor pusat', amount: 22_000_000, day: 1 },
+    { branch: 'JKT', account: '5-3100', desc: 'Listrik, air & internet kantor', amount: 9_500_000 },
+    { branch: 'JKT', account: '5-2300', desc: 'Kampanye pemasaran & pameran', amount: 34_000_000, day: 8 },
+    { branch: 'JKT', account: '5-3500', desc: 'Premi asuransi korporat', amount: 12_350_000, day: 15 },
+    { branch: 'JKT', account: '5-3600', desc: 'Perjalanan dinas manajemen', amount: 8_000_000, day: 18 },
+    { branch: 'JKT', account: '5-3700', desc: 'Perlengkapan kantor', amount: 3_500_000, day: 12 },
+    { branch: 'JKT', account: '5-4000', desc: 'Biaya administrasi bank', amount: 1_200_000, day: 28 },
+    { branch: 'JKT', account: '5-4100', desc: 'Bunga utang bank', amount: 34_500_000, day: 20 },
+    { branch: 'CKR', account: '5-3100', desc: 'Listrik & gas pabrik', amount: 96_400_000, day: 7 },
+    { branch: 'CKR', account: '5-3500', desc: 'Asuransi pabrik & mesin', amount: 6_000_000, day: 15 },
+    { branch: 'CKR', account: '5-2400', desc: 'Biaya angkut pengiriman', amount: 15_000_000, day: 26 },
+    { branch: 'CKR', account: '5-3700', desc: 'Perlengkapan pabrik', amount: 2_000_000, day: 12 },
+    { branch: 'SBY', account: '5-3300', desc: 'Sewa gudang Margomulyo', amount: 18_000_000, day: 1 },
+    { branch: 'SBY', account: '5-3100', desc: 'Listrik & air gudang', amount: 7_200_000 },
+    { branch: 'SBY', account: '5-2400', desc: 'Biaya angkut distribusi', amount: 12_000_000, day: 26 },
+    { branch: 'SBY', account: '5-3700', desc: 'Perlengkapan gudang', amount: 1_200_000, day: 12 },
+    { branch: 'MDN', account: '5-3300', desc: 'Sewa kantor cabang', amount: 9_000_000, day: 1 },
+    { branch: 'MDN', account: '5-3100', desc: 'Listrik & internet cabang', amount: 3_100_000 },
+    { branch: 'MDN', account: '5-2300', desc: 'Promosi lokal Sumatera', amount: 6_000_000, day: 8 },
+    { branch: 'MDN', account: '5-2400', desc: 'Biaya angkut ke pelanggan', amount: 4_000_000, day: 26 },
+    { branch: 'MDN', account: '5-3700', desc: 'Perlengkapan kantor cabang', amount: 800_000, day: 12 },
+  ];
+  const loanInstallment = 50_000_000;
+
+  /* Rekap penjualan POS bulanan per toko (kas, sudah termasuk PPN). */
+  const posSummary = [
+    ...['01', '02', '03', '04', '05', '06', '07'].map((m, i) => ({
+      branch: 'CKR', date: `2026-${m}-${['31', '28', '31', '30', '31', '30', '31'][i]}`, ref: `POS-CKR-2026${m}`,
+      desc: `Rekap penjualan POS Toko Cikarang ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul'][i]} 2026`,
+      sales: [388_000_000, 402_000_000, 396_000_000, 431_000_000, 418_000_000, 447_000_000, 462_000_000][i], cogsRatio: 0.62,
+    })),
+    { branch: 'CKR', date: '2026-08-13', ref: 'POS-CKR-202608A', desc: 'Rekap penjualan POS Toko Cikarang 1–13 Agu 2026', sales: 201_400_000, cogsRatio: 0.62 },
+    ...['04', '05', '06', '07'].map((m, i) => ({
+      branch: 'MDN', date: `2026-${m}-${['30', '31', '30', '31'][i]}`, ref: `POS-MDN-2026${m}`,
+      desc: `Rekap penjualan POS Toko Medan ${['Apr', 'Mei', 'Jun', 'Jul'][i]} 2026`,
+      sales: [86_000_000, 94_000_000, 102_000_000, 111_000_000][i], cogsRatio: 0.64,
+    })),
+    { branch: 'MDN', date: '2026-08-13', ref: 'POS-MDN-202608A', desc: 'Rekap penjualan POS Toko Medan 1–13 Agu 2026', sales: 48_600_000, cogsRatio: 0.64 },
+  ];
+
+  /* Jurnal manual (memorial) — dibuat pengguna, mengikuti alur persetujuan. */
+  const manualJournals = [
+    { id: 'JV-2026-0774', date: '2026-08-12', branch: 'CKR', source: 'manual', ref: 'ADJ-DEPR-0726', desc: 'Koreksi penyusutan Jul 2026 — Hydraulic Press 200T', status: 'menunggu', by: 'Andi Firmansyah',
+      lines: [{ account: '5-3200', debit: 42_300_000, credit: 0 }, { account: '1-2900', debit: 0, credit: 42_300_000 }] },
+    { id: 'JV-2026-0771', date: '2026-08-10', branch: 'CKR', source: 'manual', ref: 'RECLASS-0810', desc: 'Reklasifikasi biaya angkut ke beban pemasaran', status: 'ditolak', by: 'Sari Melati',
+      lines: [{ account: '5-2300', debit: 8_640_000, credit: 0 }, { account: '5-2400', debit: 0, credit: 8_640_000 }] },
+    { id: 'JV-2026-0768', date: '2026-08-06', branch: 'JKT', source: 'manual', ref: 'AMORT-0806', desc: 'Amortisasi asuransi dibayar di muka Agu 2026', status: 'diposting', by: 'Andi Firmansyah',
+      lines: [{ account: '5-3500', debit: 10_000_000, credit: 0 }, { account: '1-1600', debit: 0, credit: 10_000_000 }] },
+    { id: 'JV-2026-0765', date: '2026-08-04', branch: 'JKT', source: 'manual', ref: 'CLAIM-0804', desc: 'Pengakuan pendapatan lain-lain: klaim asuransi kendaraan', status: 'diposting', by: 'Sari Melati',
+      lines: [{ account: '1-1300', debit: 18_500_000, credit: 0 }, { account: '4-3000', debit: 0, credit: 18_500_000 }] },
+  ];
 
   /* --- Struktur navigasi (diperluas sesuai blueprint) -------------------- */
   const nav = [
@@ -87,8 +196,25 @@ const DATA = (() => {
         { id: 'piutang', label: 'Piutang Usaha', icon: 'wallet' },
         { id: 'hutang', label: 'Hutang Usaha', icon: 'credit-card' },
         { id: 'kas-bank', label: 'Kas & Bank', icon: 'vault' },
-        { id: 'jurnal', label: 'Jurnal Umum', icon: 'ledger' },
+        { id: 'jurnal', label: 'Jurnal Umum', icon: 'ledger', count: 1 },
         { id: 'anggaran', label: 'Anggaran', icon: 'piechart' },
+      ],
+    },
+    {
+      label: 'Laporan Keuangan',
+      items: [
+        { id: 'buku-besar', label: 'Kartu Buku Besar', icon: 'book' },
+        { id: 'neraca-saldo', label: 'Neraca Saldo', icon: 'scale' },
+        { id: 'laba-rugi', label: 'Laba Rugi', icon: 'trending' },
+        { id: 'neraca', label: 'Neraca', icon: 'columns' },
+        { id: 'konsolidasi', label: 'Laporan Konsolidasi', icon: 'layers' },
+        { id: 'integrasi', label: 'Integrasi & Rekonsiliasi', icon: 'link' },
+      ],
+    },
+    {
+      label: 'Cabang',
+      items: [
+        { id: 'cabang', label: 'Manajemen Cabang', icon: 'map-pin' },
       ],
     },
     {
@@ -137,36 +263,8 @@ const DATA = (() => {
     },
   ];
 
-  /* --- Ubin KPI dasbor --------------------------------------------------- */
-  const kpis = [
-    {
-      id: 'pendapatan', label: 'Pendapatan (bulan berjalan)', value: 4_823_400_000,
-      format: 'rp-compact', delta: 12.4, dir: 'up', foot: 'Target bulan ini Rp 5,10 M',
-      spark: [3.1, 3.4, 3.2, 3.9, 4.1, 3.8, 4.4, 4.2, 4.6, 4.5, 4.7, 4.82],
-    },
-    {
-      id: 'laba-kotor', label: 'Laba kotor', value: 1_687_200_000,
-      format: 'rp-compact', delta: 8.2, dir: 'up', foot: 'Margin 35,0% — target 36%',
-      spark: [1.1, 1.2, 1.15, 1.32, 1.38, 1.29, 1.48, 1.42, 1.55, 1.51, 1.6, 1.69],
-    },
-    {
-      id: 'arus-kas', label: 'Arus kas operasional', value: 892_500_000,
-      format: 'rp-compact', delta: -5.3, dir: 'up', foot: 'DSO 38 hari · DPO 42 hari',
-      spark: [1.02, 0.98, 1.05, 0.91, 0.88, 0.95, 1.01, 0.94, 0.87, 0.92, 0.96, 0.89],
-    },
-    {
-      id: 'piutang', label: 'Piutang jatuh tempo', value: 1_942_800_000,
-      format: 'rp-compact', delta: 18.6, dir: 'down', foot: '14 faktur lewat 30 hari',
-      spark: [1.35, 1.28, 1.41, 1.39, 1.52, 1.48, 1.55, 1.61, 1.58, 1.72, 1.64, 1.94],
-    },
-  ];
-
-  /* --- Tren pendapatan vs target (12 bulan, miliar rupiah) ---------------- */
-  const revenueTrend = {
-    labels: ['Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu'],
-    actual: [3.12, 3.44, 3.21, 3.92, 4.08, 3.77, 4.41, 4.19, 4.63, 4.52, 4.71, 4.82],
-    target: [3.30, 3.40, 3.50, 3.60, 3.80, 3.90, 4.10, 4.30, 4.40, 4.60, 4.80, 5.10],
-  };
+  /* Ubin KPI, tren pendapatan, komposisi persediaan, dan umur piutang kini
+     dihitung dari buku besar & sub-buku (lihat ledger.js) — tidak lagi statis. */
 
   const revenueByLine = [
     { label: 'Komponen otomotif', value: 1_842_000_000 },
@@ -174,22 +272,6 @@ const DATA = (() => {
     { label: 'Perakitan elektronik', value: 864_300_000 },
     { label: 'Perkakas industri', value: 573_100_000 },
     { label: 'Jasa purna jual', value: 327_500_000 },
-  ];
-
-  const inventoryMix = [
-    { label: 'Bahan baku', value: 4_712_000_000 },
-    { label: 'Barang dalam proses', value: 3_128_000_000 },
-    { label: 'Barang jadi', value: 2_845_000_000 },
-    { label: 'Suku cadang', value: 1_364_000_000 },
-    { label: 'Kemasan', value: 691_000_000 },
-  ];
-
-  const arAging = [
-    { label: 'Belum jatuh tempo', short: 'Lancar', value: 3_284_000_000, count: 41 },
-    { label: '1–30 hari', short: '1–30', value: 1_128_400_000, count: 19 },
-    { label: '31–60 hari', short: '31–60', value: 512_900_000, count: 9 },
-    { label: '61–90 hari', short: '61–90', value: 214_600_000, count: 4 },
-    { label: 'Lebih dari 90 hari', short: '>90', value: 86_900_000, count: 2 },
   ];
 
   /* --- Antrean persetujuan ------------------------------------------------ */
@@ -251,7 +333,17 @@ Ingin saya buatkan draft permintaan pembelian?` },
   ];
 
   /* --- Pesanan penjualan ------------------------------------------------- */
-  const salesOrders = [
+  const customerBranch = {
+    'PT Sentosa Baja Perkasa': 'CKR', 'PT Sinar Mas Otomotif': 'CKR', 'CV Karya Presisi': 'CKR',
+    'PT Global Komponen Indo': 'SBY', 'PT Anugerah Mesin Jaya': 'SBY', 'PT Bangun Sarana Teknik': 'SBY',
+    'PT Mitra Teknik Utama': 'JKT', 'PT Cipta Mandiri Perkasa': 'JKT', 'CV Sumber Logam': 'JKT',
+    'PT Sumatera Sawit Makmur': 'MDN', 'CV Deli Teknik': 'MDN', 'PT Medan Karya Baja': 'MDN',
+  };
+  const withBranch = (rows) => rows.map((r) => ({ branch: customerBranch[r.customer] || 'JKT', ...r }));
+
+  const salesOrders = withBranch([
+    { id: 'SO-2026-0423', date: '2026-08-14', customer: 'PT Sumatera Sawit Makmur', pic: 'Taufik Hidayat', amount: 164_200_000, status: 'menunggu', due: '2026-09-04', channel: 'Langsung' },
+    { id: 'SO-2026-0422', date: '2026-08-13', customer: 'CV Deli Teknik', pic: 'Taufik Hidayat', amount: 27_800_000, status: 'disetujui', due: '2026-08-27', channel: 'Distributor' },
     { id: 'SO-2026-0421', date: '2026-08-14', customer: 'PT Sinar Mas Otomotif', pic: 'Rina Kusuma', amount: 312_400_000, status: 'draf', due: '2026-08-28', channel: 'Distributor' },
     { id: 'SO-2026-0420', date: '2026-08-14', customer: 'PT Mitra Teknik Utama', pic: 'Rina Kusuma', amount: 148_900_000, status: 'menunggu', due: '2026-08-30', channel: 'Langsung' },
     { id: 'SO-2026-0419', date: '2026-08-13', customer: 'CV Karya Presisi', pic: 'Hendra Wijaya', amount: 87_650_000, status: 'disetujui', due: '2026-08-27', channel: 'Distributor' },
@@ -270,7 +362,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'SO-2026-0406', date: '2026-08-06', customer: 'PT Sentosa Baja Perkasa', pic: 'Rina Kusuma', amount: 611_250_000, status: 'selesai', due: '2026-08-18', channel: 'Kontrak' },
     { id: 'SO-2026-0405', date: '2026-08-06', customer: 'PT Cipta Mandiri Perkasa', pic: 'Sari Melati', amount: 77_900_000, status: 'disetujui', due: '2026-08-20', channel: 'Langsung' },
     { id: 'SO-2026-0404', date: '2026-08-05', customer: 'CV Sumber Logam', pic: 'Hendra Wijaya', amount: 29_850_000, status: 'selesai', due: '2026-08-17', channel: 'Distributor' },
-  ];
+  ]);
 
   const salesOrderLines = {
     'SO-2026-0418': [
@@ -311,6 +403,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
 
   /* --- Pelanggan --------------------------------------------------------- */
   const customers = [
+    { id: 'CUST-0052', name: 'PT Sumatera Sawit Makmur', segment: 'Langsung', pic: 'Ridwan Nasution', city: 'Medan', limit: 400_000_000, used: 312_800_000, terms: 'Net 30', status: 'aktif', branch: 'MDN' },
+    { id: 'CUST-0055', name: 'CV Deli Teknik', segment: 'Distributor', pic: 'Sartika Lubis', city: 'Deli Serdang', limit: 150_000_000, used: 50_550_000, terms: 'Net 14', status: 'aktif', branch: 'MDN' },
     { id: 'CUST-0012', name: 'PT Sentosa Baja Perkasa', segment: 'Kontrak', pic: 'Yusuf Maulana', city: 'Bekasi', limit: 1_500_000_000, used: 1_380_000_000, terms: 'Net 45', status: 'aktif' },
     { id: 'CUST-0004', name: 'PT Sinar Mas Otomotif', segment: 'Distributor', pic: 'Lina Marlina', city: 'Karawang', limit: 2_000_000_000, used: 842_000_000, terms: 'Net 30', status: 'aktif' },
     { id: 'CUST-0021', name: 'PT Global Komponen Indo', segment: 'Kontrak', pic: 'Rudi Setiawan', city: 'Surabaya', limit: 3_000_000_000, used: 1_965_000_000, terms: 'Net 60', status: 'aktif' },
@@ -320,24 +414,41 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'CUST-0028', name: 'PT Cipta Mandiri Perkasa', segment: 'Langsung', pic: 'Nurul Hidayah', city: 'Tangerang', limit: 600_000_000, used: 210_350_000, terms: 'Net 30', status: 'aktif' },
     { id: 'CUST-0041', name: 'CV Karya Presisi', segment: 'Distributor', pic: 'Joko Susilo', city: 'Cikarang', limit: 300_000_000, used: 142_350_000, terms: 'Net 14', status: 'aktif' },
     { id: 'CUST-0046', name: 'CV Sumber Logam', segment: 'Langsung', pic: 'Siti Rahayu', city: 'Bandung', limit: 200_000_000, used: 29_850_000, terms: 'Tunai', status: 'nonaktif' },
-  ];
+  ].map((c) => ({ branch: customerBranch[c.name] || 'JKT', ...c }));
 
   /* --- Faktur ------------------------------------------------------------- */
-  const invoices = [
-    { id: 'INV-2026-1188', date: '2026-08-14', customer: 'PT Global Komponen Indo', amount: 519_800_000, paid: 0, dueDate: '2026-10-13', status: 'belum-dibayar', overdue: 0 },
-    { id: 'INV-2026-1181', date: '2026-08-11', customer: 'PT Sinar Mas Otomotif', amount: 276_900_000, paid: 276_900_000, dueDate: '2026-09-10', status: 'lunas', overdue: 0 },
-    { id: 'INV-2026-1176', date: '2026-08-08', customer: 'PT Anugerah Mesin Jaya', amount: 88_300_000, paid: 40_000_000, dueDate: '2026-09-22', status: 'sebagian', overdue: 0 },
-    { id: 'INV-2026-1160', date: '2026-08-01', customer: 'CV Karya Presisi', amount: 54_700_000, paid: 0, dueDate: '2026-08-15', status: 'belum-dibayar', overdue: 0 },
-    { id: 'INV-2026-1142', date: '2026-07-22', customer: 'PT Sentosa Baja Perkasa', amount: 611_250_000, paid: 300_000_000, dueDate: '2026-09-05', status: 'sebagian', overdue: 0 },
-    { id: 'INV-2026-1128', date: '2026-07-14', customer: 'PT Mitra Teknik Utama', amount: 132_450_000, paid: 0, dueDate: '2026-08-13', status: 'jatuh-tempo', overdue: 1 },
-    { id: 'INV-2026-1119', date: '2026-07-06', customer: 'PT Cipta Mandiri Perkasa', amount: 77_900_000, paid: 0, dueDate: '2026-08-05', status: 'jatuh-tempo', overdue: 9 },
-    { id: 'INV-2026-1102', date: '2026-06-18', customer: 'PT Bangun Sarana Teknik', amount: 96_400_000, paid: 0, dueDate: '2026-06-28', status: 'jatuh-tempo', overdue: 47 },
-    { id: 'INV-2026-1094', date: '2026-06-11', customer: 'CV Sumber Logam', amount: 29_850_000, paid: 29_850_000, dueDate: '2026-06-25', status: 'lunas', overdue: 0 },
-    { id: 'INV-2026-1077', date: '2026-05-28', customer: 'PT Bangun Sarana Teknik', amount: 41_300_000, paid: 0, dueDate: '2026-05-12', status: 'jatuh-tempo', overdue: 94 },
-  ];
+  /* `amount` sudah termasuk PPN 11%. `cogs` = harga pokok yang dijurnal saat
+     faktur terbit; `paidDate` = tanggal penerimaan kas. */
+  const invoices = withBranch([
+    { id: 'INV-2026-1188', date: '2026-08-14', customer: 'PT Global Komponen Indo', amount: 519_800_000, cogs: 338_000_000, paid: 0, dueDate: '2026-10-13', status: 'belum-dibayar', overdue: 0 },
+    { id: 'INV-2026-1185', date: '2026-08-12', customer: 'PT Sumatera Sawit Makmur', amount: 148_600_000, cogs: 97_000_000, paid: 0, dueDate: '2026-09-11', status: 'belum-dibayar', overdue: 0 },
+    { id: 'INV-2026-1181', date: '2026-08-11', customer: 'PT Sinar Mas Otomotif', amount: 276_900_000, cogs: 182_000_000, paid: 276_900_000, paidDate: '2026-08-08', dueDate: '2026-09-10', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1176', date: '2026-08-08', customer: 'PT Anugerah Mesin Jaya', amount: 88_300_000, cogs: 57_000_000, paid: 40_000_000, paidDate: '2026-08-13', dueDate: '2026-09-22', status: 'sebagian', overdue: 0 },
+    { id: 'INV-2026-1165', date: '2026-08-03', customer: 'CV Deli Teknik', amount: 38_400_000, cogs: 25_000_000, paid: 38_400_000, paidDate: '2026-08-11', dueDate: '2026-08-17', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1160', date: '2026-08-01', customer: 'CV Karya Presisi', amount: 54_700_000, cogs: 36_000_000, paid: 0, dueDate: '2026-08-15', status: 'belum-dibayar', overdue: 0 },
+    { id: 'INV-2026-1149', date: '2026-07-27', customer: 'PT Sinar Mas Otomotif', amount: 188_400_000, cogs: 124_000_000, paid: 188_400_000, paidDate: '2026-08-12', dueDate: '2026-08-26', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1142', date: '2026-07-22', customer: 'PT Sentosa Baja Perkasa', amount: 611_250_000, cogs: 402_000_000, paid: 300_000_000, paidDate: '2026-08-05', dueDate: '2026-09-05', status: 'sebagian', overdue: 0 },
+    { id: 'INV-2026-1131', date: '2026-07-16', customer: 'PT Sumatera Sawit Makmur', amount: 112_200_000, cogs: 73_000_000, paid: 112_200_000, paidDate: '2026-08-06', dueDate: '2026-08-15', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1128', date: '2026-07-14', customer: 'PT Mitra Teknik Utama', amount: 132_450_000, cogs: 86_000_000, paid: 0, dueDate: '2026-08-13', status: 'jatuh-tempo', overdue: 1 },
+    { id: 'INV-2026-1121', date: '2026-07-08', customer: 'PT Global Komponen Indo', amount: 274_500_000, cogs: 181_000_000, paid: 274_500_000, paidDate: '2026-08-04', dueDate: '2026-09-06', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1119', date: '2026-07-06', customer: 'PT Cipta Mandiri Perkasa', amount: 77_900_000, cogs: 51_000_000, paid: 0, dueDate: '2026-08-05', status: 'jatuh-tempo', overdue: 9 },
+    { id: 'INV-2026-1112', date: '2026-07-02', customer: 'PT Mitra Teknik Utama', amount: 64_800_000, cogs: 42_000_000, paid: 64_800_000, paidDate: '2026-07-30', dueDate: '2026-08-01', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1108', date: '2026-06-24', customer: 'CV Deli Teknik', amount: 22_750_000, cogs: 15_000_000, paid: 0, dueDate: '2026-07-08', status: 'jatuh-tempo', overdue: 37 },
+    { id: 'INV-2026-1102', date: '2026-06-18', customer: 'PT Bangun Sarana Teknik', amount: 96_400_000, cogs: 63_000_000, paid: 0, dueDate: '2026-06-28', status: 'jatuh-tempo', overdue: 47 },
+    { id: 'INV-2026-1098', date: '2026-06-15', customer: 'PT Sentosa Baja Perkasa', amount: 342_600_000, cogs: 226_000_000, paid: 342_600_000, paidDate: '2026-07-28', dueDate: '2026-07-30', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1094', date: '2026-06-11', customer: 'CV Sumber Logam', amount: 29_850_000, cogs: 19_500_000, paid: 29_850_000, paidDate: '2026-06-25', dueDate: '2026-06-25', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1086', date: '2026-06-05', customer: 'PT Anugerah Mesin Jaya', amount: 71_200_000, cogs: 46_500_000, paid: 71_200_000, paidDate: '2026-07-10', dueDate: '2026-07-20', status: 'lunas', overdue: 0 },
+    { id: 'INV-2026-1077', date: '2026-05-28', customer: 'PT Bangun Sarana Teknik', amount: 41_300_000, cogs: 27_000_000, paid: 0, dueDate: '2026-06-27', status: 'jatuh-tempo', overdue: 48 },
+  ]);
 
   /* --- Pesanan pembelian ------------------------------------------------- */
+  const supplierBranch = {
+    'CV Logam Jaya Abadi': 'CKR', 'PT Bearing Nusantara': 'CKR', 'PT Baja Sentral Indo': 'CKR', 'PT Pelumas Andalan': 'CKR',
+    'PT Mesin Presisi Tama': 'CKR', 'PT Kabel Cipta Sarana': 'SBY', 'PT Kemasan Prima': 'SBY',
+    'CV Medan Logistik': 'MDN', 'PT Sumatera Grafika': 'MDN', 'PT Telkom Indonesia': 'JKT',
+  };
   const purchaseOrders = [
+    { id: 'PO-2026-0234', date: '2026-08-14', supplier: 'CV Medan Logistik', amount: 18_600_000, eta: '2026-08-14', status: 'selesai', buyer: 'Taufik Hidayat' },
     { id: 'PO-2026-0233', date: '2026-08-14', supplier: 'CV Logam Jaya Abadi', amount: 186_200_000, eta: '2026-08-22', status: 'menunggu', buyer: 'Bagus Hartono' },
     { id: 'PO-2026-0232', date: '2026-08-13', supplier: 'PT Bearing Nusantara', amount: 94_600_000, eta: '2026-08-18', status: 'dikirim-pemasok', buyer: 'Bagus Hartono' },
     { id: 'PO-2026-0231', date: '2026-08-12', supplier: 'PT Pelumas Andalan', amount: 48_100_000, eta: '2026-08-19', status: 'diterima-sebagian', buyer: 'Dewi Anggraini' },
@@ -348,7 +459,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'PO-2026-0226', date: '2026-08-04', supplier: 'PT Bearing Nusantara', amount: 61_450_000, eta: '2026-08-11', status: 'selesai', buyer: 'Bagus Hartono' },
     { id: 'PO-2026-0225', date: '2026-08-01', supplier: 'PT Baja Sentral Indo', amount: 402_700_000, eta: '2026-08-14', status: 'diterima-sebagian', buyer: 'Dewi Anggraini' },
     { id: 'PO-2026-0224', date: '2026-07-30', supplier: 'PT Pelumas Andalan', amount: 27_600_000, eta: '2026-08-06', status: 'draf', buyer: 'Bagus Hartono' },
-  ];
+  ].map((r) => ({ branch: supplierBranch[r.supplier] || 'JKT', ...r }));
 
   const suppliers = [
     { id: 'SUP-0007', name: 'CV Logam Jaya Abadi', category: 'Bahan baku logam', city: 'Bekasi', terms: 'Net 30', lead: 8, otd: 96.2, status: 'aktif' },
@@ -358,9 +469,13 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'SUP-0029', name: 'PT Pelumas Andalan', category: 'Bahan penolong', city: 'Surabaya', terms: 'Net 30', lead: 6, otd: 82.3, status: 'pantau' },
     { id: 'SUP-0034', name: 'PT Mesin Presisi Tama', category: 'Perkakas', city: 'Semarang', terms: 'Net 45', lead: 21, otd: 97.5, status: 'aktif' },
     { id: 'SUP-0041', name: 'PT Kemasan Prima', category: 'Kemasan', city: 'Bogor', terms: 'Net 14', lead: 4, otd: 99.1, status: 'aktif' },
-  ];
+    { id: 'SUP-0047', name: 'CV Medan Logistik', category: 'Jasa angkut', city: 'Medan', terms: 'Net 14', lead: 2, otd: 93.5, status: 'aktif' },
+    { id: 'SUP-0049', name: 'PT Sumatera Grafika', category: 'Perlengkapan kantor', city: 'Medan', terms: 'Tunai', lead: 3, otd: 98.0, status: 'aktif' },
+    { id: 'SUP-0003', name: 'PT Telkom Indonesia', category: 'Telekomunikasi', city: 'Jakarta', terms: 'Net 20', lead: 1, otd: 100, status: 'aktif' },
+  ].map((r) => ({ branch: supplierBranch[r.name] || 'JKT', ...r }));
 
   /* --- Stok --------------------------------------------------------------- */
+  const WH_BRANCH = { Jakarta: 'JKT', Cikarang: 'CKR', Surabaya: 'SBY', Medan: 'MDN' };
   const stockItems = [
     { sku: 'BRG-1042', name: 'Pelat baja SPHC 3mm', category: 'Bahan baku', unit: 'lbr', onHand: 42, min: 250, max: 900, cost: 486_000, wh: 'Cikarang' },
     { sku: 'BRG-0885', name: 'Oli hidrolik ISO VG 46', category: 'Bahan penolong', unit: 'drum', onHand: 18, min: 60, max: 180, cost: 1_720_000, wh: 'Cikarang' },
@@ -374,20 +489,25 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { sku: 'BRG-7811', name: 'Selang hidrolik R2 1/2"', category: 'Suku cadang', unit: 'm', onHand: 0, min: 150, max: 600, cost: 118_000, wh: 'Surabaya' },
     { sku: 'BRG-8302', name: 'Rantai transmisi 08B-1', category: 'Suku cadang', unit: 'm', onHand: 512, min: 200, max: 1200, cost: 96_700, wh: 'Cikarang' },
     { sku: 'BRG-9014', name: 'Panel kendali IP65', category: 'Barang jadi', unit: 'unit', onHand: 74, min: 30, max: 150, cost: 5_240_000, wh: 'Cikarang' },
-  ];
+    { sku: 'BRG-1108', name: 'Braket dudukan mesin tipe B', category: 'Barang jadi', unit: 'pcs', onHand: 96, min: 60, max: 300, cost: 264_000, wh: 'Medan' },
+    { sku: 'BRG-9014', name: 'Panel kendali IP65', category: 'Barang jadi', unit: 'unit', onHand: 5, min: 4, max: 20, cost: 5_240_000, wh: 'Medan' },
+    { sku: 'BRG-4501', name: 'Baut hex M12×60 galvanis', category: 'Suku cadang', unit: 'pcs', onHand: 2_400, min: 1_000, max: 6_000, cost: 2_850, wh: 'Medan' },
+  ].map((r) => ({ ...r, branch: WH_BRANCH[r.wh], key: `${r.sku}@${WH_BRANCH[r.wh]}` }));
 
   const stockMoves = [
     { id: 'MOV-2026-3312', date: '2026-08-14', sku: 'BRG-1108', name: 'Braket dudukan mesin tipe B', type: 'Keluar — Pengiriman', qty: -240, ref: 'DO-2026-0908', wh: 'Cikarang' },
     { id: 'MOV-2026-3311', date: '2026-08-14', sku: 'BRG-4501', name: 'Baut hex M12×60 galvanis', type: 'Masuk — Penerimaan', qty: 8000, ref: 'GR-2026-0512', wh: 'Cikarang' },
     { id: 'MOV-2026-3308', date: '2026-08-13', sku: 'BRG-2217', name: 'Bearing 6204-2RS', type: 'Keluar — Produksi', qty: -420, ref: 'WO-2026-0181', wh: 'Cikarang' },
     { id: 'MOV-2026-3305', date: '2026-08-13', sku: 'BRG-5023', name: 'Cat epoksi abu-abu', type: 'Penyesuaian — Opname', qty: -12, ref: 'ADJ-2026-0044', wh: 'Cikarang' },
-    { id: 'MOV-2026-3301', date: '2026-08-12', sku: 'BRG-6110', name: 'Peti kayu ekspor 120×80', type: 'Transfer — Antar gudang', qty: -60, ref: 'TRF-2026-0121', wh: 'Cikarang' },
-    { id: 'MOV-2026-3300', date: '2026-08-12', sku: 'BRG-6110', name: 'Peti kayu ekspor 120×80', type: 'Transfer — Antar gudang', qty: 60, ref: 'TRF-2026-0121', wh: 'Surabaya' },
+    { id: 'MOV-2026-3301', date: '2026-08-12', sku: 'BRG-6110', name: 'Peti kayu ekspor 120×80', type: 'Transfer — Antar gudang', qty: -60, ref: 'TRF-2026-0121', wh: 'Cikarang', to: 'SBY' },
+    { id: 'MOV-2026-3300', date: '2026-08-12', sku: 'BRG-6110', name: 'Peti kayu ekspor 120×80', type: 'Transfer — Antar gudang', qty: 60, ref: 'TRF-2026-0121', wh: 'Surabaya', from: 'CKR' },
     { id: 'MOV-2026-3294', date: '2026-08-11', sku: 'BRG-1042', name: 'Pelat baja SPHC 3mm', type: 'Keluar — Produksi', qty: -180, ref: 'WO-2026-0179', wh: 'Cikarang' },
     { id: 'MOV-2026-3288', date: '2026-08-11', sku: 'BRG-9014', name: 'Panel kendali IP65', type: 'Masuk — Hasil produksi', qty: 24, ref: 'WO-2026-0177', wh: 'Cikarang' },
     { id: 'MOV-2026-3282', date: '2026-08-10', sku: 'BRG-0885', name: 'Oli hidrolik ISO VG 46', type: 'Keluar — Pemeliharaan', qty: -6, ref: 'MNT-2026-0203', wh: 'Cikarang' },
     { id: 'MOV-2026-3277', date: '2026-08-09', sku: 'BRG-8302', name: 'Rantai transmisi 08B-1', type: 'Masuk — Penerimaan', qty: 300, ref: 'GR-2026-0508', wh: 'Cikarang' },
-  ];
+    { id: 'MOV-2026-3271', date: '2026-08-06', sku: 'BRG-1108', name: 'Braket dudukan mesin tipe B', type: 'Transfer — Antar gudang', qty: -120, ref: 'TRF-2026-0125', wh: 'Cikarang', to: 'MDN' },
+    { id: 'MOV-2026-3270', date: '2026-08-06', sku: 'BRG-1108', name: 'Braket dudukan mesin tipe B', type: 'Transfer — Antar gudang', qty: 120, ref: 'TRF-2026-0125', wh: 'Medan', from: 'CKR' },
+  ].map((r) => ({ ...r, branch: WH_BRANCH[r.wh] }));
 
   /* --- Perintah kerja (papan) --------------------------------------------- */
   const workOrderColumns = [
@@ -411,19 +531,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'WO-2026-0175', product: 'Pelat potong SPHC', qty: 240, unit: 'lbr', line: 'Lini 1 — Potong', due: '11 Agu', progress: 100, col: 'selesai', pic: 'Slamet Riyadi' },
   ];
 
-  /* --- Jurnal umum ------------------------------------------------------- */
-  const journals = [
-    { id: 'JV-2026-0778', date: '2026-08-14', desc: 'Pengakuan pendapatan penjualan Agu', account: '4-1000 Pendapatan Penjualan', debit: 0, credit: 519_800_000, status: 'diposting', by: 'Sistem' },
-    { id: 'JV-2026-0777', date: '2026-08-14', desc: 'Harga pokok penjualan Agu', account: '5-1000 Harga Pokok Penjualan', debit: 341_600_000, credit: 0, status: 'diposting', by: 'Sistem' },
-    { id: 'JV-2026-0776', date: '2026-08-13', desc: 'Penerimaan barang PO-2026-0229', account: '1-1400 Persediaan Bahan Baku', debit: 217_400_000, credit: 0, status: 'diposting', by: 'Sistem' },
-    { id: 'JV-2026-0775', date: '2026-08-13', desc: 'Beban gaji produksi minggu 2', account: '5-2100 Beban Tenaga Kerja Langsung', debit: 184_200_000, credit: 0, status: 'diposting', by: 'Andi Firmansyah' },
-    { id: 'JV-2026-0774', date: '2026-08-12', desc: 'Koreksi penyusutan Jul 2026', account: '5-3200 Beban Penyusutan', debit: 42_300_000, credit: 0, status: 'menunggu', by: 'Andi Firmansyah' },
-    { id: 'JV-2026-0773', date: '2026-08-12', desc: 'Pembayaran utang PT Bearing Nusantara', account: '2-1100 Utang Usaha', debit: 61_450_000, credit: 0, status: 'diposting', by: 'Sari Melati' },
-    { id: 'JV-2026-0772', date: '2026-08-11', desc: 'Penyesuaian selisih opname stok', account: '5-1900 Selisih Persediaan', debit: 1_110_000, credit: 0, status: 'diposting', by: 'Andi Firmansyah' },
-    { id: 'JV-2026-0771', date: '2026-08-10', desc: 'Reklasifikasi biaya angkut', account: '5-2400 Beban Angkut', debit: 8_640_000, credit: 0, status: 'ditolak', by: 'Sari Melati' },
-    { id: 'JV-2026-0770', date: '2026-08-08', desc: 'Penerimaan pelanggan PT Sinar Mas', account: '1-1200 Piutang Usaha', debit: 0, credit: 276_900_000, status: 'diposting', by: 'Sistem' },
-    { id: 'JV-2026-0769', date: '2026-08-07', desc: 'Beban listrik pabrik Jul 2026', account: '5-3100 Beban Utilitas', debit: 96_400_000, credit: 0, status: 'diposting', by: 'Andi Firmansyah' },
-  ];
+  /* Jurnal umum kini dihasilkan mesin buku besar (ledger.js) dari dokumen
+     sumber tiap modul, ditambah `manualJournals` di atas. */
 
   /* --- Karyawan ---------------------------------------------------------- */
   const employees = [
@@ -439,7 +548,9 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'EMP-0071', name: 'Osmond Pratama', dept: 'Operasional', title: 'Manajer Operasional', join: '2018-01-22', location: 'Jakarta', status: 'tetap' },
     { id: 'EMP-0138', name: 'Fitri Ramadhani', dept: 'Gudang', title: 'Kepala Gudang', join: '2023-04-10', location: 'Surabaya', status: 'tetap' },
     { id: 'EMP-0159', name: 'Reza Alfarizi', dept: 'Gudang', title: 'Staf Gudang', join: '2025-02-03', location: 'Cikarang', status: 'magang' },
-  ];
+    { id: 'EMP-0163', name: 'Taufik Hidayat', dept: 'Penjualan', title: 'Kepala Cabang Medan', join: '2024-11-01', location: 'Medan', status: 'tetap' },
+    { id: 'EMP-0166', name: 'Maya Sari', dept: 'Operasional', title: 'Staf Administrasi & Kasir', join: '2025-01-06', location: 'Medan', status: 'kontrak' },
+  ].map((e) => ({ ...e, branch: WH_BRANCH[e.location] }));
 
   /* --- Peran & izin ------------------------------------------------------ */
   const roles = [
@@ -536,7 +647,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'PRJ-2026-003', name: 'Automation Panel Unilever', customer: 'PT Unilever Indonesia', pm: 'Yuni Astuti', budget: 890_000_000, actual: 0, startDate: '2026-09-01', endDate: '2027-02-28', status: 'perencanaan', health: 'hijau', progress: 0 },
     { id: 'PRJ-2026-002', name: 'Conveyor System Indofood', customer: 'PT Indofood CBP Sukses', pm: 'Dedi Kurnia', budget: 540_000_000, actual: 162_000_000, startDate: '2026-07-01', endDate: '2026-10-31', status: 'berjalan', health: 'hijau', progress: 30 },
     { id: 'PRJ-2026-001', name: 'Overhaul CNC Cikarang', customer: 'Internal', pm: 'Slamet Riyadi', budget: 320_000_000, actual: 310_000_000, startDate: '2026-01-15', endDate: '2026-06-30', status: 'selesai', health: 'hijau', progress: 100 },
-  ];
+  ].map((p) => ({ ...p, branch: { 'PRJ-2026-005': 'CKR', 'PRJ-2026-004': 'CKR', 'PRJ-2026-003': 'JKT', 'PRJ-2026-002': 'SBY', 'PRJ-2026-001': 'CKR' }[p.id] }));
 
   const projectTasks = {
     'PRJ-2026-005': [
@@ -551,62 +662,67 @@ Ingin saya buatkan draft permintaan pembelian?` },
   /* --- Bagan Akun (Chart of Accounts) ----------------------------------- */
   const chartOfAccounts = [
     /* Aset */
-    { code: '1-0000', name: 'Aset', type: 'Header', category: 'Aset', level: 0, balance: 0, parent: null, status: 'aktif' },
-    { code: '1-1000', name: 'Aset Lancar', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
-    { code: '1-1100', name: 'Kas & Setara Kas', type: 'Detail', category: 'Aset', level: 2, balance: 4_841_400_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1200', name: 'Piutang Usaha', type: 'Detail', category: 'Aset', level: 2, balance: 1_627_400_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1300', name: 'Piutang Lain-lain', type: 'Detail', category: 'Aset', level: 2, balance: 84_600_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1400', name: 'Persediaan Bahan Baku', type: 'Detail', category: 'Aset', level: 2, balance: 2_184_200_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1500', name: 'Persediaan Barang Jadi', type: 'Detail', category: 'Aset', level: 2, balance: 1_342_000_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1600', name: 'Biaya Dibayar di Muka', type: 'Detail', category: 'Aset', level: 2, balance: 196_800_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-1700', name: 'PPN Masukan', type: 'Detail', category: 'Aset', level: 2, balance: 312_400_000, parent: '1-1000', status: 'aktif' },
-    { code: '1-2000', name: 'Aset Tetap', type: 'Header', category: 'Aset', level: 1, balance: 0, parent: '1-0000', status: 'aktif' },
-    { code: '1-2100', name: 'Tanah', type: 'Detail', category: 'Aset', level: 2, balance: 3_200_000_000, parent: '1-2000', status: 'aktif' },
-    { code: '1-2200', name: 'Bangunan', type: 'Detail', category: 'Aset', level: 2, balance: 4_800_000_000, parent: '1-2000', status: 'aktif' },
-    { code: '1-2300', name: 'Mesin & Peralatan', type: 'Detail', category: 'Aset', level: 2, balance: 6_420_000_000, parent: '1-2000', status: 'aktif' },
-    { code: '1-2400', name: 'Kendaraan', type: 'Detail', category: 'Aset', level: 2, balance: 1_640_000_000, parent: '1-2000', status: 'aktif' },
-    { code: '1-2500', name: 'Peralatan Kantor', type: 'Detail', category: 'Aset', level: 2, balance: 486_000_000, parent: '1-2000', status: 'aktif' },
-    { code: '1-2900', name: 'Akumulasi Penyusutan', type: 'Detail', category: 'Aset', level: 2, balance: -4_218_000_000, parent: '1-2000', status: 'aktif' },
+    { code: '1-0000', name: 'Aset', type: 'Header', category: 'Aset', level: 0, parent: null, status: 'aktif' },
+    { code: '1-1000', name: 'Aset Lancar', type: 'Header', category: 'Aset', level: 1, parent: '1-0000', status: 'aktif' },
+    { code: '1-1100', name: 'Kas & Setara Kas', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1200', name: 'Piutang Usaha', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1300', name: 'Piutang Lain-lain', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1400', name: 'Persediaan Bahan Baku & Penolong', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1450', name: 'Persediaan Barang Dalam Proses', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1500', name: 'Persediaan Barang Jadi', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1600', name: 'Biaya Dibayar di Muka', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-1700', name: 'PPN Masukan', type: 'Detail', category: 'Aset', level: 2, parent: '1-1000', status: 'aktif' },
+    { code: '1-2000', name: 'Aset Tetap', type: 'Header', category: 'Aset', level: 1, parent: '1-0000', status: 'aktif' },
+    { code: '1-2100', name: 'Tanah', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif' },
+    { code: '1-2200', name: 'Bangunan', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif' },
+    { code: '1-2300', name: 'Mesin & Peralatan', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif' },
+    { code: '1-2400', name: 'Kendaraan', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif' },
+    { code: '1-2500', name: 'Peralatan Kantor', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif' },
+    { code: '1-2900', name: 'Akumulasi Penyusutan', type: 'Detail', category: 'Aset', level: 2, parent: '1-2000', status: 'aktif', contra: true },
+    { code: '1-3000', name: 'Rekening Koran Antar Kantor', type: 'Header', category: 'Aset', level: 1, parent: '1-0000', status: 'aktif' },
+    { code: '1-3100', name: 'RK Cabang (buku kantor pusat)', type: 'Detail', category: 'Aset', level: 2, parent: '1-3000', status: 'aktif', interco: true },
     /* Liabilitas */
-    { code: '2-0000', name: 'Liabilitas', type: 'Header', category: 'Liabilitas', level: 0, balance: 0, parent: null, status: 'aktif' },
-    { code: '2-1000', name: 'Liabilitas Jangka Pendek', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
-    { code: '2-1100', name: 'Utang Usaha', type: 'Detail', category: 'Liabilitas', level: 2, balance: 1_842_600_000, parent: '2-1000', status: 'aktif' },
-    { code: '2-1200', name: 'Utang Gaji', type: 'Detail', category: 'Liabilitas', level: 2, balance: 486_200_000, parent: '2-1000', status: 'aktif' },
-    { code: '2-1300', name: 'Utang Pajak', type: 'Detail', category: 'Liabilitas', level: 2, balance: 324_800_000, parent: '2-1000', status: 'aktif' },
-    { code: '2-1400', name: 'PPN Keluaran', type: 'Detail', category: 'Liabilitas', level: 2, balance: 418_600_000, parent: '2-1000', status: 'aktif' },
-    { code: '2-1500', name: 'Pendapatan Diterima di Muka', type: 'Detail', category: 'Liabilitas', level: 2, balance: 264_000_000, parent: '2-1000', status: 'aktif' },
-    { code: '2-2000', name: 'Liabilitas Jangka Panjang', type: 'Header', category: 'Liabilitas', level: 1, balance: 0, parent: '2-0000', status: 'aktif' },
-    { code: '2-2100', name: 'Utang Bank', type: 'Detail', category: 'Liabilitas', level: 2, balance: 4_600_000_000, parent: '2-2000', status: 'aktif' },
-    { code: '2-2200', name: 'Utang Sewa Guna', type: 'Detail', category: 'Liabilitas', level: 2, balance: 840_000_000, parent: '2-2000', status: 'aktif' },
+    { code: '2-0000', name: 'Liabilitas', type: 'Header', category: 'Liabilitas', level: 0, parent: null, status: 'aktif' },
+    { code: '2-1000', name: 'Liabilitas Jangka Pendek', type: 'Header', category: 'Liabilitas', level: 1, parent: '2-0000', status: 'aktif' },
+    { code: '2-1100', name: 'Utang Usaha', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-1000', status: 'aktif' },
+    { code: '2-1200', name: 'Utang Gaji', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-1000', status: 'aktif' },
+    { code: '2-1300', name: 'Utang Pajak', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-1000', status: 'aktif' },
+    { code: '2-1400', name: 'PPN Keluaran', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-1000', status: 'aktif' },
+    { code: '2-1500', name: 'Pendapatan Diterima di Muka', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-1000', status: 'aktif' },
+    { code: '2-2000', name: 'Liabilitas Jangka Panjang', type: 'Header', category: 'Liabilitas', level: 1, parent: '2-0000', status: 'aktif' },
+    { code: '2-2100', name: 'Utang Bank', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-2000', status: 'aktif' },
+    { code: '2-2200', name: 'Utang Sewa Guna', type: 'Detail', category: 'Liabilitas', level: 2, parent: '2-2000', status: 'aktif' },
     /* Ekuitas */
-    { code: '3-0000', name: 'Ekuitas', type: 'Header', category: 'Ekuitas', level: 0, balance: 0, parent: null, status: 'aktif' },
-    { code: '3-1000', name: 'Modal Disetor', type: 'Detail', category: 'Ekuitas', level: 1, balance: 10_000_000_000, parent: '3-0000', status: 'aktif' },
-    { code: '3-2000', name: 'Laba Ditahan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 3_842_600_000, parent: '3-0000', status: 'aktif' },
-    { code: '3-3000', name: 'Laba Periode Berjalan', type: 'Detail', category: 'Ekuitas', level: 1, balance: 1_687_200_000, parent: '3-0000', status: 'aktif' },
+    { code: '3-0000', name: 'Ekuitas', type: 'Header', category: 'Ekuitas', level: 0, parent: null, status: 'aktif' },
+    { code: '3-1000', name: 'Modal Disetor', type: 'Detail', category: 'Ekuitas', level: 1, parent: '3-0000', status: 'aktif' },
+    { code: '3-1500', name: 'RK Kantor Pusat (buku cabang)', type: 'Detail', category: 'Ekuitas', level: 1, parent: '3-0000', status: 'aktif', interco: true },
+    { code: '3-2000', name: 'Laba Ditahan', type: 'Detail', category: 'Ekuitas', level: 1, parent: '3-0000', status: 'aktif' },
+    { code: '3-3000', name: 'Laba Periode Berjalan', type: 'Detail', category: 'Ekuitas', level: 1, parent: '3-0000', status: 'aktif', computed: true },
     /* Pendapatan */
-    { code: '4-0000', name: 'Pendapatan', type: 'Header', category: 'Pendapatan', level: 0, balance: 0, parent: null, status: 'aktif' },
-    { code: '4-1000', name: 'Pendapatan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: 4_823_400_000, parent: '4-0000', status: 'aktif' },
-    { code: '4-2000', name: 'Pendapatan Jasa', type: 'Detail', category: 'Pendapatan', level: 1, balance: 682_000_000, parent: '4-0000', status: 'aktif' },
-    { code: '4-3000', name: 'Pendapatan Lain-lain', type: 'Detail', category: 'Pendapatan', level: 1, balance: 124_600_000, parent: '4-0000', status: 'aktif' },
-    { code: '4-9000', name: 'Retur & Potongan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, balance: -186_400_000, parent: '4-0000', status: 'aktif' },
+    { code: '4-0000', name: 'Pendapatan', type: 'Header', category: 'Pendapatan', level: 0, parent: null, status: 'aktif' },
+    { code: '4-1000', name: 'Pendapatan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, parent: '4-0000', status: 'aktif' },
+    { code: '4-2000', name: 'Pendapatan Jasa', type: 'Detail', category: 'Pendapatan', level: 1, parent: '4-0000', status: 'aktif' },
+    { code: '4-3000', name: 'Pendapatan Lain-lain', type: 'Detail', category: 'Pendapatan', level: 1, parent: '4-0000', status: 'aktif' },
+    { code: '4-9000', name: 'Retur & Potongan Penjualan', type: 'Detail', category: 'Pendapatan', level: 1, parent: '4-0000', status: 'aktif' },
     /* Beban */
-    { code: '5-0000', name: 'Beban', type: 'Header', category: 'Beban', level: 0, balance: 0, parent: null, status: 'aktif' },
-    { code: '5-1000', name: 'Harga Pokok Penjualan', type: 'Detail', category: 'Beban', level: 1, balance: 3_136_200_000, parent: '5-0000', status: 'aktif' },
-    { code: '5-1900', name: 'Selisih Persediaan', type: 'Detail', category: 'Beban', level: 1, balance: 14_200_000, parent: '5-0000', status: 'aktif' },
-    { code: '5-2000', name: 'Beban Operasional', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
-    { code: '5-2100', name: 'Beban Tenaga Kerja Langsung', type: 'Detail', category: 'Beban', level: 2, balance: 1_246_800_000, parent: '5-2000', status: 'aktif' },
-    { code: '5-2200', name: 'Beban Gaji & Tunjangan', type: 'Detail', category: 'Beban', level: 2, balance: 2_184_000_000, parent: '5-2000', status: 'aktif' },
-    { code: '5-2300', name: 'Beban Pemasaran', type: 'Detail', category: 'Beban', level: 2, balance: 412_600_000, parent: '5-2000', status: 'aktif' },
-    { code: '5-2400', name: 'Beban Angkut', type: 'Detail', category: 'Beban', level: 2, balance: 186_400_000, parent: '5-2000', status: 'aktif' },
-    { code: '5-3000', name: 'Beban Umum & Administrasi', type: 'Header', category: 'Beban', level: 1, balance: 0, parent: '5-0000', status: 'aktif' },
-    { code: '5-3100', name: 'Beban Utilitas', type: 'Detail', category: 'Beban', level: 2, balance: 624_800_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3200', name: 'Beban Penyusutan', type: 'Detail', category: 'Beban', level: 2, balance: 842_400_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3300', name: 'Beban Sewa', type: 'Detail', category: 'Beban', level: 2, balance: 264_000_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3400', name: 'Beban Pemeliharaan', type: 'Detail', category: 'Beban', level: 2, balance: 312_600_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3500', name: 'Beban Asuransi', type: 'Detail', category: 'Beban', level: 2, balance: 148_200_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3600', name: 'Beban Perjalanan Dinas', type: 'Detail', category: 'Beban', level: 2, balance: 96_400_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-3700', name: 'Beban Perlengkapan Kantor', type: 'Detail', category: 'Beban', level: 2, balance: 42_600_000, parent: '5-3000', status: 'aktif' },
-    { code: '5-4000', name: 'Beban Lain-lain', type: 'Detail', category: 'Beban', level: 1, balance: 36_800_000, parent: '5-0000', status: 'aktif' },
+    { code: '5-0000', name: 'Beban', type: 'Header', category: 'Beban', level: 0, parent: null, status: 'aktif' },
+    { code: '5-1000', name: 'Harga Pokok Penjualan', type: 'Detail', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
+    { code: '5-1900', name: 'Selisih Persediaan', type: 'Detail', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
+    { code: '5-2000', name: 'Beban Operasional', type: 'Header', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
+    { code: '5-2100', name: 'Beban Tenaga Kerja Langsung', type: 'Detail', category: 'Beban', level: 2, parent: '5-2000', status: 'aktif' },
+    { code: '5-2200', name: 'Beban Gaji & Tunjangan', type: 'Detail', category: 'Beban', level: 2, parent: '5-2000', status: 'aktif' },
+    { code: '5-2300', name: 'Beban Pemasaran', type: 'Detail', category: 'Beban', level: 2, parent: '5-2000', status: 'aktif' },
+    { code: '5-2400', name: 'Beban Angkut', type: 'Detail', category: 'Beban', level: 2, parent: '5-2000', status: 'aktif' },
+    { code: '5-3000', name: 'Beban Umum & Administrasi', type: 'Header', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
+    { code: '5-3100', name: 'Beban Utilitas', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3200', name: 'Beban Penyusutan', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3300', name: 'Beban Sewa', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3400', name: 'Beban Pemeliharaan', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3500', name: 'Beban Asuransi', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3600', name: 'Beban Perjalanan Dinas', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-3700', name: 'Beban Perlengkapan Kantor', type: 'Detail', category: 'Beban', level: 2, parent: '5-3000', status: 'aktif' },
+    { code: '5-4000', name: 'Beban Lain-lain', type: 'Detail', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
+    { code: '5-4100', name: 'Beban Bunga Bank', type: 'Detail', category: 'Beban', level: 1, parent: '5-0000', status: 'aktif' },
   ];
 
   /* --- Anggaran per Akun (Management Budget) ------------------------------ */
@@ -650,7 +766,13 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'PAY-2026-08-006', employeeId: 'EMP-0145', name: 'Sari Melati', dept: 'Keuangan', basic: 12_000_000, allowance: 3_200_000, deduction: 1_264_000, overtime: 600_000, netPay: 14_536_000, status: 'diproses', period: 'Agu 2026' },
     { id: 'PAY-2026-08-007', employeeId: 'EMP-0152', name: 'Yuni Astuti', dept: 'Produksi', basic: 11_000_000, allowance: 3_600_000, deduction: 1_164_000, overtime: 1_800_000, netPay: 15_236_000, status: 'diproses', period: 'Agu 2026' },
     { id: 'PAY-2026-08-008', employeeId: 'EMP-0159', name: 'Reza Alfarizi', dept: 'Gudang', basic: 5_500_000, allowance: 1_800_000, deduction: 384_000, overtime: 0, netPay: 6_916_000, status: 'draf', period: 'Agu 2026' },
-  ];
+    { id: 'PAY-2026-08-009', employeeId: 'EMP-0118', name: 'Hendra Wijaya', dept: 'Penjualan', basic: 16_500_000, allowance: 5_200_000, deduction: 1_736_000, overtime: 0, netPay: 19_964_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-010', employeeId: 'EMP-0131', name: 'Dewi Anggraini', dept: 'Pengadaan', basic: 13_500_000, allowance: 3_900_000, deduction: 1_392_000, overtime: 400_000, netPay: 16_408_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-011', employeeId: 'EMP-0110', name: 'Dedi Kurnia', dept: 'Produksi', basic: 15_500_000, allowance: 4_800_000, deduction: 1_624_000, overtime: 2_100_000, netPay: 20_776_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-012', employeeId: 'EMP-0138', name: 'Fitri Ramadhani', dept: 'Gudang', basic: 14_000_000, allowance: 4_200_000, deduction: 1_456_000, overtime: 600_000, netPay: 17_344_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-013', employeeId: 'EMP-0163', name: 'Taufik Hidayat', dept: 'Penjualan', basic: 17_000_000, allowance: 5_500_000, deduction: 1_800_000, overtime: 0, netPay: 20_700_000, status: 'dibayar', period: 'Agu 2026' },
+    { id: 'PAY-2026-08-014', employeeId: 'EMP-0166', name: 'Maya Sari', dept: 'Operasional', basic: 6_800_000, allowance: 2_000_000, deduction: 528_000, overtime: 300_000, netPay: 8_572_000, status: 'diproses', period: 'Agu 2026' },
+  ].map((p) => ({ ...p, branch: WH_BRANCH[employees.find((e) => e.id === p.employeeId).location] }));
 
   /* --- Daftar Aset ------------------------------------------------------- */
   const assets = [
@@ -659,10 +781,15 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'AST-0031', name: 'Forklift Toyota 8FD30', category: 'Kendaraan operasional', location: 'Cikarang — Gudang', acquisitionDate: '2023-11-20', acquisitionCost: 480_000_000, bookValue: 384_000_000, monthlyDepr: 8_000_000, status: 'aktif' },
     { id: 'AST-0038', name: 'Genset Cummins 500 kVA', category: 'Instalasi listrik', location: 'Cikarang — Utilitas', acquisitionDate: '2021-02-14', acquisitionCost: 850_000_000, bookValue: 425_000_000, monthlyDepr: 14_166_667, status: 'aktif' },
     { id: 'AST-0045', name: 'Mobil operasional Toyota Hilux', category: 'Kendaraan operasional', location: 'Jakarta — Pusat', acquisitionDate: '2024-06-10', acquisitionCost: 520_000_000, bookValue: 442_000_000, monthlyDepr: 6_500_000, status: 'aktif' },
-    { id: 'AST-0051', name: 'Server Dell PowerEdge R750', category: 'Perangkat TI', location: 'Jakarta — Pusat', acquisitionDate: '2025-01-08', acquisitionCost: 320_000_000, bookValue: 266_667_000, monthlyDepr: 8_888_889, status: 'aktif' },
+    { id: 'AST-0051', name: 'Server Dell PowerEdge R750', category: 'Perangkat TI', location: 'Jakarta — Pusat', acquisitionDate: '2025-01-08', acquisitionCost: 320_000_000, bookValue: 142_222_222, monthlyDepr: 8_888_889, status: 'aktif' },
     { id: 'AST-0009', name: 'Mesin bubut konvensional Pinacho', category: 'Mesin produksi', location: 'Cikarang — Lini 1', acquisitionDate: '2016-03-12', acquisitionCost: 380_000_000, bookValue: 0, monthlyDepr: 0, status: 'dihapuskan' },
     { id: 'AST-0056', name: 'Crane overhead 5T Konecranes', category: 'Peralatan material handling', location: 'Surabaya — Gudang', acquisitionDate: '2023-07-22', acquisitionCost: 680_000_000, bookValue: 510_000_000, monthlyDepr: 11_333_333, status: 'aktif' },
-  ];
+    { id: 'AST-0060', name: 'Mobil operasional Daihatsu Gran Max', category: 'Kendaraan operasional', location: 'Medan — Cabang', acquisitionDate: '2025-03-10', acquisitionCost: 210_000_000, bookValue: 172_812_500, monthlyDepr: 2_187_500, status: 'aktif' },
+  ].map((a) => ({
+    ...a,
+    branch: WH_BRANCH[a.location.split(' — ')[0]],
+    account: { 'Kendaraan operasional': '1-2400', 'Perangkat TI': '1-2500' }[a.category] || '1-2300',
+  }));
 
   /* --- Pemeliharaan ------------------------------------------------------ */
   const maintenanceOrders = [
@@ -672,7 +799,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'MNT-2026-0206', asset: 'Genset Cummins 500 kVA', assetId: 'AST-0038', type: 'Preventif', priority: 'sedang', assignee: 'Dedi Kurnia', scheduledDate: '2026-08-14', status: 'selesai', cost: 8_200_000, desc: 'Load test dan ganti bahan bakar' },
     { id: 'MNT-2026-0203', asset: 'Hydraulic Press 200T Aida', assetId: 'AST-0022', type: 'Korektif', priority: 'tinggi', assignee: 'Slamet Riyadi', scheduledDate: '2026-08-10', status: 'selesai', cost: 18_400_000, desc: 'Kebocoran seal silinder — darurat' },
     { id: 'MNT-2026-0201', asset: 'Crane overhead 5T Konecranes', assetId: 'AST-0056', type: 'Preventif', priority: 'rendah', assignee: 'Fitri Ramadhani', scheduledDate: '2026-08-25', status: 'dijadwalkan', cost: 6_100_000, desc: 'Inspeksi wire rope dan rem' },
-  ];
+    { id: 'MNT-2026-0199', asset: 'Mobil operasional Daihatsu Gran Max', assetId: 'AST-0060', type: 'Preventif', priority: 'rendah', assignee: 'Maya Sari', scheduledDate: '2026-08-07', status: 'selesai', cost: 1_450_000, desc: 'Servis berkala 20.000 km' },
+  ].map((m) => ({ ...m, branch: assets.find((a) => a.id === m.assetId).branch }));
 
   /* --- Repositori Dokumen ------------------------------------------------ */
   const documents = [
@@ -690,7 +818,8 @@ Ingin saya buatkan draft permintaan pembelian?` },
   const posShifts = [
     { id: 'SHF-0842', cashier: 'Anita Permata', store: 'Toko Cikarang', startTime: '08:00', endTime: '16:00', status: 'aktif', openingCash: 500_000, currentCash: 2_840_000, transactions: 28, totalSales: 18_420_000 },
     { id: 'SHF-0841', cashier: 'Budi Santoso', store: 'Toko Cikarang', startTime: '08:00', endTime: '16:00', status: 'aktif', openingCash: 500_000, currentCash: 1_960_000, transactions: 22, totalSales: 14_680_000 },
-  ];
+    { id: 'SHF-0843', cashier: 'Maya Sari', store: 'Toko Medan', startTime: '09:00', endTime: '17:00', status: 'aktif', openingCash: 300_000, currentCash: 1_120_000, transactions: 9, totalSales: 6_240_000 },
+  ].map((sh) => ({ ...sh, branch: sh.store === 'Toko Medan' ? 'MDN' : 'CKR' }));
 
   const posTransactions = [
     { id: 'TRX-2026-14921', time: '14:32', cashier: 'Anita Permata', items: 4, total: 1_284_000, payment: 'QRIS', status: 'selesai' },
@@ -699,11 +828,12 @@ Ingin saya buatkan draft permintaan pembelian?` },
     { id: 'TRX-2026-14918', time: '13:41', cashier: 'Budi Santoso', items: 6, total: 2_148_000, payment: 'Transfer', status: 'selesai' },
     { id: 'TRX-2026-14917', time: '13:22', cashier: 'Anita Permata', items: 3, total: 764_500, payment: 'Tunai', status: 'void' },
     { id: 'TRX-2026-14916', time: '12:58', cashier: 'Budi Santoso', items: 2, total: 385_000, payment: 'Kredit', status: 'selesai' },
-  ];
+    { id: 'TRX-2026-14915', time: '12:40', cashier: 'Maya Sari', items: 3, total: 812_000, payment: 'QRIS', status: 'selesai' },
+  ].map((t) => ({ ...t, branch: t.cashier === 'Maya Sari' ? 'MDN' : 'CKR' }));
 
   const posKpis = {
-    todaySales: 33_100_000, todayTarget: 40_000_000,
-    transactions: 50, avgBasket: 662_000,
+    todaySales: 39_340_000, todayTarget: 46_000_000,
+    transactions: 59, avgBasket: 667_000,
     topProduct: 'Braket dudukan mesin tipe B',
     refundRate: 2.0,
   };
@@ -712,7 +842,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
   const auditTrail = [
     { id: 'AUD-9842', timestamp: '2026-08-14 14:23:01', user: 'Rina Kusuma', action: 'Buat', module: 'Pesanan Penjualan', entity: 'SO-2026-0421', detail: 'Pesanan baru untuk PT Sinar Mas Otomotif', ip: '10.10.2.45' },
     { id: 'AUD-9841', timestamp: '2026-08-14 14:22:58', user: 'Sistem', action: 'Periksa', module: 'Kredit', entity: 'CUST-0004', detail: 'Pemeriksaan plafon kredit otomatis — lolos', ip: '—' },
-    { id: 'AUD-9839', timestamp: '2026-08-14 09:31:00', user: 'Sistem', action: 'Posting', module: 'Keuangan', entity: 'JV-2026-0778', detail: 'Pengakuan pendapatan otomatis dari INV-2026-1188', ip: '—' },
+    { id: 'AUD-9839', timestamp: '2026-08-14 09:31:00', user: 'Sistem', action: 'Posting', module: 'Keuangan', entity: 'INV-2026-1188', detail: 'Jurnal pendapatan, PPN keluaran, dan HPP diposting otomatis dari faktur', ip: '—' },
     { id: 'AUD-9835', timestamp: '2026-08-13 14:23:15', user: 'Rina Kusuma', action: 'Buat', module: 'Pesanan Penjualan', entity: 'SO-2026-0418', detail: 'Pesanan untuk PT Sentosa Baja Perkasa — diteruskan ke approval', ip: '10.10.2.45' },
     { id: 'AUD-9832', timestamp: '2026-08-13 08:57:22', user: 'Bagus Hartono', action: 'Terima', module: 'Penerimaan Barang', entity: 'GR-2026-0512', detail: 'Penerimaan PO-2026-0229 — 8000 pcs baut hex M12×60', ip: '10.10.3.12' },
     { id: 'AUD-9828', timestamp: '2026-08-12 11:02:00', user: 'Osmond Pratama', action: 'Setujui', module: 'Pesanan Penjualan', entity: 'SO-2026-0419', detail: 'Persetujuan pesanan CV Karya Presisi', ip: '10.10.1.8' },
@@ -745,33 +875,35 @@ Ingin saya buatkan draft permintaan pembelian?` },
   ];
 
   /* --- Hutang Usaha (Accounts Payable) ----------------------------------- */
+  /* `kind: 'jasa'` diposting ke akun beban `account`, selain itu ke persediaan. */
   const payables = [
     { id: 'APV-2026-0412', date: '2026-08-14', supplier: 'CV Logam Jaya Abadi', poRef: 'PO-2026-0233', amount: 186_200_000, paid: 0, dueDate: '2026-09-13', status: 'belum-dibayar', matched: true },
+    { id: 'APV-2026-0410', date: '2026-08-14', supplier: 'CV Medan Logistik', poRef: 'PO-2026-0234', amount: 18_600_000, paid: 0, dueDate: '2026-08-28', status: 'belum-dibayar', matched: true, kind: 'jasa', account: '5-2400' },
     { id: 'APV-2026-0408', date: '2026-08-11', supplier: 'PT Kabel Cipta Sarana', poRef: 'PO-2026-0230', amount: 132_800_000, paid: 0, dueDate: '2026-09-10', status: 'belum-dibayar', matched: true },
-    { id: 'APV-2026-0405', date: '2026-08-08', supplier: 'PT Bearing Nusantara', poRef: 'PO-2026-0226', amount: 61_450_000, paid: 61_450_000, dueDate: '2026-09-22', status: 'lunas', matched: true },
-    { id: 'APV-2026-0401', date: '2026-08-05', supplier: 'PT Kemasan Prima', poRef: 'PO-2026-0227', amount: 33_200_000, paid: 33_200_000, dueDate: '2026-08-19', status: 'lunas', matched: true },
-    { id: 'APV-2026-0398', date: '2026-08-01', supplier: 'PT Baja Sentral Indo', poRef: 'PO-2026-0225', amount: 402_700_000, paid: 200_000_000, dueDate: '2026-09-30', status: 'sebagian', matched: false },
+    { id: 'APV-2026-0405', date: '2026-08-08', supplier: 'PT Bearing Nusantara', poRef: 'PO-2026-0226', amount: 61_450_000, paid: 61_450_000, paidDate: '2026-08-12', dueDate: '2026-09-22', status: 'lunas', matched: true },
+    { id: 'APV-2026-0403', date: '2026-08-06', supplier: 'PT Telkom Indonesia', poRef: null, amount: 12_800_000, paid: 12_800_000, paidDate: '2026-08-13', dueDate: '2026-08-26', status: 'lunas', matched: true, kind: 'jasa', account: '5-3100' },
+    { id: 'APV-2026-0401', date: '2026-08-05', supplier: 'PT Kemasan Prima', poRef: 'PO-2026-0227', amount: 33_200_000, paid: 33_200_000, paidDate: '2026-08-10', dueDate: '2026-08-19', status: 'lunas', matched: true },
+    { id: 'APV-2026-0398', date: '2026-08-01', supplier: 'PT Baja Sentral Indo', poRef: 'PO-2026-0225', amount: 402_700_000, paid: 200_000_000, paidDate: '2026-08-08', dueDate: '2026-09-30', status: 'sebagian', matched: false },
+    { id: 'APV-2026-0396', date: '2026-07-30', supplier: 'PT Sumatera Grafika', poRef: null, amount: 6_400_000, paid: 6_400_000, paidDate: '2026-08-09', dueDate: '2026-07-30', status: 'lunas', matched: true, kind: 'jasa', account: '5-3700' },
     { id: 'APV-2026-0392', date: '2026-07-28', supplier: 'PT Pelumas Andalan', poRef: 'PO-2026-0224', amount: 27_600_000, paid: 0, dueDate: '2026-08-27', status: 'belum-dibayar', matched: true },
     { id: 'APV-2026-0385', date: '2026-07-22', supplier: 'PT Mesin Presisi Tama', poRef: 'PO-2026-0228', amount: 76_950_000, paid: 0, dueDate: '2026-09-05', status: 'belum-dibayar', matched: true },
-    { id: 'APV-2026-0378', date: '2026-07-14', supplier: 'CV Logam Jaya Abadi', poRef: 'PO-2026-0229', amount: 217_400_000, paid: 217_400_000, dueDate: '2026-08-13', status: 'lunas', matched: true },
-  ];
-
-  const apAging = [
-    { label: 'Belum jatuh tempo', short: 'Lancar', value: 921_650_000, count: 5 },
-    { label: '1–30 hari', short: '1–30', value: 27_600_000, count: 1 },
-    { label: '31–60 hari', short: '31–60', value: 0, count: 0 },
-    { label: '61–90 hari', short: '61–90', value: 0, count: 0 },
-    { label: 'Lebih dari 90 hari', short: '>90', value: 0, count: 0 },
-  ];
+    { id: 'APV-2026-0378', date: '2026-07-14', supplier: 'CV Logam Jaya Abadi', poRef: 'PO-2026-0229', amount: 217_400_000, paid: 217_400_000, paidDate: '2026-08-13', dueDate: '2026-08-13', status: 'lunas', matched: true },
+  ].map((r) => ({ branch: supplierBranch[r.supplier] || 'JKT', ...r }));
 
   /* --- Kas & Bank -------------------------------------------------------- */
+  /* `opening` = saldo 1 Jan 2026; saldo berjalan dihitung dari jurnal kas. */
   const bankAccounts = [
-    { id: 'BNK-001', name: 'BCA — Giro Operasional', bank: 'BCA', accountNo: '012-345-6789', currency: 'IDR', balance: 2_842_600_000, lastRecon: '2026-08-13', unrecon: 3, status: 'aktif' },
-    { id: 'BNK-002', name: 'Mandiri — Giro Gaji', bank: 'Mandiri', accountNo: '123-00-4567890', currency: 'IDR', balance: 486_200_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
-    { id: 'BNK-003', name: 'BCA — Deposito 3 bln', bank: 'BCA', accountNo: '012-888-9012', currency: 'IDR', balance: 1_500_000_000, lastRecon: '2026-08-01', unrecon: 0, status: 'aktif' },
-    { id: 'BNK-004', name: 'BNI — Giro USD', bank: 'BNI', accountNo: '789-012-3456', currency: 'USD', balance: 124_800, lastRecon: '2026-08-10', unrecon: 1, status: 'aktif' },
-    { id: 'BNK-005', name: 'Kas Kecil — Cikarang', bank: 'Kas', accountNo: '—', currency: 'IDR', balance: 8_400_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
-    { id: 'BNK-006', name: 'Kas Kecil — Surabaya', bank: 'Kas', accountNo: '—', currency: 'IDR', balance: 4_200_000, lastRecon: '2026-08-12', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-001', name: 'BCA — Giro Operasional', bank: 'BCA', accountNo: '012-345-6789', currency: 'IDR', branch: 'JKT', opening: 420_000_000, lastRecon: '2026-08-13', unrecon: 3, status: 'aktif' },
+    { id: 'BNK-002', name: 'Mandiri — Giro Gaji', bank: 'Mandiri', accountNo: '123-00-4567890', currency: 'IDR', branch: 'JKT', opening: 180_000_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-003', name: 'BCA — Deposito 3 bln', bank: 'BCA', accountNo: '012-888-9012', currency: 'IDR', branch: 'JKT', opening: 1_500_000_000, lastRecon: '2026-08-01', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-004', name: 'BNI — Giro USD', bank: 'BNI', accountNo: '789-012-3456', currency: 'USD', branch: 'JKT', opening: 124_800, lastRecon: '2026-08-10', unrecon: 1, status: 'aktif' },
+    { id: 'BNK-007', name: 'Kas Kecil — Jakarta', bank: 'Kas', accountNo: '—', currency: 'IDR', branch: 'JKT', opening: 8_000_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-008', name: 'BCA — Giro Cabang Cikarang', bank: 'BCA', accountNo: '012-410-2277', currency: 'IDR', branch: 'CKR', opening: 260_000_000, lastRecon: '2026-08-13', unrecon: 2, status: 'aktif' },
+    { id: 'BNK-005', name: 'Kas Kecil — Cikarang', bank: 'Kas', accountNo: '—', currency: 'IDR', branch: 'CKR', opening: 40_000_000, lastRecon: '2026-08-14', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-009', name: 'BCA — Giro Cabang Surabaya', bank: 'BCA', accountNo: '012-611-3345', currency: 'IDR', branch: 'SBY', opening: 140_000_000, lastRecon: '2026-08-12', unrecon: 1, status: 'aktif' },
+    { id: 'BNK-006', name: 'Kas Kecil — Surabaya', bank: 'Kas', accountNo: '—', currency: 'IDR', branch: 'SBY', opening: 6_000_000, lastRecon: '2026-08-12', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-010', name: 'Bank Sumut — Giro Medan', bank: 'Bank Sumut', accountNo: '100-02-118844', currency: 'IDR', branch: 'MDN', opening: 72_000_000, lastRecon: '2026-08-11', unrecon: 0, status: 'aktif' },
+    { id: 'BNK-011', name: 'Kas Kecil — Medan', bank: 'Kas', accountNo: '—', currency: 'IDR', branch: 'MDN', opening: 6_000_000, lastRecon: '2026-08-13', unrecon: 0, status: 'aktif' },
   ];
 
   /* --- Kehadiran & Cuti -------------------------------------------------- */
@@ -877,12 +1009,13 @@ Ingin saya buatkan draft permintaan pembelian?` },
   ];
 
   return {
-    org, nav, kpis, revenueTrend, revenueByLine, inventoryMix, arAging,
+    org, nav, revenueByLine,
+    branches, periods, openingBalances, salesRecap, recurringExpenses, loanInstallment, posSummary, manualJournals,
     approvals, stockAlerts, activity, notifications,
     salesOrders, salesOrderLines, defaultLines, orderTimeline, defaultTimeline,
     customers, invoices, purchaseOrders, suppliers,
     stockItems, stockMoves, workOrderColumns, workOrders,
-    journals, employees, roles, permissions,
+    employees, roles, permissions,
     /* Modul baru */
     aiBriefing, aiMessages,
     crmStages, leads, quotations, purchaseRequests,
@@ -891,7 +1024,7 @@ Ingin saya buatkan draft permintaan pembelian?` },
     documents, posShifts, posTransactions, posKpis,
     auditTrail,
     /* Modul tambahan */
-    masterProducts, rfqs, payables, apAging, bankAccounts,
+    masterProducts, rfqs, payables, bankAccounts,
     attendanceRecords, workflows, reports, complianceItems, shipments,
     /* Dashboard */
     bscData, analyticsKpis,

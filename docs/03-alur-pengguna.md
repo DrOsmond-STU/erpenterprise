@@ -130,6 +130,42 @@ kolom lain angka itu selalu 0% atau 100% dan hanya menambah kebisingan visual.
 
 ---
 
+## Alur 5 — Menutup angka: dari dokumen ke neraca konsolidasi
+
+**Pelaku:** Andi (akuntan senior) · **Frekuensi:** harian, intensif saat tutup bulan
+
+```
+Strip konteks ▸ Cabang: Cikarang · Periode: Agu 2026
+  ▼
+Integrasi & Rekonsiliasi
+  │  11 pemeriksaan sub-buku vs buku besar — semuanya "Cocok"
+  │  Ringkasan posting per modul: faktur, hutang, gaji, aset, POS, stok, pajak
+  ▼
+Jurnal Umum ▸ chip "Menunggu persetujuan" ▸ JV-2026-0774
+  │  Laci: baris debit/kredit, pil "Seimbang", dokumen sumber
+  ├─ [Posting]  ▸ jurnal langsung memengaruhi buku besar & laporan
+  └─ [Tolak]    ▸ dikembalikan ke pembuat
+  ▼
+Kartu Buku Besar ▸ 1-1100 Kas & Setara Kas ▸ saring rekening
+  │  Saldo awal ▸ mutasi berjalan ▸ saldo akhir; klik baris ▸ jurnal asal
+  ▼
+Neraca Saldo ▸ Laba Rugi ▸ Neraca (cabang)
+  │  Pil "Aset = Liabilitas + Ekuitas"
+  ▼
+Strip konteks ▸ Cabang: Semua cabang
+  ▼
+Laporan Konsolidasi
+  │  Kolom Jakarta · Cikarang · Surabaya · Medan · Eliminasi · Konsolidasi
+  └  RK Cabang (pusat) ↔ RK Kantor Pusat (cabang) saling menghapus
+```
+
+**Keputusan desain.** Tidak ada angka laporan yang diketik: semuanya turunan
+jurnal. Karena itu halaman Integrasi diletakkan di depan alur — bila satu
+sub-buku tidak cocok, akuntan tahu modul mana yang harus dibuka sebelum
+membaca laporan.
+
+---
+
 ## Pola lintas alur
 
 | Pola | Aturan |

@@ -19,6 +19,8 @@ const VIEWS = [
   'karyawan', 'peran', 'pengaturan', 'sistem-desain',
   'lead', 'penawaran', 'kasir', 'permintaan-pembelian', 'proyek',
   'anggaran', 'penggajian', 'aset', 'pemeliharaan', 'dokumen', 'jejak-audit',
+  'hutang', 'kas-bank', 'bagan-akun', 'buku-besar', 'neraca-saldo', 'laba-rugi', 'neraca',
+  'konsolidasi', 'integrasi', 'cabang',
 ];
 
 const problems = [];
@@ -72,6 +74,53 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(300);
   if (!(await page.locator('.toast').count())) problems.push(`[${scheme}] toast tidak muncul setelah simpan`);
 
+  /* Konteks cabang: pilih Cikarang, register & laporan harus mengikuti. */
+  await page.click('.contextbar [data-action="switch-branch"]');
+  await page.waitForTimeout(150);
+  await page.click('[data-set-branch="CKR"]');
+  await page.waitForTimeout(250);
+  const ctxText = await page.locator('.contextbar').innerText();
+  if (!ctxText.includes('Cikarang')) problems.push(`[${scheme}] pemilih cabang tidak mengubah konteks`);
+  await page.goto(`${url}#/neraca`);
+  await page.evaluate(() => { location.hash = '#/neraca'; });
+  await page.waitForTimeout(250);
+  const neracaOk = await page.locator('.kpi-tile .pill[data-tone="ok"]').count();
+  if (!neracaOk) problems.push(`[${scheme}] neraca cabang Cikarang tidak seimbang`);
+
+  /* Jurnal → laci → kartu buku besar, lalu kembali ke konsolidasi. */
+  await page.evaluate(() => { location.hash = '#/jurnal'; });
+  await page.waitForTimeout(250);
+  await page.click('tbody tr[data-row]');
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.drawer .table').count())) problems.push(`[${scheme}] laci jurnal tanpa tabel baris`);
+  await page.click('.drawer [data-gl]');
+  await page.waitForTimeout(250);
+  if (!(await page.evaluate(() => location.hash)).includes('buku-besar')) problems.push(`[${scheme}] tautan kartu buku besar tidak membuka halaman`);
+  await page.click('.contextbar [data-action="switch-branch"]');
+  await page.waitForTimeout(150);
+  await page.click('[data-set-branch="ALL"]');
+  await page.waitForTimeout(250);
+
+  /* Jurnal manual baru yang seimbang harus tersimpan. */
+  await page.evaluate(() => { location.hash = '#/jurnal'; });
+  await page.waitForTimeout(250);
+  await page.click('[data-action="new-journal"]');
+  await page.waitForTimeout(200);
+  await page.fill('#jv-desc', 'Uji asap jurnal memorial');
+  await page.selectOption('#jv-body tr:nth-child(1) [data-jv-acc]', '5-3700');
+  await page.fill('#jv-body tr:nth-child(1) [data-jv-debit]', '1500000');
+  await page.selectOption('#jv-body tr:nth-child(2) [data-jv-acc]', '1-1100');
+  await page.selectOption('#jv-body tr:nth-child(2) [data-jv-bank]', 'BNK-007');
+  await page.fill('#jv-body tr:nth-child(2) [data-jv-credit]', '1500000');
+  await page.click('[data-action="submit-journal"][data-mode="diposting"]');
+  await page.waitForTimeout(300);
+  const jvToast = await page.locator('.toast').last().innerText().catch(() => '');
+  if (!jvToast.includes('Jurnal diposting')) problems.push(`[${scheme}] jurnal manual tidak terposting: ${jvToast}`);
+  const integ = await page.evaluate(() => { location.hash = '#/integrasi'; return true; });
+  await page.waitForTimeout(300);
+  const selisih = await page.locator('.pill[data-tone="danger"]').count();
+  if (integ && selisih) problems.push(`[${scheme}] rekonsiliasi menunjukkan ${selisih} selisih setelah jurnal manual`);
+
   await ctx.close();
 }
 
@@ -95,4 +144,4 @@ if (problems.length) {
   for (const p of problems) console.error('  · ' + p);
   process.exit(1);
 }
-console.log(`LULUS — ${VIEWS.length} layar × 2 tema + interaksi + tampilan sempit, tanpa galat.`);
+console.log(`LULUS — ${VIEWS.length} layar × 2 tema + interaksi (konteks cabang, jurnal, buku besar, rekonsiliasi) + tampilan sempit, tanpa galat.`);

@@ -264,7 +264,8 @@ urutan navigasi.
 ### 10.1 Bagan akun (`#/bagan-akun`)
 
 **Fitur:**
-- Pohon akun 47 entri hierarkis (3 level kedalaman)
+- Pohon akun 57 entri hierarkis (3 level kedalaman); saldo dihitung dari buku
+  besar untuk cabang & periode aktif; klik akun detail → kartu buku besar
 - 5 kategori: Aset, Liabilitas, Ekuitas, Pendapatan, Beban
 - Kolom: kode, nama, tipe (Header/Detail), saldo
 - Akun Header dapat diciutkan/dikembangkan
@@ -293,7 +294,9 @@ urutan navigasi.
 ### 10.4 Kas & bank (`#/kas-bank`)
 
 **Fitur:**
-- Register 6 rekening: ID, nama, bank, no. rekening, mata uang, saldo, rekonsiliasi terakhir, status
+- Register 11 rekening bercap cabang: saldo dihitung dari saldo awal + jurnal
+  kas per akhir periode; ubin pembanding saldo buku besar 1-1100; klik
+  rekening → kartu buku besar tersaring rekening
 - Page-head dengan tombol Rekening Baru, Ekspor
 - Indikator transaksi belum direkonsiliasi
 
@@ -304,14 +307,70 @@ urutan navigasi.
 ### 10.5 Jurnal umum (`#/jurnal`)
 
 **Fitur:**
-- Register 10 jurnal: ID, tanggal, deskripsi, akun, debit, kredit, status, oleh
-- Chip status: diposting, menunggu, ditolak
-- Kolom debit/kredit rata kanan, format angka id-ID
+- Register ±550 jurnal berpasangan: nomor, cabang, tanggal, keterangan
+  (sumber · referensi · jumlah baris), debit, kredit, oleh, status; tersaring
+  cabang & periode aktif; pencarian mencakup kode/nama akun
+- Laci jurnal: rincian, tabel baris debit/kredit dengan tautan ke kartu buku
+  besar, pil keseimbangan, tautan dokumen sumber, aksi Posting / Tolak
+- Modal jurnal memorial: tanggal, cabang, keterangan, referensi, baris dinamis
+  (akun detail, debit, kredit, rekening untuk 1-1100), total & selisih hidup,
+  simpan & posting atau kirim untuk persetujuan
+
+**Validasi (`Ledger.validate`):**
+- Σ debit = Σ kredit; minimal dua baris; satu sisi per baris
+- Hanya akun `Detail` (bukan header, bukan akun dihitung)
+- Periode tertutup menolak jurnal; cabang harus dikenal
+- Baris `1-1100` wajib menyebut rekening milik cabang yang sama
 
 **Aturan bisnis:**
-- Σ debit = Σ kredit untuk setiap jurnal entry
-- Jurnal penyesuaian manual → memerlukan persetujuan
-- Posting otomatis dari modul lain (penjualan, pembelian) oleh Sistem
+- Posting otomatis oleh Sistem dari faktur, hutang, penggajian, aset,
+  pemeliharaan, POS, mutasi stok, beban rutin, angsuran, dan pajak
+- Jurnal manual berstatus `menunggu` tidak memengaruhi laporan sampai diposting
+
+### 10.7 Kartu buku besar (`#/buku-besar`)
+
+- Pilih akun (dikelompokkan per kategori) dan, untuk 1-1100, rekening bank
+- Ubin: saldo awal, mutasi debit, mutasi kredit, saldo akhir (sisi normal)
+- Tabel: tanggal, jurnal, keterangan, cabang (saat konsolidasi), debit, kredit,
+  saldo berjalan; baris saldo awal & total; klik baris → laci jurnal
+
+### 10.8 Neraca saldo (`#/neraca-saldo`)
+
+- Saldo awal D/K, mutasi D/K, saldo akhir D/K per akun detail, dikelompokkan
+  kategori; total & pil keseimbangan
+- Mode *Per cabang* (konteks semua cabang): kolom tiap cabang, eliminasi
+  akun antar kantor, konsolidasi
+
+### 10.9 Laba rugi (`#/laba-rugi`)
+
+- Pendapatan → HPP → laba kotor → beban operasional → beban umum &
+  administrasi → laba operasional → lain-lain → laba bersih
+- Satu cabang: kolom nilai + % pendapatan; semua cabang: kolom per cabang +
+  konsolidasi
+- Ubin: pendapatan, laba kotor (margin), laba operasional, laba bersih (margin)
+
+### 10.10 Neraca (`#/neraca`)
+
+- Aset lancar, aset tetap (neto akumulasi penyusutan), RK antar kantor,
+  liabilitas jangka pendek/panjang, ekuitas + laba periode berjalan
+  (dihitung sejak awal tahun buku)
+- Pil "Aset = Liabilitas + Ekuitas"; mode konsolidasi dengan kolom eliminasi
+
+### 10.11 Laporan konsolidasi (`#/konsolidasi`)
+
+- Ubin konsolidasi, tabel kontribusi per cabang (pendapatan, laba, kas, aset)
+- Tab: laba rugi konsolidasi, neraca konsolidasi, neraca saldo per cabang
+- Eliminasi: `1-3100 RK Cabang` (pusat) terhadap `3-1500 RK Kantor Pusat`
+  (cabang); pemeriksaan keduanya sama besar ada di halaman Integrasi
+
+### 10.12 Integrasi & rekonsiliasi (`#/integrasi`)
+
+- 11 pemeriksaan sub-buku vs buku besar: piutang, hutang, kas & bank,
+  persediaan, aset (perolehan & nilai buku), utang gaji, neraca saldo, neraca,
+  RK antar kantor, keseimbangan jurnal — nilai sub-buku, nilai buku besar,
+  selisih, status, tombol buka modul
+- Ringkasan posting per modul sumber untuk periode aktif
+- Alur dokumen → jurnal → buku besar → laporan, dan peta aturan posting
 
 ### 10.6 Anggaran (`#/anggaran`)
 
@@ -499,10 +558,37 @@ urutan navigasi.
 
 ---
 
+## 17. Cabang
+
+### 17.1 Manajemen cabang (`#/cabang`)
+
+- Kartu per cabang: pendapatan, laba bersih, kas, piutang, persediaan,
+  karyawan, pencapaian target; tombol Pilih (jadikan konteks), Laba rugi, Neraca
+- Laci cabang: profil, kinerja periode, rekening (klik → buku besar), sumber
+  daya; aksi jadikan aktif / nonaktifkan
+- Modal cabang baru: kode 3 huruf unik, nama, kota, tipe, kepala cabang,
+  target, bank; otomatis membuat giro & kas kecil bersaldo nol dan buku besar
+  cabang (saldo awal kosong)
+- Cabang nonaktif tidak masuk kolom konsolidasi
+
+---
+
 ## Matriks integrasi antar modul
+
+Setiap baris "Jurnal" di bawah dijalankan otomatis oleh `ledger.js`; hasilnya
+dapat diaudit di `#/integrasi` dan `#/jurnal`.
 
 | Dari | Ke | Pemicu | Aksi |
 |------|----|--------|------|
+| Faktur → Terbit | Jurnal | Otomatis | Dr Piutang; Kr Pendapatan, PPN keluaran; Dr HPP, Kr Persediaan barang jadi |
+| Hutang → Dicatat | Jurnal | Otomatis | Dr Persediaan (atau beban jasa), PPN masukan; Kr Utang usaha |
+| POS → Shift / rekap | Jurnal | Otomatis | Dr Kas; Kr Pendapatan, PPN keluaran; Dr HPP, Kr Persediaan |
+| Mutasi stok → Produksi / opname / pemakaian | Jurnal | Otomatis | Bahan baku → WIP → barang jadi; selisih opname; beban pemeliharaan |
+| Mutasi stok → Transfer antar cabang | Jurnal | Otomatis | Cabang asal Dr RK, Kr Persediaan; cabang tujuan Dr Persediaan, Kr RK |
+| Penggajian → Diproses | Jurnal | Otomatis | Dr Beban gaji / TKL; Kr Utang pajak, Utang gaji |
+| Penggajian → Dibayar | Jurnal | Otomatis | Cabang Dr Utang gaji, Kr RK Pusat; pusat Dr RK Cabang, Kr Bank |
+| Pajak → Setoran masa | Jurnal | Otomatis | PPN keluaran − masukan + PPh disetor pusat lewat RK |
+| Cabang → Setoran kas | Jurnal | Otomatis | Cabang Dr RK Pusat, Kr Bank; pusat Dr Bank, Kr RK Cabang |
 | CRM Lead → Menang | Penawaran | Otomatis | Buat penawaran dari peluang |
 | Penawaran → Diterima | Pesanan Penjualan | Manual | Konversi ke SO |
 | Pesanan Penjualan | Persetujuan | Otomatis | Jika melebihi plafon kredit |
@@ -527,13 +613,17 @@ urutan navigasi.
 ## Kerangka aplikasi (cross-cutting)
 
 ### Navigasi
-- Rail navigasi 37 butir, 16 kelompok, dapat diciutkan
+- Rail navigasi 44 butir, 18 kelompok, dapat diciutkan
 - Lencana pekerjaan menunggu pada 11 butir
 - Responsif: collapse ke ikon pada layar sempit
 
 ### Strip kepala dokumen
 - Perusahaan · Cabang · Periode · Mata uang
-- Membingkai konteks setiap angka di halaman
+- Cabang: popover *Semua cabang (konsolidasi)* + cabang aktif; menyaring
+  register bercap cabang, dasbor, kas & bank, piutang, dan laporan
+- Periode: bulan Jan–Agu, kuartal, TA 2026; periode tertutup ditandai dan
+  menolak jurnal baru; berlaku untuk jurnal, laporan, dan ubin dasbor
+- Pilihan tersimpan di `localStorage` (`erp-ctx`)
 
 ### Tema
 - 3 mode: terang, gelap, ikut sistem
@@ -542,7 +632,8 @@ urutan navigasi.
 
 ### Palet perintah
 - `Ctrl/Cmd + K` atau `/`
-- Pencarian lintas jenis: halaman, pesanan, pelanggan, stok
+- Pencarian lintas jenis: halaman, pesanan, pelanggan, stok, jurnal, akun
+  (→ kartu buku besar), cabang (→ ganti konteks)
 - Navigasi keyboard (↑ ↓ Enter)
 
 ### Perutean

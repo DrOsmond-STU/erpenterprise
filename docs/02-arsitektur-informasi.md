@@ -47,8 +47,19 @@ Keuangan
 ├── Piutang Usaha                   #/piutang
 ├── Hutang Usaha                    #/hutang
 ├── Kas & Bank                      #/kas-bank
-├── Jurnal Umum                     #/jurnal
+├── Jurnal Umum                [1]  #/jurnal
 └── Anggaran                        #/anggaran
+
+Laporan Keuangan
+├── Kartu Buku Besar                #/buku-besar
+├── Neraca Saldo                    #/neraca-saldo
+├── Laba Rugi                       #/laba-rugi
+├── Neraca                          #/neraca
+├── Laporan Konsolidasi             #/konsolidasi
+└── Integrasi & Rekonsiliasi        #/integrasi
+
+Cabang
+└── Manajemen Cabang                #/cabang
 
 SDM
 ├── Karyawan                        #/karyawan
@@ -208,6 +219,14 @@ nilai tebal di bawah, dipisahkan garis vertikal tipis.
 
 Ini keputusan informasi, bukan hiasan. Di ERP, kesalahan yang paling mahal
 adalah membaca angka yang benar untuk periode yang salah.
+
+**Cabang** dan **Periode** adalah kendali sungguhan: memilih cabang menyaring
+register bercap cabang, ubin KPI dasbor, kas & bank, piutang, dan seluruh
+laporan keuangan; memilih *Semua cabang* menampilkan laporan konsolidasi
+dengan eliminasi. Periode membatasi jurnal dan laporan (bulan, kuartal, atau
+tahun anggaran; periode yang sudah ditutup menolak jurnal baru). Pilihan
+tersimpan di `localStorage`. Pemilih perusahaan tetap informatif karena
+purwarupa memuat data satu entitas.
 
 ## Pencarian & papan ketik
 

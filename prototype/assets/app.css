@@ -1543,3 +1543,50 @@ svg { display: block; }
   .content { padding: 0; }
   .card { break-inside: avoid; }
 }
+
+/* ====================================================================== */
+/* Buku besar, laporan keuangan, konsolidasi, cabang                       */
+/* ====================================================================== */
+.branch-tag {
+  display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px;
+  font-size: var(--fs-cap); font-weight: 600; white-space: nowrap; line-height: 1.5;
+  color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--accent-soft-line);
+}
+.ctx-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 var(--sp-3);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: var(--fs-cap); color: var(--ink-2); white-space: nowrap;
+}
+.ctx-chip svg { width: 13px; height: 13px; color: var(--ink-3); }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.link-btn:hover { color: var(--accent-ink); text-decoration: underline; }
+.ta-c { text-align: center; }
+.table.report th, .table.report td { white-space: nowrap; }
+.table.report td:first-child, .table.report th:first-child { white-space: normal; }
+.table.report-stmt td:first-child, .table.report-stmt th:first-child { min-width: 220px; }
+.table.report td:nth-child(2):not(.ta-r), .table.report td:nth-child(3):not(.ta-r) { white-space: normal; }
+.report-section td { background: var(--surface-2); font-size: var(--fs-cap); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.report-subtotal td { font-weight: 650; border-top: 1px solid var(--ink-4); }
+.report-total td { font-weight: 700; border-top: 2px solid var(--ink-3); background: var(--surface-2); }
+.report-indent { padding-left: var(--sp-6) !important; }
+.table tbody tr.report-section, .table tbody tr.report-subtotal, .table tfoot tr { cursor: default; }
+.table tbody tr.report-section:hover, .table tbody tr.report-subtotal:hover { background: var(--surface-2); }
+.kpi-value.neg { color: var(--danger); }
+.kpi-value.pos { color: var(--ok); }
+
+.branch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-4); }
+.branch-card { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); }
+.branch-card[data-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.branch-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
+.branch-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.branch-kpi b { font-size: var(--fs-sm); }
+
+.flow { display: flex; flex-direction: column; gap: var(--sp-2); }
+.flow-step { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.flow-step > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.flow-step b { font-size: var(--fs-sm); }
+.flow-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-cap); font-weight: 700; color: var(--ink-on-brand, #fff); background: var(--grad-brand, var(--accent)); }
+
+.jv-lines .select, .jv-lines .input { height: 30px; font-size: var(--fs-cap); }
+.jv-lines td { padding: var(--sp-1) var(--sp-2); }
+.segmented + .toolbar-spacer { min-width: var(--sp-3); }
+@media (max-width: 900px) { .branch-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
