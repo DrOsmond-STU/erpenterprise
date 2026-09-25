@@ -1,20 +1,112 @@
-# ERP Enterprise — Purwarupa UI/UX
+# ERP Enterprise
+
+Monorepo untuk aplikasi ERP terpadu multi-cabang: **purwarupa UI/UX** (HTML/JS
+tanpa build) dan **implementasi produksi** yang sedang dikembangkan dari
+purwarupa tersebut — Vue 3 di sisi klien, NestJS + PostgreSQL di sisi peladen,
+dengan paket domain bersama yang memuat aturan buku besar.
+
+Seluruh modul operasional **bermuara pada buku besar**: setiap dokumen sumber
+diposting sebagai jurnal berpasangan per cabang, lalu diturunkan menjadi kartu
+buku besar, neraca saldo, laba rugi, dan neraca — per cabang maupun konsolidasi
+dengan eliminasi rekening koran antar kantor.
+
+## Struktur repositori
+
+| Jalur | Isi |
+| --- | --- |
+| `packages/domain` | `@erp/domain` — tipe, validasi jurnal (zod), pembulatan rupiah, klasifikasi akun, penyusun neraca saldo / laba rugi / neraca / konsolidasi, matriks izin. Dipakai API dan web. Uji regresi vitest terhadap data purwarupa. |
+| `packages/ui` | `@erp/ui` — token desain dan CSS bersama (disinkronkan dari purwarupa lewat `tools/sync-ui.mjs`). |
+| `apps/api` | `@erp/api` — NestJS 11 + PostgreSQL 16: autentikasi (Argon2id, JWT + refresh cookie berotasi), izin granular, konteks cabang/periode, jurnal, buku besar, laporan, konsolidasi, rekonsiliasi, log audit berantai hash, migrasi SQL, seed, uji e2e. |
+| `apps/web` | `@erp/web` — Vue 3 + Vite + Pinia + Vue Router: masuk, dasbor, jurnal, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, integrasi & rekonsiliasi, cabang, bagan akun, rekening bank, log audit. |
+| `infra/` | Skrip penyiapan basis data, Dockerfile API & web, konfigurasi nginx. |
+| `docker-compose.yml` | Lingkungan lokal/staging: db + api + web pada satu origin (`http://localhost:8080`). |
+| `prototype/` | Purwarupa UI/UX (lihat bagian bawah). |
+| `docs/` | Dokumen desain (01–07) dan pra-pengembangan (08–13). |
+| `tools/` | `build.mjs`, `smoke.mjs` (purwarupa), `web-e2e.mjs` (uji peramban aplikasi web), `sync-ui.mjs`. |
+
+## Mulai cepat (pengembangan lokal)
+
+Prasyarat: Node.js ≥ 22, PostgreSQL 16 lokal (atau Docker).
+
+```bash
+npm install
+
+# 1. Basis data: peran pemilik skema erp_owner + basis data erp (sebagai superuser Postgres)
+sudo -u postgres sh infra/db-setup.sh
+
+# 2. Konfigurasi API
+cp apps/api/.env.example apps/api/.env      # sesuaikan DATABASE_*_URL, JWT_SECRET (≥ 32 karakter), SEED_PASSWORD
+
+# 3. Bangun, migrasi, isi data contoh (PT Karya Nusantara Mandiri, 4 cabang, ±550 jurnal)
+npm run build -w @erp/domain && npm run build -w @erp/api
+npm run api:migrate
+npm run api:seed
+
+# 4. Jalankan
+npm run api:dev            # API di http://localhost:3000/api/v1
+npm run web:dev            # Web di http://localhost:5173 (proksi /api → :3000)
+```
+
+Pengguna seed (kata sandi = `SEED_PASSWORD`):
+
+| Surel | Peran | Cabang |
+| --- | --- | --- |
+| `admin@knm.co.id` | Admin sistem (cabang, akun, pengguna, log audit) | semua |
+| `andi@knm.co.id` | Akuntan senior (posting & balik jurnal, tutup periode, konsolidasi, audit) | semua |
+| `sari@knm.co.id` | Staf keuangan (buat jurnal, laporan — tanpa posting) | semua |
+| `osmond@knm.co.id` | Manajer operasional (laporan & konsolidasi, baca saja) | semua |
+| `fitri@knm.co.id` | Staf gudang (tanpa akses buku besar) | SBY |
+| `taufik@knm.co.id` | Manajer operasional cabang | MDN |
+
+### Dengan Docker Compose
+
+```bash
+cp apps/api/.env.example apps/api/.env
+docker compose up --build -d
+docker compose exec api npm run migrate
+docker compose exec api npm run seed
+# buka http://localhost:8080
+```
+
+## Pengujian
+
+```bash
+npm run check              # typecheck domain + api + web, uji unit domain (vitest)
+npm run api:e2e            # uji e2e API (butuh basis data yang sudah dimigrasi & di-seed)
+npm run web:e2e            # uji peramban aplikasi web (butuh API :3000 dan `npm run preview -w @erp/web` di :5173)
+npm test                   # build purwarupa + uji asap purwarupa (Playwright)
+```
+
+Uji e2e API memeriksa autentikasi (kunci akun, rotasi refresh, deteksi
+pemakaian ulang), pembatasan konteks cabang, pemisahan tugas pembuat ≠
+pemosting, invarian basis data (jurnal seimbang, akun detail, periode
+terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
+konsolidasi yang seimbang, serta rekonsiliasi sub-buku dan rantai audit.
+
+## Catatan implementasi vs dokumen pra-pengembangan
+
+- **Akses basis data**: SQL migrasi dan pustaka `pg` langsung (bukan ORM) agar
+  invarian buku besar hidup sebagai trigger/constraint di PostgreSQL dan
+  row-level security dipaksakan (`FORCE ROW LEVEL SECURITY`) untuk peran
+  aplikasi `erp_app`.
+- **Autentikasi**: untuk fase pengembangan memakai kata sandi lokal (Argon2id)
+  + JWT HS256 berumur pendek dan refresh cookie HttpOnly. Integrasi OIDC/IdP
+  dan MFA (dok. 11) dijadwalkan pada fase berikutnya.
+- **Cakupan fase ini**: buku besar, laporan, konsolidasi, rekonsiliasi,
+  administrasi cabang/akun/bank, dan audit. Modul operasional (penjualan,
+  pembelian, persediaan, produksi, SDM) menyusul sesuai dok. 13.
+
+---
+
+# Purwarupa UI/UX
 
 Purwarupa antarmuka untuk aplikasi ERP terpadu: dasbor, penjualan, pembelian,
 inventaris, produksi, keuangan, SDM, dan administrasi sistem. Purwarupa berjalan
 di peramban tanpa peladen, tanpa pustaka pihak ketiga, dan tanpa proses build
-wajib — cukup buka satu berkas.
+wajib — cukup buka satu berkas. Seluruh data bersifat fiktif dan disimpan di
+memori; menyegarkan halaman mengembalikan keadaan awal.
 
-Repositori ini berisi **desain**, bukan aplikasi produksi. Seluruh data bersifat
-fiktif dan disimpan di memori; menyegarkan halaman mengembalikan keadaan awal.
-
-Sejak versi ini seluruh modul operasional **bermuara pada buku besar**: setiap
-faktur, tagihan pemasok, slip gaji, mutasi stok, order pemeliharaan, dan shift
-POS diposting otomatis sebagai jurnal berpasangan per cabang, lalu diturunkan
-menjadi kartu buku besar, neraca saldo, laba rugi, dan neraca — per cabang
-maupun konsolidasi dengan eliminasi rekening koran antar kantor.
-
-## Menjalankan
+## Menjalankan purwarupa
 
 ```bash
 # Cara tercepat — berkas tunggal hasil build
@@ -24,7 +116,7 @@ open dist/prototipe.html
 python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
 ```
 
-## Isi repositori
+## Isi purwarupa
 
 | Jalur | Isi |
 | --- | --- |

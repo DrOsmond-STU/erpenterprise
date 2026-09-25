@@ -43,7 +43,13 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [company, b.id, b.name, b.short, b.type, b.city, b.address, b.phone, b.manager, b.id === Ledger.HO, b.mainBank, b.pettyCash, b.targetMonthly, b.budgetShare, b.status, b.openedAt]);
     }
-    for (const p of DATA.periods) {
+    /* Periode purwarupa (Jan–Agu) + sisa tahun buku agar jurnal hari ini selalu punya periode. */
+    const extra = [
+      { id: '2026-09', label: 'Sep 2026', from: '2026-09-01', to: '2026-09-30' }, { id: '2026-10', label: 'Okt 2026', from: '2026-10-01', to: '2026-10-31' },
+      { id: '2026-11', label: 'Nov 2026', from: '2026-11-01', to: '2026-11-30' }, { id: '2026-12', label: 'Des 2026', from: '2026-12-01', to: '2026-12-31' },
+      { id: '2026-Q4', label: 'Kuartal IV 2026', from: '2026-10-01', to: '2026-12-31', group: 'Kuartal' },
+    ];
+    for (const p of [...DATA.periods, ...extra]) {
       await c.query(`INSERT INTO fiscal_periods (company_id, code, label, date_from, date_to, period_group, status) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [company, p.id, p.label, p.from, p.to, p.group ?? 'Bulan', p.closed ? 'closed' : 'open']);
     }

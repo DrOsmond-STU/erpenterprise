@@ -52,7 +52,12 @@ export class BranchContextGuard implements CanActivate {
     const period = String(req.headers['x-period-id'] ?? '').trim() || null;
     if (period && !/^[0-9A-Z-]{4,12}$/.test(period)) throw forbidden('Periode tidak sah.');
 
-    if (!raw || raw === 'ALL') {
+    if (!raw) {
+      /* Tanpa header: cakupan = seluruh cabang yang dimiliki pengguna (RLS tetap membatasi). */
+      req.scope = { branch: user.branches === '*' ? 'ALL' : user.branches.length === 1 ? user.branches[0] : 'ALL', rlsBranches: user.branches, period };
+      return true;
+    }
+    if (raw === 'ALL') {
       const allowedAll = user.branches === '*' || user.permissions.has('report.consolidated');
       if (!allowedAll) throw forbidden('Konteks "Semua cabang" memerlukan izin laporan konsolidasi.');
       req.scope = { branch: 'ALL', rlsBranches: user.branches, period };

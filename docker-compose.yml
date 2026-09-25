@@ -1,0 +1,67 @@
+# Lingkungan lokal / staging: PostgreSQL + API + web (nginx menyajikan SPA dan memproksi /api).
+# Pemakaian:
+#   cp apps/api/.env.example apps/api/.env   # sesuaikan JWT_SECRET & kata sandi
+#   docker compose up --build
+#   docker compose exec api npm run migrate && docker compose exec api npm run seed
+# Buka http://localhost:8080 — pengguna seed: andi@knm.co.id / SEED_PASSWORD.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: erp
+      POSTGRES_USER: erp_owner
+      POSTGRES_PASSWORD: ${ERP_OWNER_PASSWORD:-erp_owner_dev}
+    volumes:
+      - erp-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp_owner -d erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Tidak dipublikasikan ke host di staging/produksi (K-63); buka hanya untuk pengembangan.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/api.Dockerfile
+    env_file: apps/api/.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD:-erp_app_dev}@db:5432/erp
+      DATABASE_ADMIN_URL: postgres://erp_owner:${ERP_OWNER_PASSWORD:-erp_owner_dev}@db:5432/erp
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  erp-db:

@@ -17,7 +17,9 @@
     "api:migrate": "npm run migrate -w @erp/api",
     "api:seed": "npm run seed -w @erp/api",
     "web:dev": "npm run dev -w @erp/web",
-    "check": "npm run typecheck -w @erp/domain && npm run typecheck -w @erp/api && npm run typecheck -w @erp/web && npm run domain:test"
+    "check": "npm run typecheck -w @erp/domain && npm run typecheck -w @erp/api && npm run typecheck -w @erp/web && npm run domain:test",
+    "api:e2e": "npm run test:e2e -w @erp/api",
+    "web:e2e": "node tools/web-e2e.mjs"
   },
   "repository": {
     "type": "git",

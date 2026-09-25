@@ -35,7 +35,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })   // per IP; setiap muat ulang SPA memanggil refresh sekali
   @Post('auth/refresh')
   @HttpCode(200)
   async refresh(@Req() req: AppRequest, @Res({ passthrough: true }) res: Response) {
