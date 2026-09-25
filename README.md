@@ -35,7 +35,7 @@ python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
 | `prototype/assets/charts.js` | Pemformat angka id-ID dan mesin grafik SVG |
 | `prototype/assets/ledger.js` | Mesin buku besar: posting otomatis per modul, saldo, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, rekonsiliasi sub-buku |
 | `prototype/assets/app.js` | Perutean, layar, register, laci rekaman, overlay, konteks cabang & periode |
-| `docs/` | Dokumen desain — produk, arsitektur informasi, alur, sistem desain |
+| `docs/` | Dokumen desain (01–07) dan dokumen pra-pengembangan (08–13) |
 | `tools/build.mjs` | Menggabungkan purwarupa menjadi berkas tunggal di `dist/` |
 | `tools/smoke.mjs` | Uji asap: 36 layar × 2 tema + interaksi (konteks cabang, jurnal, buku besar, rekonsiliasi) + tampilan sempit |
 
@@ -46,6 +46,21 @@ python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
 3. [Alur pengguna utama](docs/03-alur-pengguna.md)
 4. [Sistem desain](docs/04-sistem-desain.md)
 5. [Cakupan & batas purwarupa](docs/05-cakupan-purwarupa.md)
+6. [Model data & entitas](docs/06-model-data.md)
+7. [Spesifikasi fungsional per modul](docs/07-spesifikasi-fungsional.md)
+
+## Dokumen pra-pengembangan
+
+Disusun untuk memulai implementasi produksi dari purwarupa ini.
+
+8. [Arsitektur teknis](docs/08-arsitektur-teknis.md) — tumpukan, modul, mesin posting, multi-cabang, lingkungan
+9. [Skema basis data](docs/09-skema-basis-data.md) — tabel, invarian buku besar, row-level security, indeks
+10. [Spesifikasi API](docs/10-spesifikasi-api.md) — konvensi, endpoint per modul, laporan, webhook
+11. [Keamanan](docs/11-keamanan.md) — model ancaman, autentikasi, otorisasi & pemisahan tugas, kontrol keuangan, UU PDP, audit, checklist rilis
+12. [Standar pengembangan & pengujian](docs/12-standar-pengembangan-dan-pengujian.md) — alur kerja, tinjauan, uji invarian, CI, definisi selesai
+13. [Rencana pengembangan](docs/13-rencana-pengembangan.md) — fase, sprint, risiko, peran
+
+Kebijakan pelaporan kerentanan: [SECURITY.md](SECURITY.md).
 
 ## Perkakas
 
