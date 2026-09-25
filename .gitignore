@@ -5,3 +5,13 @@ node_modules/
 # tanpa menjalankan build terlebih dahulu.
 dist/artifact.html
 dist/shots/
+
+# Implementasi produksi (monorepo)
+node_modules/
+apps/*/dist/
+packages/*/dist/
+apps/api/.env
+apps/web/.env
+*.local
+.DS_Store
+coverage/

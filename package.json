@@ -1,12 +1,23 @@
 {
   "name": "erpenterprise",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Purwarupa UI/UX untuk aplikasi ERP Enterprise",
+  "description": "ERP Enterprise — purwarupa UI/UX dan implementasi produksi (Vue 3 + NestJS + PostgreSQL)",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "node tools/build.mjs && node tools/smoke.mjs"
+    "test": "node tools/build.mjs && node tools/smoke.mjs",
+    "domain:test": "npm run test -w @erp/domain",
+    "build:all": "npm run build -w @erp/domain && npm run build -w @erp/api && npm run build -w @erp/web",
+    "api:dev": "npm run dev -w @erp/api",
+    "api:migrate": "npm run migrate -w @erp/api",
+    "api:seed": "npm run seed -w @erp/api",
+    "web:dev": "npm run dev -w @erp/web",
+    "check": "npm run typecheck -w @erp/domain && npm run typecheck -w @erp/api && npm run typecheck -w @erp/web && npm run domain:test"
   },
   "repository": {
     "type": "git",
@@ -14,6 +25,10 @@
   },
   "license": "UNLICENSED",
   "devDependencies": {
-    "playwright": "^1.49.1"
+    "playwright": "^1.49.1",
+    "typescript": "~5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
