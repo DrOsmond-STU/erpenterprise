@@ -147,7 +147,7 @@ if (require.main === module) {
   const url = cfg.DATABASE_ADMIN_URL;
   if (!url) { console.error('DATABASE_ADMIN_URL belum disetel.'); process.exit(1); }
   if (!cfg.SEED_PASSWORD) { console.error('SEED_PASSWORD belum disetel (min. 12 karakter).'); process.exit(1); }
-  const root = resolve(__dirname, '../../../../prototype/assets');
+  const root = process.env.PROTOTYPE_ASSETS_DIR || resolve(__dirname, '../../../../prototype/assets');
   seed(url, cfg.SEED_PASSWORD, root).then((r) => console.log(r.skipped ? 'Seed dilewati: perusahaan sudah ada.' : `Seed selesai: ${r.journals} jurnal.`))
     .catch((e) => { console.error(e); process.exit(1); });
 }

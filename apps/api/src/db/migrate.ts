@@ -12,7 +12,19 @@ import pg from 'pg';
 
 const here = __dirname;
 
+/**
+ * Nama peran aplikasi dapat diganti lewat DATABASE_APP_ROLE (mis. hosting cPanel
+ * yang mewajibkan awalan akun: "akun_erpapp"). Peran itu harus sudah ada bila
+ * pemilik skema tidak berhak CREATE ROLE; migrasi hanya memberi hak akses.
+ */
+export function appRole(): string {
+  const role = process.env.DATABASE_APP_ROLE || 'erp_app';
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(role)) throw new Error('DATABASE_APP_ROLE tidak sah.');
+  return role;
+}
+
 export async function migrate(adminUrl: string, dir = resolve(here, 'migrations')): Promise<string[]> {
+  const role = appRole();
   const client = new pg.Client({ connectionString: adminUrl });
   await client.connect();
   const applied: string[] = [];
@@ -22,7 +34,7 @@ export async function migrate(adminUrl: string, dir = resolve(here, 'migrations'
     const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
     for (const f of files) {
       if (done.has(f)) continue;
-      const sql = readFileSync(resolve(dir, f), 'utf8');
+      const sql = readFileSync(resolve(dir, f), 'utf8').replace(/\berp_app\b/g, role);
       await client.query('BEGIN');
       try {
         await client.query(sql);

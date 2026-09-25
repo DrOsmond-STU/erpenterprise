@@ -4,8 +4,8 @@
 -- Dijalankan oleh pemilik skema (erp_owner). Aplikasi terhubung sebagai erp_app.
 -- ==========================================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS citext;
+-- Tanpa ekstensi: gen_random_uuid() dan sha256() adalah fungsi inti PostgreSQL 13+,
+-- sehingga skema ini juga berjalan di hosting yang tidak menyediakan contrib.
 
 -- Peran aplikasi tanpa BYPASSRLS; kata sandi diatur oleh operator (lihat infra/db-setup.sh).
 DO $$ BEGIN
@@ -71,7 +71,7 @@ CREATE TABLE fiscal_periods (
 CREATE TABLE users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES companies(id),
-  email citext NOT NULL UNIQUE,
+  email text NOT NULL,
   display_name text NOT NULL,
   password_hash text,                       -- Argon2id; NULL bila hanya lewat IdP
   status text NOT NULL DEFAULT 'aktif' CHECK (status IN ('aktif','nonaktif')),
@@ -81,6 +81,8 @@ CREATE TABLE users (
   last_login_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX users_email_uq ON users (company_id, lower(email));
 
 CREATE TABLE roles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -330,7 +332,7 @@ DECLARE prev bytea;
 BEGIN
   SELECT hash INTO prev FROM audit_log ORDER BY id DESC LIMIT 1;
   NEW.prev_hash := prev;
-  NEW.hash := digest(coalesce(encode(prev, 'hex'), '') || NEW.at::text || coalesce(NEW.user_id::text, '') || NEW.action || NEW.entity_type || coalesce(NEW.entity_id, '') || coalesce(NEW.before::text, '') || coalesce(NEW.after::text, ''), 'sha256');
+  NEW.hash := sha256(convert_to(coalesce(encode(prev, 'hex'), '') || NEW.at::text || coalesce(NEW.user_id::text, '') || NEW.action || NEW.entity_type || coalesce(NEW.entity_id, '') || coalesce(NEW.before::text, '') || coalesce(NEW.after::text, ''), 'UTF8'));
   RETURN NEW;
 END $$;
 CREATE TRIGGER audit_chain BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION audit_chain_hash();

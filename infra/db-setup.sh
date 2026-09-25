@@ -13,5 +13,5 @@ DO \$\$ BEGIN
 END \$\$;
 SELECT 'CREATE DATABASE ${DB} OWNER erp_owner' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB}')\gexec
 SQL
-psql -v ON_ERROR_STOP=1 -d "$DB" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS citext; ALTER SCHEMA public OWNER TO erp_owner;"
+psql -v ON_ERROR_STOP=1 -d "$DB" -c "ALTER SCHEMA public OWNER TO erp_owner;"
 echo "Basis data ${DB} siap (pemilik erp_owner)."

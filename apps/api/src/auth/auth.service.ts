@@ -34,7 +34,7 @@ export class AuthService {
 
   async login(email: string, password: string, meta: { ip?: string; userAgent?: string; requestId?: string }): Promise<LoginResult> {
     return this.db.run(systemContext(), async (c) => {
-      const { rows } = await c.query('SELECT * FROM users WHERE email = $1', [email]);
+      const { rows } = await c.query('SELECT * FROM users WHERE lower(email) = lower($1)', [email]);
       const u = rows[0];
       const generic = new UnauthorizedException('Email atau kata sandi salah.');
       if (!u || u.status !== 'aktif' || !u.password_hash) {

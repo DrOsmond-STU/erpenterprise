@@ -1,0 +1,57 @@
+# ============================================================================
+#  ERP Enterprise — erp.semestateknologiutama.com (cPanel, tanpa Passenger)
+#
+#  Document root ini berisi hasil build SPA (index.html + assets/) dan
+#  direktori server/ (API NestJS) yang TIDAK boleh dilayani Apache.
+#  API berjalan sebagai proses Node pada 127.0.0.1:3620, dijaga hidup oleh
+#  server/erp-runner.sh lewat cron; Apache memproksi /api ke sana.
+# ============================================================================
+DirectoryIndex index.html
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Paksa HTTPS — cookie refresh ber-flag Secure.
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+  # Verifikasi AutoSSL dilayani Apache langsung.
+  RewriteRule ^\.well-known/ - [L]
+
+  # Berkas internal tidak pernah dilayani (K-60): repositori git, kode server, skrip.
+  RewriteRule ^(\.git|server|README\.md)(/|$) - [R=404,L]
+
+  # API → proses Node.
+  RewriteRule ^api/(.*)$ http://127.0.0.1:3620/api/$1 [P,QSA,L]
+
+  # SPA: rute klien jatuh ke index.html; berkas nyata dilayani apa adanya.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  RequestHeader set X-Forwarded-Proto "https" env=HTTPS
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  # K-33: CSP ketat — SPA tanpa skrip inline; gaya inline dipakai token desain.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+
+  # Aset ber-hash tidak pernah berubah; kerangka halaman selalu diambil ulang.
+  <FilesMatch "\.(js|css|woff2?|svg|png)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
+</IfModule>
+
+<IfModule pagespeed_module>
+  ModPagespeed off
+</IfModule>
