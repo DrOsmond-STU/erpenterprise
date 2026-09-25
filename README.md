@@ -53,7 +53,7 @@ python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
 
 Disusun untuk memulai implementasi produksi dari purwarupa ini.
 
-8. [Arsitektur teknis](docs/08-arsitektur-teknis.md) — tumpukan, modul, mesin posting, multi-cabang, lingkungan
+8. [Arsitektur teknis](docs/08-arsitektur-teknis.md) — tumpukan (frontend Vue 3), modul, mesin posting, multi-cabang, lingkungan
 9. [Skema basis data](docs/09-skema-basis-data.md) — tabel, invarian buku besar, row-level security, indeks
 10. [Spesifikasi API](docs/10-spesifikasi-api.md) — konvensi, endpoint per modul, laporan, webhook
 11. [Keamanan](docs/11-keamanan.md) — model ancaman, autentikasi, otorisasi & pemisahan tugas, kontrol keuangan, UU PDP, audit, checklist rilis

@@ -2,7 +2,7 @@
 
 Aturan kerja tim selama implementasi. Dokumen ini pendek dengan sengaja:
 yang tidak tertulis di sini mengikuti bawaan perkakas (ESLint, Prettier,
-NestJS, React).
+NestJS, Vue).
 
 ---
 
@@ -33,7 +33,8 @@ NestJS, React).
 | Area | Aturan |
 | --- | --- |
 | Bahasa | TypeScript `strict`; tidak ada `any` tanpa komentar alasan. |
-| Gaya | ESLint + Prettier di pre-commit (lint-staged); CI menolak pelanggaran. |
+| Gaya | ESLint (+ `eslint-plugin-vue`, aturan `vue/no-v-html`) + Prettier di pre-commit (lint-staged); CI menolak pelanggaran. |
+| Vue | Composition API dengan `<script setup lang="ts">`; props & emits bertipe; state lintas halaman hanya di Pinia; komponen `packages/ui` tanpa akses jaringan; pengujian komponen dengan Vitest + Vue Test Utils. |
 | Uang | Tipe `Rupiah = bigint`/integer; dilarang `number` desimal untuk uang; pembulatan hanya di fungsi `splitPPN`/`allocate` yang diuji. |
 | Tanggal | `date` untuk tanggal dokumen (tanpa zona), `timestamptz` UTC untuk peristiwa. |
 | Kesalahan | Kelas kesalahan domain dengan `code` stabil (mis. `LEDGER_PERIOD_CLOSED`); pesan pengguna berbahasa Indonesia; detail teknis hanya di log. |

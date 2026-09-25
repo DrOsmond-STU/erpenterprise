@@ -93,7 +93,7 @@ pelanggaran yang ada:
 | --- | --- |
 | K-30 | Semua masukan divalidasi di server dengan skema (DTO + class-validator/zod): tipe, panjang, rentang, enum, format tanggal/uang. Nilai uang integer ≥ 0; kuantitas dalam batas wajar; tanggal dalam periode. |
 | K-31 | Akses basis data hanya lewat kueri berparameter (ORM/prepared statement); tidak ada penggabungan string SQL, termasuk pada penyaring laporan dan pengurutan (`sort` dipetakan ke daftar putih kolom). |
-| K-32 | Keluaran HTML di-*escape* secara bawaan (React); tidak ada `dangerouslySetInnerHTML` kecuali untuk konten yang disanitasi (DOMPurify) — memo jurnal dan catatan bebas diperlakukan sebagai teks. |
+| K-32 | Keluaran HTML di-*escape* secara bawaan (interpolasi Vue `{{ }}`); `v-html` dilarang oleh aturan ESLint (`vue/no-v-html`) kecuali untuk konten yang disanitasi DOMPurify di komponen khusus yang ditinjau — memo jurnal dan catatan bebas diperlakukan sebagai teks. Tidak ada template yang dibangun dari string pengguna (tanpa *runtime compiler*). |
 | K-33 | Content-Security-Policy ketat: `default-src 'self'`, tanpa skrip inline (nonce untuk yang perlu), `frame-ancestors 'none'`, `object-src 'none'`. |
 | K-34 | Unggahan berkas (repositori dokumen, lampiran): daftar putih tipe berdasarkan isi (magic bytes) bukan ekstensi, batas ukuran, pemindaian antivirus, disimpan di object store dengan nama acak, disajikan lewat URL bertanda tangan berumur pendek dengan `Content-Disposition: attachment`. |
 | K-35 | Ekspor CSV/XLSX menetralkan sel yang diawali `= + - @` (*CSV injection*). |

@@ -34,16 +34,18 @@ validasi, dan aturan posting dapat dibagi antara klien dan peladen.
 | Cache & antrean | **Redis 7** | Sesi, rate-limit, antrean posting & laporan (BullMQ). |
 | Backend | **Node.js 22 + NestJS** | Modul per domain, DI, guard/interceptor untuk otorisasi, OpenAPI bawaan. |
 | ORM & migrasi | **Prisma** (skema) + **SQL migrasi terkelola** untuk trigger/RLS | Prisma untuk CRUD; SQL murni untuk aturan yang harus hidup di basis data. |
-| Frontend | **React 18 + Vite + TypeScript** | Memindahkan `tokens.css` dan komponen purwarupa; tabel data dengan TanStack Table; grafik memakai `charts.js` yang diport ke komponen. |
+| Frontend | **Vue 3 + Vite + TypeScript** (Composition API, `<script setup>`), **Pinia** untuk state, **Vue Router** | Memindahkan `tokens.css` dan komponen purwarupa; tabel data dengan TanStack Table (adaptor Vue); grafik memakai `charts.js` yang diport ke komponen; validasi formulir dengan skema zod yang sama dengan backend. |
 | Autentikasi | **OIDC** (Keycloak atau Authentik, swakelola) | SSO, MFA, kebijakan kata sandi, audit login terpusat. |
 | Laporan & cetak | Peladen HTML→PDF (Playwright headless) | Laporan keuangan dicetak dari tampilan yang sama dengan layar. |
 | Penyimpanan berkas | S3-compatible (MinIO swakelola / cloud) | Dokumen repositori, lampiran faktur. |
 | Infrastruktur | Docker Compose (dev) → Kubernetes atau VM + Docker (prod) | Skala horizontal untuk API; basis data tunggal dengan replika baca. |
 | Observabilitas | OpenTelemetry → Grafana/Loki/Tempo | Trace per permintaan, log terstruktur, metrik posting. |
 
-Alternatif yang setara bila tim lebih fasih: Laravel 11 + PostgreSQL (backend),
-Vue 3 (frontend). Keputusan arsitektur di bawah tidak bergantung pada
-kerangka kerja.
+Frontend **Vue 3** sudah diputuskan. Backend tetap NestJS agar tipe, skema
+validasi (zod), dan aturan posting di `packages/domain` dibagi antara Vue dan
+API dalam satu bahasa; bila tim backend lebih fasih PHP, Laravel 11 +
+PostgreSQL adalah pengganti yang setara tanpa mengubah keputusan arsitektur
+di bawah.
 
 ---
 
@@ -52,7 +54,7 @@ kerangka kerja.
 ```
 ┌─────────────┐   HTTPS   ┌──────────────────────┐        ┌──────────────┐
 │  Browser    │──────────▶│  API Gateway / Nginx │───────▶│  OIDC (IdP)  │
-│  React SPA  │           │  TLS, WAF, rate-limit│        └──────────────┘
+│  Vue 3 SPA  │           │  TLS, WAF, rate-limit│        └──────────────┘
 └─────────────┘           └──────────┬───────────┘
                                      │
                      ┌───────────────┴───────────────┐
@@ -150,10 +152,18 @@ tugas terjadwal setiap malam dan sesudah tutup periode; hasilnya disimpan di
 
 ## 7. Frontend
 
-- SPA React; perutean per modul mengikuti `#/…` purwarupa (diubah ke path
-  `/…`).
-- **Konteks global** (perusahaan, cabang, periode) disimpan di store dan
-  dikirim sebagai header di setiap permintaan; server memvalidasi ulang.
+- SPA Vue 3 dengan Vue Router; perutean per modul mengikuti `#/…` purwarupa
+  (diubah ke path `/…`, *lazy-loaded* per modul). Route guard memeriksa izin
+  dari `/me` sebelum memuat halaman.
+- **Konteks global** (perusahaan, cabang, periode) disimpan di store Pinia
+  (`useContextStore`) dan dikirim sebagai header oleh interceptor HTTP di
+  setiap permintaan; server memvalidasi ulang.
+- Struktur: `src/modules/<modul>/{pages,components,api,store}`; komponen
+  bersama di `packages/ui` (rail, topbar, strip konteks, register, laci,
+  modal, palet, toast, grafik) dengan Histoire sebagai katalog komponen.
+- Pengambilan data lewat TanStack Query (Vue) agar cache, *refetch* setelah
+  posting, dan status memuat seragam; komposabel `useLedgerCard`,
+  `useTrialBalance`, dst. membungkus endpoint laporan.
 - Komponen inti dipindahkan dari purwarupa: rail, topbar, strip konteks,
   register (tabel + chip + paginasi server-side), laci rekaman, modal, palet
   perintah, toast, grafik.
@@ -198,8 +208,8 @@ buku besar membaca baris jurnal langsung.
 
 ## 10. Keputusan yang perlu dikonfirmasi
 
-1. **[KEPUTUSAN]** Tumpukan: NestJS/React/PostgreSQL seperti §2, atau
-   Laravel/Vue.
+1. **[DIPUTUSKAN]** Frontend Vue 3 (Vite, TypeScript, Pinia, Vue Router).
+   **[KEPUTUSAN]** Backend NestJS (rekomendasi) atau Laravel 11.
 2. **[KEPUTUSAN]** IdP: Keycloak swakelola atau layanan identitas cloud.
 3. **[KEPUTUSAN]** Hosting: VM + Docker (lebih murah, cukup untuk 200
    pengguna) atau Kubernetes.

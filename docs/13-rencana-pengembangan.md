@@ -15,7 +15,8 @@ minggu.
 
 - Konfirmasi keputusan **[KEPUTUSAN]** dok. 08 §10.
 - Monorepo, CI dasar (lint, uji, pemindaian), Docker Compose, IdP dev.
-- Pindahkan `tokens.css` dan komponen inti ke `packages/ui`; Storybook.
+- Pindahkan `tokens.css` dan komponen inti ke `packages/ui` sebagai
+  komponen Vue 3; katalog komponen dengan Histoire.
 - Skema awal: identitas, organisasi, bagan akun, periode, `audit_log`, RLS.
 - Kebijakan keamanan dasar aktif: K-01…K-07, K-50…K-54, K-60…K-65.
 
