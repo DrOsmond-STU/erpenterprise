@@ -93,7 +93,7 @@ let ReportsService = class ReportsService {
             const target = branches.reduce((t, b) => t + b.targetMonthly, 0) * months;
             const today = new Date().toISOString().slice(0, 10);
             const overdue = (await c.query(`SELECT count(*)::int AS n, coalesce(sum(total_gross - paid_amount),0)::bigint AS amount FROM invoices
-          WHERE company_id = $1 AND total_gross > paid_amount AND due_date < $2 AND ($3::text IS NULL OR branch_code = $3)`, [u.companyId, today, branch])).rows[0];
+          WHERE company_id = $1 AND status IN ('belum-dibayar','sebagian') AND total_gross > paid_amount AND due_date < $2 AND ($3::text IS NULL OR branch_code = $3)`, [u.companyId, today, branch])).rows[0];
             const pending = (await c.query(`SELECT count(*)::int AS n FROM journals WHERE company_id = $1 AND status = 'pending' AND ($2::text IS NULL OR branch_code = $2)`, [u.companyId, branch])).rows[0].n;
             return {
                 period, scope: s.branch,

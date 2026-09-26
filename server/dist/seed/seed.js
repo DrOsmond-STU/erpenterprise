@@ -18,6 +18,7 @@ const node_path_1 = require("node:path");
 const pg_1 = __importDefault(require("pg"));
 const domain_1 = require("@erp/domain");
 const auth_service_js_1 = require("../auth/auth.service.js");
+const sales_seed_js_1 = require("./sales-seed.js");
 const config_js_1 = require("../config.js");
 const STATUS = { diposting: 'posted', menunggu: 'pending', ditolak: 'rejected' };
 const SOURCE = { penjualan: 'invoice', pembelian: 'ap_invoice', persediaan: 'stock_move', produksi: 'work_order', penggajian: 'payslip', aset: 'depreciation', pemeliharaan: 'maintenance', pos: 'pos_shift', 'kas-bank': 'cash', pajak: 'tax', 'saldo-awal': 'opening', manual: 'manual' };
@@ -38,8 +39,12 @@ async function seed(adminUrl, password, protoRoot) {
         await c.query(`SELECT set_config('app.migration', 'on', true)`); // izinkan posting historis ke periode tertutup
         const exists = await c.query('SELECT id FROM companies WHERE code = $1', ['KNM']);
         if (exists.rowCount) {
-            await c.query('ROLLBACK');
-            return { skipped: true, companyId: exists.rows[0].id };
+            /* Upgrade: lengkapi data contoh modul yang ditambahkan setelah seed pertama (idempoten). */
+            const id = exists.rows[0].id;
+            await c.query(`SELECT set_config('app.company_id', $1, true), set_config('app.branch_codes', '*', true)`, [id]);
+            const sales = await (0, sales_seed_js_1.seedSales)(c, id, DATA);
+            await c.query('COMMIT');
+            return { skipped: true, companyId: id, upgraded: sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`] };
         }
         const company = (await c.query(`INSERT INTO companies (code, name, npwp) VALUES ('KNM', $1, '01.234.567.8-901.000') RETURNING id`, [DATA.org.company])).rows[0].id;
         /* RLS berlaku juga untuk pemilik skema (FORCE); seed berjalan sebagai konteks sistem lintas cabang. */
@@ -109,7 +114,7 @@ async function seed(adminUrl, password, protoRoot) {
         await c.query(`INSERT INTO document_sequences (company_id, doc_type, year, last_no) VALUES ($1, 'JV', 2026, 1000)`, [company]);
         /* Sub-buku minimum untuk rekonsiliasi */
         for (const i of DATA.invoices) {
-            await c.query(`INSERT INTO invoices (company_id, branch_code, doc_no, customer_name, invoice_date, due_date, total_gross, cogs_amount, paid_amount, paid_date, bank_account_code, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [company, i.branch, i.id, i.customer, i.date, i.dueDate, i.amount, i.cogs ?? 0, i.paid, i.paidDate ?? null, i.bank ?? null, i.status]);
+            await c.query(`INSERT INTO invoices (company_id, branch_code, doc_no, customer_name, invoice_date, due_date, total_gross, cogs_amount, paid_amount, paid_date, bank_account_code, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [company, i.branch, i.id, i.customer, i.date, i.dueDate, i.amount, i.cogs ?? 0, i.paid, i.paidDate ?? null, i.bank ?? null, i.paid <= 0 ? 'belum-dibayar' : i.paid >= i.amount ? 'lunas' : 'sebagian']);
         }
         for (const a of DATA.payables) {
             await c.query(`INSERT INTO ap_invoices (company_id, branch_code, doc_no, supplier_name, po_ref, kind, expense_account_code, invoice_date, due_date, total_gross, paid_amount, paid_date, bank_account_code, three_way_matched, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [company, a.branch, a.id, a.supplier, a.poRef, a.kind === 'jasa' ? 'service' : 'goods', a.account ?? null, a.date, a.dueDate, a.amount, a.paid, a.paidDate ?? null, a.bank ?? null, a.matched, a.status]);
@@ -123,6 +128,7 @@ async function seed(adminUrl, password, protoRoot) {
         for (const p of DATA.payroll) {
             await c.query(`INSERT INTO payslips (company_id, branch_code, doc_no, employee_code, employee_name, dept, period_code, basic, allowance, overtime, deduction, net_pay, status) VALUES ($1,$2,$3,$4,$5,$6,'2026-08',$7,$8,$9,$10,$11,$12)`, [company, p.branch, p.id, p.employeeId, p.name, p.dept, p.basic, p.allowance, p.overtime, p.deduction, p.netPay, p.status]);
         }
+        await (0, sales_seed_js_1.seedSales)(c, company, DATA); // setelah faktur & kartu stok
         await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);
         await c.query('COMMIT');
         return { skipped: false, companyId: company, journals: n };
@@ -147,7 +153,7 @@ if (require.main === module) {
         process.exit(1);
     }
     const root = process.env.PROTOTYPE_ASSETS_DIR || (0, node_path_1.resolve)(__dirname, '../../../../prototype/assets');
-    seed(url, cfg.SEED_PASSWORD, root).then((r) => console.log(r.skipped ? 'Seed dilewati: perusahaan sudah ada.' : `Seed selesai: ${r.journals} jurnal.`))
+    seed(url, cfg.SEED_PASSWORD, root).then((r) => console.log(r.skipped ? `Seed dilewati: perusahaan sudah ada.${r.upgraded?.length ? ` Dilengkapi: ${r.upgraded.join('; ')}.` : ''}` : `Seed selesai: ${r.journals} jurnal.`))
         .catch((e) => { console.error(e); process.exit(1); });
 }
 //# sourceMappingURL=seed.js.map

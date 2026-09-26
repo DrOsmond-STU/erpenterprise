@@ -38,6 +38,7 @@ const journals_service_js_1 = require("../ledger/journals.service.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const reconciliation_service_js_1 = require("../ledger/reconciliation.service.js");
 const reports_service_js_1 = require("../ledger/reports.service.js");
+const invoices_service_js_1 = require("../sales/invoices.service.js");
 const assistant_tools_js_1 = require("./assistant.tools.js");
 const MAX_STEPS = 8;
 const MAX_TOOL_RESULT_CHARS = 60_000;
@@ -60,16 +61,18 @@ let AssistantService = class AssistantService {
     reports;
     journals;
     recon;
+    invoices;
     cfg = (0, config_js_1.loadConfig)();
     log = new common_1.Logger('Assistant');
     client = null;
-    constructor(db, audit, refs, reports, journals, recon) {
+    constructor(db, audit, refs, reports, journals, recon, invoices) {
         this.db = db;
         this.audit = audit;
         this.refs = refs;
         this.reports = reports;
         this.journals = journals;
         this.recon = recon;
+        this.invoices = invoices;
         if (this.cfg.ANTHROPIC_API_KEY) {
             this.client = new sdk_1.default({ apiKey: this.cfg.ANTHROPIC_API_KEY, timeout: 120_000, maxRetries: 1 });
         }
@@ -152,7 +155,7 @@ let AssistantService = class AssistantService {
         if (!def || !allowed.includes(name))
             return { text: `Alat "${name}" tidak tersedia untuk pengguna ini.`, isError: true };
         try {
-            const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon }, call, input ?? {});
+            const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon, invoices: this.invoices }, call, input ?? {});
             let text = JSON.stringify(out);
             if (text.length > MAX_TOOL_RESULT_CHARS)
                 text = `${text.slice(0, MAX_TOOL_RESULT_CHARS)}… [dipotong: hasil terlalu besar, persempit cakupan]`;
@@ -215,7 +218,8 @@ exports.AssistantService = AssistantService = __decorate([
         ledger_shared_js_1.LedgerRefs,
         reports_service_js_1.ReportsService,
         journals_service_js_1.JournalsService,
-        reconciliation_service_js_1.ReconciliationService])
+        reconciliation_service_js_1.ReconciliationService,
+        invoices_service_js_1.InvoicesService])
 ], AssistantService);
 function textOf(content) {
     return content.filter((b) => b.type === 'text').map((b) => b.text).join('\n\n').trim();

@@ -189,6 +189,22 @@ exports.TOOLS = [
             return { ...r, period: periodOf(r.period) };
         },
     },
+    {
+        permission: 'sales.invoice.read',
+        spec: {
+            name: 'piutang_usaha',
+            description: 'Piutang usaha per akhir periode (paling lambat hari ini): total, jatuh tempo, DSO, tertagih periode ini, umur piutang per ember, piutang per pelanggan, dan daftar faktur terbuka dengan hari keterlambatan. Pakai untuk pertanyaan penagihan, pelanggan menunggak, atau umur piutang.',
+            input_schema: { type: 'object', properties: scopeProps, additionalProperties: false },
+        },
+        run: async ({ invoices }, c, input) => {
+            const r = await invoices.receivables(c.user, scopeFor(c.user, c.scope, scopeInput.parse(input)), c.requestId);
+            return {
+                per_tanggal: r.asOf, periode: periodOf(r.period), cakupan: r.scope, kpi: r.kpi, umur: r.aging,
+                pelanggan: r.customers.slice(0, 30),
+                faktur_terbuka: r.invoices.slice(0, 40).map((i) => ({ nomor: i.docNo, cabang: i.branch, pelanggan: i.customerName, tanggal: i.date, jatuh_tempo: i.dueDate, total: i.total, sisa: i.open, hari_terlambat: i.overdueDays })),
+            };
+        },
+    },
 ];
 const toolsFor = (u) => exports.TOOLS.filter((t) => u.permissions.has(t.permission));
 exports.toolsFor = toolsFor;

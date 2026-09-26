@@ -20,6 +20,7 @@ const guards_js_1 = require("./common/guards.js");
 const db_module_js_1 = require("./db/db.module.js");
 const ledger_module_js_1 = require("./ledger/ledger.module.js");
 const org_module_js_1 = require("./org/org.module.js");
+const sales_module_js_1 = require("./sales/sales.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -27,7 +28,7 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             throttler_1.ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule, assistant_module_js_1.AssistantModule, iam_module_js_1.IamModule,
+            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule, assistant_module_js_1.AssistantModule, iam_module_js_1.IamModule, sales_module_js_1.SalesModule,
         ],
         controllers: [admin_controller_js_1.AdminController],
         providers: [

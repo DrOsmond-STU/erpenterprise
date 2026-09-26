@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AssistantModule = void 0;
 const common_1 = require("@nestjs/common");
 const ledger_module_js_1 = require("../ledger/ledger.module.js");
+const sales_module_js_1 = require("../sales/sales.module.js");
 const assistant_controller_js_1 = require("./assistant.controller.js");
 const assistant_service_js_1 = require("./assistant.service.js");
 let AssistantModule = class AssistantModule {
@@ -16,7 +17,7 @@ let AssistantModule = class AssistantModule {
 exports.AssistantModule = AssistantModule;
 exports.AssistantModule = AssistantModule = __decorate([
     (0, common_1.Module)({
-        imports: [ledger_module_js_1.LedgerModule],
+        imports: [ledger_module_js_1.LedgerModule, sales_module_js_1.SalesModule],
         controllers: [assistant_controller_js_1.AssistantController],
         providers: [assistant_service_js_1.AssistantService],
         exports: [assistant_service_js_1.AssistantService],
