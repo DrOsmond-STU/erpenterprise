@@ -4,10 +4,12 @@ import { get } from '@/lib/api';
 import * as F from '@/lib/format';
 import { bsRows, plRows } from '@/lib/statements';
 import { useLoader } from '@/lib/useLoader';
+import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
+import Pager from '@/components/Pager.vue';
 import ReportHead from '@/components/ReportHead.vue';
 import StatementTable from '@/components/StatementTable.vue';
 
@@ -15,6 +17,7 @@ const ctx = useContext();
 const session = useSession();
 const tab = ref<'pl' | 'bs'>('pl');
 const { data, loading } = useLoader(() => get('/reports/consolidation'));
+const pgKpi = usePaged<any>(() => data.value?.kpis ?? [], 10);
 const elim = computed(() => data.value.balanceSheet.eliminations.filter((e: any) => e.code.startsWith('1')).reduce((s: number, e: any) => s + e.amount, 0));
 const totals = computed(() => data.value.kpis.reduce((t: any, k: any) => ({ revenue: t.revenue + k.revenue, gross: t.gross + k.gross, net: t.net + k.net, cash: t.cash + k.cash, totalAssets: t.totalAssets + k.totalAssets }), { revenue: 0, gross: 0, net: 0, cash: 0, totalAssets: 0 }));
 </script>
@@ -34,12 +37,13 @@ const totals = computed(() => data.value.kpis.reduce((t: any, k: any) => ({ reve
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba kotor</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th><th class="ta-r">Kas</th><th class="ta-r">Total aset</th></tr></thead>
         <tbody>
-          <tr v-for="k in data.kpis" :key="k.branch" @click="ctx.branch = k.branch">
+          <tr v-for="k in pgKpi.pageRows.value" :key="k.branch" @click="ctx.branch = k.branch">
             <td><span class="cell-strong">{{ k.name }}</span></td><td class="ta-r num">{{ F.amt(k.revenue) }}</td><td class="ta-r num">{{ F.amt(k.gross) }}</td><td class="ta-r num" :class="{ neg: k.net < 0 }">{{ F.amt(k.net) }}</td><td class="ta-r num">{{ F.pct(k.netMargin) }}</td><td class="ta-r num">{{ F.amt(k.cash) }}</td><td class="ta-r num">{{ F.amt(k.totalAssets) }}</td>
           </tr>
         </tbody>
         <tfoot><tr class="report-total"><td>Konsolidasi (setelah eliminasi)</td><td class="ta-r num">{{ F.amt(totals.revenue, true) }}</td><td class="ta-r num">{{ F.amt(totals.gross, true) }}</td><td class="ta-r num">{{ F.amt(totals.net, true) }}</td><td class="ta-r num">{{ F.pct(data.incomeStatement.combined.netMargin) }}</td><td class="ta-r num">{{ F.amt(totals.cash, true) }}</td><td class="ta-r num">{{ F.amt(totals.totalAssets - elim, true) }}</td></tr></tfoot>
       </table></div>
+      <Pager v-model:page="pgKpi.page.value" v-model:size="pgKpi.size.value" :total="pgKpi.total.value" label="cabang" />
     </article>
     <div class="tab-bar">
       <button class="tab-btn" :class="{ active: tab === 'pl' }" @click="tab = 'pl'"><Icon name="trending" /> Laba rugi konsolidasi</button>

@@ -83,6 +83,26 @@ pemosting, invarian basis data (jurnal seimbang, akun detail, periode
 terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
 konsolidasi yang seimbang, serta rekonsiliasi sub-buku dan rantai audit.
 
+## CRUD & paginasi
+
+| Data | Tambah | Ubah | Nonaktif/aktif | Hapus | Izin |
+| --- | --- | --- | --- | --- | --- |
+| Jurnal umum | memorial manual (status menunggu persetujuan) | — | posting / tolak / jurnal balik | — | `ledger.journal.*` |
+| Bagan akun | di bawah akun header | nama | saldo harus nol, tanpa anak aktif | hanya bila belum pernah dipakai jurnal | `ledger.account.manage` |
+| Rekening kas & bank | per cabang | nama, bank, 4 digit nomor | saldo harus nol, bukan rekening utama cabang | hanya bila belum dipakai jurnal | `ledger.account.manage` |
+| Cabang | dengan giro & kas kecil otomatis | seluruh data kecuali kode | kecuali kantor pusat | — | `org.branch.manage` |
+| Periode fiskal | — | — | tutup (`ledger.period.close`) / buka kembali (`ledger.period.reopen`, orang berbeda) | — | |
+
+Jurnal yang sudah diajukan tidak dapat diubah atau dihapus: koreksi lewat tolak (sebelum
+posting) atau jurnal balik (sesudah posting). Akun sistem (kas, piutang, hutang,
+persediaan, RK antar kantor, laba berjalan) dilindungi. Setiap perubahan wajib beralasan
+dan tercatat di jejak audit.
+
+Semua tabel data memakai komponen `Pager` (10/25/50/100 baris per halaman): jurnal dan
+jejak audit dipaginasi di server; bagan akun, rekening, kartu buku besar, neraca saldo,
+periode, integrasi, konsolidasi, dasbor, dan daftar cabang dipaginasi di klien. Laporan
+laba rugi dan neraca sengaja ditampilkan utuh karena subtotalnya harus terbaca bersama.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

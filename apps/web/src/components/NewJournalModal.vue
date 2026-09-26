@@ -37,7 +37,7 @@ onMounted(async () => {
   banks.value = b.accounts;
 });
 const cats = computed(() => [...new Set(accounts.value.map((a) => a.category))]);
-const branchBanks = computed(() => banks.value.filter((b) => b.branchCode === branch.value && b.currency === 'IDR'));
+const branchBanks = computed(() => banks.value.filter((b) => b.branchCode === branch.value && b.currency === 'IDR' && b.status === 'aktif'));
 const totalD = computed(() => lines.value.reduce((s, l) => s + (Number(l.debit) || 0), 0));
 const totalK = computed(() => lines.value.reduce((s, l) => s + (Number(l.credit) || 0), 0));
 const diff = computed(() => Math.abs(totalD.value - totalK.value));

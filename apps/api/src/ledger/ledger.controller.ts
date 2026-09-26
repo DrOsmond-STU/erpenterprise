@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AppRequest, CurrentUser, RequirePermission, RequestUser, Scope, ScopeContext } from '../common/context.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { JournalsService } from './journals.service.js';
+import { MasterDataService } from './master.service.js';
 import { ReconciliationService } from './reconciliation.service.js';
 import { ReportsService } from './reports.service.js';
 
@@ -18,10 +19,33 @@ const reasonSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 const reverseSchema = z.object({ reason: z.string().trim().min(3).max(300), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
 const cardQuery = z.object({ bank: z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() });
 const tbQuery = z.object({ by_branch: z.enum(['true', 'false']).optional() });
+const accountCreate = z.object({
+  code: z.string().trim().regex(/^\d-\d{4}$/, 'Kode akun berformat 9-9999'),
+  name: z.string().trim().min(3).max(120),
+  type: z.enum(['header', 'detail']),
+  parentCode: z.string().trim().regex(/^\d-\d{4}$/, 'Kode induk berformat 9-9999'),
+  isContra: z.boolean().optional(),
+});
+const accountPatch = z.object({ name: z.string().trim().min(3).max(120).optional(), status: z.enum(['aktif', 'nonaktif']).optional(), reason: z.string().trim().min(3).max(300) });
+const bankCreate = z.object({
+  code: z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z0-9-]{3,30}$/, 'Kode rekening 3–30 karakter huruf besar, angka, atau tanda hubung')),
+  branch: z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{3}$/, 'Kode cabang 3 huruf')),
+  name: z.string().trim().min(3).max(120),
+  bankName: z.string().trim().min(2).max(60),
+  accountNoLast4: z.string().trim().regex(/^\d{4}$/, 'Empat digit terakhir nomor rekening').optional().or(z.literal('').transform(() => undefined)),
+});
+const bankPatch = z.object({
+  name: z.string().trim().min(3).max(120).optional(),
+  bankName: z.string().trim().min(2).max(60).optional(),
+  accountNoLast4: z.string().trim().regex(/^\d{4}$/, 'Empat digit terakhir nomor rekening').optional().or(z.literal('')),
+  status: z.enum(['aktif', 'nonaktif']).optional(),
+  reason: z.string().trim().min(3).max(300),
+});
+const deleteSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 
 @Controller()
 export class LedgerController {
-  constructor(private readonly journals: JournalsService, private readonly reports: ReportsService, private readonly recon: ReconciliationService) {}
+  constructor(private readonly journals: JournalsService, private readonly reports: ReportsService, private readonly recon: ReconciliationService, private readonly master: MasterDataService) {}
 
   /* --- Jurnal ------------------------------------------------------------ */
   @Get('ledger/journals') @RequirePermission('ledger.journal.read')
@@ -70,6 +94,37 @@ export class LedgerController {
 
   @Get('ledger/bank-accounts') @RequirePermission('ledger.report.read')
   banks(@CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) { return this.reports.bankBalances(u, s, r.requestId); }
+
+  /* --- CRUD data induk (ledger.account.manage) ------------------------------ */
+  @Post('ledger/accounts') @RequirePermission('ledger.account.manage')
+  createAccount(@Body(new ZodValidationPipe(accountCreate)) b: z.infer<typeof accountCreate>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.createAccount(u, s, b, r.requestId);
+  }
+
+  @Patch('ledger/accounts/:code') @RequirePermission('ledger.account.manage')
+  patchAccount(@Param('code') code: string, @Body(new ZodValidationPipe(accountPatch)) b: z.infer<typeof accountPatch>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.patchAccount(u, s, code.slice(0, 10), b, r.requestId);
+  }
+
+  @Delete('ledger/accounts/:code') @RequirePermission('ledger.account.manage')
+  deleteAccount(@Param('code') code: string, @Body(new ZodValidationPipe(deleteSchema)) b: z.infer<typeof deleteSchema>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.deleteAccount(u, s, code.slice(0, 10), b.reason, r.requestId);
+  }
+
+  @Post('ledger/bank-accounts') @RequirePermission('ledger.account.manage')
+  createBank(@Body(new ZodValidationPipe(bankCreate)) b: z.infer<typeof bankCreate>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.createBank(u, s, b, r.requestId);
+  }
+
+  @Patch('ledger/bank-accounts/:code') @RequirePermission('ledger.account.manage')
+  patchBank(@Param('code') code: string, @Body(new ZodValidationPipe(bankPatch)) b: z.infer<typeof bankPatch>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.patchBank(u, s, code.slice(0, 30).toUpperCase(), b, r.requestId);
+  }
+
+  @Delete('ledger/bank-accounts/:code') @RequirePermission('ledger.account.manage')
+  deleteBank(@Param('code') code: string, @Body(new ZodValidationPipe(deleteSchema)) b: z.infer<typeof deleteSchema>, @CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) {
+    return this.master.deleteBank(u, s, code.slice(0, 30).toUpperCase(), b.reason, r.requestId);
+  }
 
   /* --- Laporan -------------------------------------------------------------- */
   @Get('reports/kpis') @RequirePermission('ledger.report.read')

@@ -3,15 +3,18 @@ import { computed } from 'vue';
 import { get } from '@/lib/api';
 import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
+import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import ReportHead from '@/components/ReportHead.vue';
 import Icon from '@/components/Icon.vue';
+import Pager from '@/components/Pager.vue';
 
 const ctx = useContext();
 const session = useSession();
 const { data: k, loading } = useLoader(() => get('/reports/kpis'));
 const { data: cons } = useLoader(() => (session.can('report.consolidated') && session.allBranches ? get('/reports/consolidation') : Promise.resolve(null)));
+const pgBranch = usePaged<any>(() => cons.value?.kpis ?? [], 10);
 const maxBar = computed(() => Math.max(1, ...(k.value?.monthlyRevenue ?? [0]), k.value?.monthlyTarget ?? 0));
 const firstName = computed(() => (session.user?.name ?? '').split(' ')[0]);
 </script>
@@ -60,12 +63,13 @@ const firstName = computed(() => (session.user?.name ?? '').split(' ')[0]);
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba kotor</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th><th class="ta-r">Kas</th></tr></thead>
         <tbody>
-          <tr v-for="b in cons.kpis" :key="b.branch" @click="ctx.branch = b.branch">
+          <tr v-for="b in pgBranch.pageRows.value" :key="b.branch" @click="ctx.branch = b.branch">
             <td><span class="cell-strong">{{ b.name }}</span></td><td class="ta-r num">{{ F.rpCompact(b.revenue) }}</td><td class="ta-r num">{{ F.rpCompact(b.gross) }}</td>
             <td class="ta-r num" :class="{ neg: b.net < 0 }">{{ F.rpCompact(b.net) }}</td><td class="ta-r num">{{ F.pct(b.netMargin) }}</td><td class="ta-r num">{{ F.rpCompact(b.cash) }}</td>
           </tr>
         </tbody>
       </table></div>
+      <Pager v-model:page="pgBranch.page.value" v-model:size="pgBranch.size.value" :total="pgBranch.total.value" label="cabang" />
     </article>
   </template>
 </template>

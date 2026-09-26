@@ -9,6 +9,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
 import Icon from '@/components/Icon.vue';
+import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
 import NewJournalModal from '@/components/NewJournalModal.vue';
@@ -22,13 +23,14 @@ const toast = useToast();
 const q = ref('');
 const status = ref<string>(String(route.query.status ?? ''));
 const page = ref(1);
+const size = ref(25);
 const openId = ref<string | null>(null);
 const showNew = ref(false);
-const { data, loading, reload } = useLoader(() => get(`/ledger/journals?page=${page.value}&size=25${status.value ? `&status=${status.value}` : ''}${q.value ? `&q=${encodeURIComponent(q.value)}` : ''}`), [page, status]);
+const { data, loading, reload } = useLoader(() => get(`/ledger/journals?page=${page.value}&size=${size.value}${status.value ? `&status=${status.value}` : ''}${q.value ? `&q=${encodeURIComponent(q.value)}` : ''}`), [page, size, status]);
 let t: ReturnType<typeof setTimeout>;
 watch(q, () => { clearTimeout(t); t = setTimeout(() => { page.value = 1; reload(); }, 250); });
 watch(status, () => { page.value = 1; router.replace({ query: status.value ? { status: status.value } : {} }); });
-const pages = computed(() => Math.max(1, Math.ceil((data.value?.meta.total ?? 0) / 25)));
+watch(size, () => { page.value = 1; });
 const counts = computed(() => data.value?.meta.statusCounts ?? {});
 const total = computed(() => Object.values(counts.value as Record<string, number>).reduce((a, b) => a + b, 0));
 const chips = [['', 'Semua'], ['posted', 'Diposting'], ['pending', 'Menunggu persetujuan'], ['rejected', 'Ditolak'], ['reversed', 'Dibalik']];
@@ -70,10 +72,7 @@ void post;
         <tr v-if="data && !data.data.length"><td colspan="8"><div class="empty"><div class="empty-card"><span class="empty-title">Tidak ada jurnal</span><span class="empty-note">Ubah kata kunci, status, cabang, atau periode.</span></div></div></td></tr>
       </tbody>
     </table></div>
-    <div class="card-foot">
-      <span class="pager-info">Halaman {{ page }} dari {{ pages }}</span><div class="toolbar-spacer"></div>
-      <div class="pager"><button class="btn btn-sm btn-icon" :disabled="page <= 1" aria-label="Halaman sebelumnya" @click="page--"><Icon name="chevron-left" /></button><button class="btn btn-sm btn-icon" :disabled="page >= pages" aria-label="Halaman berikutnya" @click="page++"><Icon name="chevron-right" /></button></div>
-    </div>
+    <Pager v-model:page="page" v-model:size="size" :total="data?.meta.total ?? 0" label="jurnal" />
   </article>
   <JournalDrawer v-if="openId" :id="openId" @close="openId = null" @changed="onChanged" />
   <NewJournalModal v-if="showNew" @close="showNew = false" @created="created" />

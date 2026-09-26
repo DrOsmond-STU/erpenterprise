@@ -124,6 +124,83 @@ ok(chatBodies[1]?.messages?.length === 3 && chatBodies[1].messages.map((m) => m.
 await shot('19-asisten');
 await page.unroute('**/api/v1/assistant/status'); await page.unroute('**/api/v1/assistant/chat');
 
+
+console.log('Paginasi tabel');
+for (const path of ['/jurnal', '/buku-besar', '/neraca-saldo', '/bagan-akun', '/kas-bank', '/periode', '/integrasi', '/konsolidasi', '/dasbor', '/jejak-audit']) {
+  await page.goto(base + path); await page.waitForSelector('.pager-bar', { timeout: 15000 }).catch(() => null);
+  const info = await page.locator('[data-pager-info]').first().innerText().catch(() => '');
+  ok(/Menampilkan \d/.test(info), `${path} memiliki paginasi`, info);
+}
+await page.goto(base + '/jurnal'); await page.waitForSelector('tbody tr[data-row]');
+const firstNo = await page.locator('tbody tr[data-row] td').first().innerText();
+await page.click('[data-pager-next]'); await page.waitForFunction((n) => document.querySelector('tbody tr[data-row] td')?.textContent !== n, firstNo, { timeout: 10000 });
+ok((await page.locator('[data-pager-info]').innerText()).startsWith('Menampilkan 26–'), 'jurnal pindah ke halaman 2');
+await page.selectOption('.pager-size select', '10'); await page.waitForTimeout(800);
+ok(await page.locator('tbody tr[data-row]').count() === 10 && (await page.locator('[data-pager-info]').innerText()).startsWith('Menampilkan 1–10'), 'ukuran halaman jurnal dapat diubah');
+await page.goto(base + '/bagan-akun'); await page.waitForSelector('[data-table=accounts] tbody tr');
+await page.fill('[data-filter=account]', 'kas'); await page.waitForTimeout(300);
+ok((await page.locator('[data-table=accounts] tbody tr').allInnerTexts()).every((t) => /kas/i.test(t)), 'pencarian bagan akun menyaring baris');
+
+console.log('CRUD lewat antarmuka (admin)');
+await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
+await login('admin@knm.co.id');
+const accCode = `5-38${String(Date.now() % 90 + 10)}`;
+await page.goto(base + '/bagan-akun'); await page.waitForSelector('[data-action=new-account]');
+await page.click('[data-action=new-account]'); await page.selectOption('#acc-parent', '5-3000');
+await page.fill('#acc-code', accCode); await page.fill('#acc-name', 'Beban Uji Peramban'); await page.click('[data-action=save-account]');
+await page.waitForSelector('.toast'); await page.fill('[data-filter=account]', accCode); await page.waitForTimeout(400);
+ok(await page.locator(`[data-account="${accCode}"]`).count() === 1, 'akun baru dibuat lewat formulir');
+await page.click(`[data-account="${accCode}"] [data-action=edit-account]`); await page.fill('#acc-name', 'Beban Uji Peramban Diubah'); await page.click('[data-action=save-account]');
+await page.waitForFunction((c) => document.querySelector(`[data-account="${c}"]`)?.textContent?.includes('Diubah'), accCode, { timeout: 10000 });
+ok(true, 'nama akun diubah lewat formulir');
+await page.click(`[data-account="${accCode}"] [data-action=toggle-account]`); await page.fill('#reason-input', 'uji nonaktif peramban'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction((c) => document.querySelector(`[data-account="${c}"] .pill`)?.textContent?.trim() === 'Nonaktif', accCode, { timeout: 10000 });
+ok(true, 'akun dinonaktifkan dengan alasan');
+await page.click(`[data-account="${accCode}"] [data-action=delete-account]`); await page.fill('#reason-input', 'uji hapus peramban'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction((c) => !document.querySelector(`[data-account="${c}"]`), accCode, { timeout: 10000 });
+ok(true, 'akun dihapus lewat konfirmasi');
+await page.fill('[data-filter=account]', '1-1200'); await page.waitForTimeout(300);
+ok(await page.locator('[data-account="1-1200"] [data-action=delete-account]').count() === 0, 'akun sistem tidak menampilkan tombol hapus');
+
+const bCode = `BNK-SBY-W${String(Date.now() % 1000)}`;
+await page.goto(base + '/kas-bank'); await page.waitForSelector('[data-action=new-bank]');
+await page.click('[data-action=new-bank]'); await page.selectOption('#bank-branch', 'SBY'); await page.fill('#bank-code', bCode);
+await page.fill('#bank-name', 'BRI — Rekening Uji Peramban'); await page.fill('#bank-bank', 'BRI'); await page.fill('#bank-last4', '5566'); await page.click('[data-action=save-bank]');
+await page.waitForSelector('.toast'); await page.fill('[data-filter=bank]', bCode); await page.waitForTimeout(400);
+ok((await page.locator(`[data-bank="${bCode}"]`).innerText().catch(() => '')).includes('••••5566'), 'rekening baru dibuat lewat formulir');
+await page.click(`[data-bank="${bCode}"] [data-action=edit-bank]`); await page.fill('#bank-name', 'BRI — Rekening Uji Diubah'); await page.click('[data-action=save-bank]');
+await page.waitForFunction((c) => document.querySelector(`[data-bank="${c}"]`)?.textContent?.includes('Diubah'), bCode, { timeout: 10000 });
+ok(true, 'rekening diubah lewat formulir');
+await page.click(`[data-bank="${bCode}"] [data-action=delete-bank]`); await page.fill('#reason-input', 'uji hapus rekening'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction((c) => !document.querySelector(`[data-bank="${c}"]`), bCode, { timeout: 10000 });
+ok(true, 'rekening dihapus lewat konfirmasi');
+
+await page.goto(base + '/cabang'); await page.waitForSelector('[data-branch-card=SBY]');
+await page.click('[data-branch-card=SBY] [data-action=edit-branch]'); await page.fill('#br-phone', '031-777-0000'); await page.click('[data-action=submit-branch]');
+await page.waitForSelector('.toast'); await page.waitForTimeout(500);
+ok((await page.locator('.toast').last().innerText()).includes('Cabang diperbarui') && !(await page.locator('.modal').count()), 'data cabang diubah lewat formulir');
+await page.click('[data-branch-card=SBY] [data-action=toggle-branch]'); await page.fill('#reason-input', 'uji nonaktif cabang'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(() => document.querySelector('[data-branch-card=SBY] .pill')?.textContent?.trim() === 'Nonaktif', null, { timeout: 10000 });
+await page.click('[data-branch-card=SBY] [data-action=toggle-branch]'); await page.fill('#reason-input', 'uji aktifkan cabang'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(() => document.querySelector('[data-branch-card=SBY] .pill')?.textContent?.trim() === 'Aktif', null, { timeout: 10000 });
+ok(true, 'cabang dinonaktifkan lalu diaktifkan kembali dengan alasan (tanpa prompt peramban)');
+await shot('21-crud-admin');
+
+console.log('Periode fiskal');
+await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
+await login('andi@knm.co.id');
+await page.goto(base + '/periode'); await page.waitForSelector('[data-period="2026-11"]');
+await page.click('[data-period="2026-11"] [data-action=close-period]'); await page.fill('#reason-input', 'uji tutup periode'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(() => document.querySelector('[data-period="2026-11"] .pill')?.textContent?.trim() === 'Ditutup', null, { timeout: 15000 });
+ok(await page.locator('[data-period="2026-11"] [data-action=reopen-period]').count() === 0, 'akuntan menutup periode; tombol buka kembali tidak tersedia baginya');
+await shot('22-periode');
+await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
+await login('admin@knm.co.id');
+await page.goto(base + '/periode'); await page.waitForSelector('[data-period="2026-11"] [data-action=reopen-period]');
+await page.click('[data-period="2026-11"] [data-action=reopen-period]'); await page.fill('#reason-input', 'uji buka periode'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(() => document.querySelector('[data-period="2026-11"] .pill')?.textContent?.trim() === 'Terbuka', null, { timeout: 15000 });
+ok(true, 'admin membuka kembali periode');
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);

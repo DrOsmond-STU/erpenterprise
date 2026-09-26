@@ -27,7 +27,7 @@ export const SOD_CONFLICTS: [Permission, Permission, string][] = [
 export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permission[] }> = {
   admin: {
     name: 'Admin Sistem',
-    permissions: ['org.branch.read', 'org.branch.manage', 'org.period.read', 'ledger.account.read', 'ledger.account.manage', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'admin.user.manage', 'admin.role.manage', 'admin.audit.read'],
+    permissions: ['org.branch.read', 'org.branch.manage', 'org.period.read', 'ledger.period.reopen', 'ledger.account.read', 'ledger.account.manage', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'admin.user.manage', 'admin.role.manage', 'admin.audit.read'],
   },
   akuntan_senior: {
     name: 'Akuntan Senior',

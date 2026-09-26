@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router';
 import { get } from '@/lib/api';
 import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
+import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import BranchTag from '@/components/BranchTag.vue';
+import Pager from '@/components/Pager.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import ReportHead from '@/components/ReportHead.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
@@ -19,6 +21,13 @@ const openId = ref<string | null>(null);
 const { data: coa } = useLoader(() => get('/ledger/accounts'));
 const { data: banks } = useLoader(() => get('/ledger/bank-accounts'));
 const { data: card, loading, reload } = useLoader(() => get(`/ledger/accounts/${account.value}/card${account.value === '1-1100' && bank.value ? `?bank=${bank.value}` : ''}`), [account, bank]);
+const pg = usePaged<any>(() => card.value?.lines ?? [], 50);
+watch([account, bank], pg.reset);
+/** Saldo pindahan di awal halaman: saldo berjalan baris terakhir halaman sebelumnya. */
+const carried = computed(() => {
+  const start = (pg.page.value - 1) * pg.size.value;
+  return start === 0 ? card.value?.opening ?? 0 : card.value?.lines[start - 1]?.balance ?? 0;
+});
 watch([account, bank], () => router.replace({ query: { akun: account.value, ...(bank.value ? { rekening: bank.value } : {}) } }));
 const details = computed(() => (coa.value?.accounts ?? []).filter((a: any) => a.type === 'detail' && !a.isComputed));
 const cats = computed(() => [...new Set(details.value.map((a: any) => a.category))]);
@@ -47,8 +56,8 @@ const cats = computed(() => [...new Set(details.value.map((a: any) => a.category
       <div class="table-scroll"><table class="table report">
         <thead><tr><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th><th class="ta-r">Saldo</th></tr></thead>
         <tbody>
-          <tr class="report-subtotal is-static"><td class="num">{{ F.date(card.period.from) }}</td><td></td><td>Saldo awal {{ card.account.name }}</td><td v-if="ctx.branch === 'ALL'"></td><td></td><td></td><td class="ta-r">{{ F.amt(card.opening, true) }}</td></tr>
-          <tr v-for="(l, i) in card.lines" :key="i" @click="openId = l.journal_id">
+          <tr class="report-subtotal is-static"><td class="num">{{ pg.page.value === 1 ? F.date(card.period.from) : '' }}</td><td></td><td>{{ pg.page.value === 1 ? `Saldo awal ${card.account.name}` : 'Saldo pindahan dari halaman sebelumnya' }}</td><td v-if="ctx.branch === 'ALL'"></td><td></td><td></td><td class="ta-r">{{ F.amt(carried, true) }}</td></tr>
+          <tr v-for="(l, i) in pg.pageRows.value" :key="i" @click="openId = l.journal_id">
             <td class="num">{{ F.date(l.date) }}</td><td class="code">{{ l.journal_no }}</td>
             <td><span class="cell-strong">{{ l.description }}</span><span class="cell-sub">{{ l.source }}<template v-if="l.ref"> · {{ l.ref }}</template></span></td>
             <td v-if="ctx.branch === 'ALL'"><BranchTag :code="l.branch" /></td>
@@ -58,6 +67,7 @@ const cats = computed(() => [...new Set(details.value.map((a: any) => a.category
         </tbody>
         <tfoot><tr class="report-total"><td :colspan="ctx.branch === 'ALL' ? 4 : 3">Total mutasi &amp; saldo akhir</td><td class="ta-r">{{ F.amt(card.debit, true) }}</td><td class="ta-r">{{ F.amt(card.credit, true) }}</td><td class="ta-r">{{ F.amt(card.ending, true) }}</td></tr></tfoot>
       </table></div>
+      <Pager v-model:page="pg.page.value" v-model:size="pg.size.value" :total="pg.total.value" label="mutasi" />
     </template>
     <div v-else-if="loading" class="loading">Memuat…</div>
   </article>

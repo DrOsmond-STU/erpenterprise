@@ -62,3 +62,4 @@ export async function api<T = any>(path: string, init: RequestInit & { retry?: b
 export const get = <T = any>(path: string, opts?: { scoped?: boolean }) => api<T>(path, { method: 'GET', ...opts });
 export const post = <T = any>(path: string, body?: unknown, opts?: { scoped?: boolean }) => api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), ...opts });
 export const patch = <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+export const del = <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'DELETE', body: body === undefined ? undefined : JSON.stringify(body) });

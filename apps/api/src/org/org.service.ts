@@ -42,8 +42,10 @@ export class OrgService {
       const cur = (await c.query('SELECT * FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, code])).rows[0];
       if (!cur) throw notFound(`Cabang ${code}`);
       if (p.status === 'nonaktif' && cur.is_head_office) throw new DomainError('HEAD_OFFICE', 'Kantor pusat tidak dapat dinonaktifkan.');
-      const upd = await c.query(`UPDATE branches SET name = coalesce($3, name), manager_name = coalesce($4, manager_name), status = coalesce($5, status), target_monthly = coalesce($6, target_monthly), updated_at = now()
-        WHERE company_id = $1 AND code = $2 RETURNING *`, [u.companyId, code, p.name ?? null, p.managerName ?? null, p.status ?? null, p.targetMonthly ?? null]);
+      const upd = await c.query(`UPDATE branches SET name = coalesce($3, name), manager_name = coalesce($4, manager_name), status = coalesce($5, status), target_monthly = coalesce($6, target_monthly),
+          short_name = coalesce($7, short_name), type = coalesce($8, type), city = coalesce($9, city), address = coalesce($10, address), phone = coalesce($11, phone), updated_at = now()
+        WHERE company_id = $1 AND code = $2 RETURNING *`, [u.companyId, code, p.name ?? null, p.managerName ?? null, p.status ?? null, p.targetMonthly ?? null,
+          p.shortName ?? null, p.type ?? null, p.city ?? null, p.address ?? null, p.phone ?? null]);
       const row = mapBranch(upd.rows[0]);
       await this.audit.record(c, { companyId: u.companyId, branchCode: code, userId: u.id, sessionId: u.sessionId, action: 'branch.updated', entityType: 'branch', entityId: code, before: mapBranch(cur), after: { ...row, reason: p.reason }, requestId });
       return row;

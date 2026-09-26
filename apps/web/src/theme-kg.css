@@ -286,3 +286,7 @@ td > .code { display: inline-block; margin-right: 8px; color: var(--ink-3); }
 @media (max-width: 720px) {
   .kpi-value { font-size: 18px; }
 }
+/* Toast di atas tombol melayang Asisten AI agar tidak saling menutupi. */
+.toasts { bottom: calc(var(--sp-6) + 72px); }
+@media (max-width: 720px) { .toasts { bottom: calc(var(--sp-4) + 64px); } }
+h2.card-title, h3.card-title { display: flex; align-items: center; gap: 8px; }

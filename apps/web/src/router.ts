@@ -14,6 +14,7 @@ export const NAV: NavGroup[] = [
       { path: '/bagan-akun', label: 'Bagan Akun', icon: 'tree', permission: 'ledger.account.read' },
       { path: '/kas-bank', label: 'Kas & Bank', icon: 'vault', permission: 'ledger.report.read' },
       { path: '/jurnal', label: 'Jurnal Umum', icon: 'ledger', permission: 'ledger.journal.read' },
+      { path: '/periode', label: 'Periode Fiskal', icon: 'calendar', permission: 'org.period.read' },
     ],
   },
   {
@@ -43,6 +44,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/tanpa-akses', component: () => import('@/pages/NoAccessPage.vue'), meta: { title: 'Tanpa akses' } },
   { path: '/dasbor', component: () => import('@/pages/DashboardPage.vue'), meta: { title: 'Dasbor', permission: 'ledger.report.read' } },
   { path: '/asisten', component: () => import('@/pages/AssistantPage.vue'), meta: { title: 'Asisten AI', permission: 'ledger.report.read' } },
+  { path: '/periode', component: () => import('@/pages/PeriodsPage.vue'), meta: { title: 'Periode Fiskal', permission: 'org.period.read' } },
   { path: '/bagan-akun', component: () => import('@/pages/ChartOfAccountsPage.vue'), meta: { title: 'Bagan Akun', permission: 'ledger.account.read' } },
   { path: '/kas-bank', component: () => import('@/pages/BankAccountsPage.vue'), meta: { title: 'Kas & Bank', permission: 'ledger.report.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },

@@ -74,6 +74,7 @@ export function validateJournal(input: JournalInput, ctx: ValidationContext): st
       else {
         const k = ctx.bankAccounts.find((b) => b.id === l.bankAccountId || b.code === l.bankAccountId);
         if (!k) errs.push(`Rekening ${l.bankAccountId} tidak dikenal.`);
+        else if ((k as { status?: string }).status && (k as { status?: string }).status !== 'aktif') errs.push(`Rekening ${l.bankAccountId} nonaktif.`);
         else if (k.branchCode !== input.branch) errs.push(`Rekening ${k.name} milik cabang ${k.branchCode}, bukan ${input.branch}.`);
         else if (k.currency !== 'IDR') errs.push(`Rekening ${k.name} berdenominasi ${k.currency}; buku besar rupiah tidak menerima baris valas.`);
       }

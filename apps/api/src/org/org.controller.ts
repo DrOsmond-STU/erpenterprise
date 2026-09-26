@@ -18,6 +18,11 @@ const branchSchema = z.object({
 });
 const branchPatch = z.object({
   name: z.string().trim().min(3).max(120).optional(),
+  shortName: z.string().trim().min(2).max(40).optional(),
+  type: z.string().trim().min(3).max(60).optional(),
+  city: z.string().trim().min(2).max(80).optional(),
+  address: z.string().trim().max(300).optional(),
+  phone: z.string().trim().max(40).optional(),
   managerName: z.string().trim().max(120).optional(),
   status: z.enum(['aktif', 'nonaktif']).optional(),
   targetMonthly: z.number().int().min(0).optional(),
