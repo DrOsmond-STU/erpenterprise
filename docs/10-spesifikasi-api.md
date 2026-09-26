@@ -64,7 +64,19 @@ Semua modul dokumen memakai pola yang sama; contoh untuk faktur:
 | POST | `/invoices/{id}/receipts` | `sales.receipt.create` | Jurnal kas/piutang |
 | POST | `/invoices/{id}/cancel` | `sales.invoice.cancel` | Jurnal balik otomatis; hanya bila periode terbuka |
 
-Jalur serupa: `/sales-orders` (+`/approve`, `/reject`), `/ap-invoices`
+**Terimplementasi (Fase 2 sprint 4)** di bawah prefiks `/sales`:
+
+| Metode | Jalur | Izin |
+| --- | --- | --- |
+| GET · POST · PATCH | `/sales/customers`, `/sales/customers/{id}` | baca `sales.invoice.read`; tulis `sales.customer.manage` (plafon/termin/status wajib `reason`) |
+| GET · POST · PATCH · DELETE | `/sales/products`, `/sales/products/{sku}` | idem |
+| GET · POST · PATCH | `/sales/orders`, `/sales/orders/{id}` (`submit: true` untuk langsung mengajukan) | `sales.order.create` |
+| POST | `/sales/orders/{id}/submit` · `/approve` · `/reject` · `/cancel` · `/invoice` | create · approve (≠ pembuat) · approve · pembuat/penyetuju · `sales.invoice.create` |
+| GET · POST · PATCH | `/sales/invoices`, `/sales/invoices/{id}` (draf) | `sales.invoice.create` |
+| POST | `/sales/invoices/{id}/issue` · `/receipts` · `/cancel` | issue (≠ pembuat) · `sales.receipt.create` · `sales.invoice.cancel` (draf: pembuatnya) |
+| GET | `/sales/receivables` | `sales.invoice.read` — umur piutang per akhir periode konteks |
+
+Jalur rencana lain: `/ap-invoices`
 (+`/payments`), `/stock-moves`, `/transfers` (dua cabang), `/work-orders`
 (+`/complete`), `/payroll-runs` (+`/process`, `/pay`), `/assets`
 (+`/depreciation-runs`), `/maintenance-orders` (+`/complete`), `/pos/shifts`

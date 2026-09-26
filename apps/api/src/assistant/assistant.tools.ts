@@ -11,8 +11,9 @@ import { forbidden } from '../common/errors.js';
 import type { JournalsService } from '../ledger/journals.service.js';
 import type { ReconciliationService } from '../ledger/reconciliation.service.js';
 import type { ReportsService } from '../ledger/reports.service.js';
+import type { InvoicesService } from '../sales/invoices.service.js';
 
-export interface ToolDeps { reports: ReportsService; journals: JournalsService; recon: ReconciliationService }
+export interface ToolDeps { reports: ReportsService; journals: JournalsService; recon: ReconciliationService; invoices: InvoicesService }
 export interface ToolCall { user: RequestUser; scope: ScopeContext; requestId: string }
 
 const cabang = { type: 'string', description: 'Kode cabang tiga huruf (mis. JKT, SBY), atau "ALL" untuk seluruh cabang. Kosongkan untuk memakai konteks cabang yang sedang dipilih pengguna.' } as const;
@@ -203,6 +204,22 @@ export const TOOLS: ToolDef[] = [
     run: async ({ reports }, c, input) => {
       const r: any = await reports.bankBalances(c.user, scopeFor(c.user, c.scope, scopeInput.parse(input)), c.requestId);
       return { ...r, period: periodOf(r.period) };
+    },
+  },
+  {
+    permission: 'sales.invoice.read',
+    spec: {
+      name: 'piutang_usaha',
+      description: 'Piutang usaha per akhir periode (paling lambat hari ini): total, jatuh tempo, DSO, tertagih periode ini, umur piutang per ember, piutang per pelanggan, dan daftar faktur terbuka dengan hari keterlambatan. Pakai untuk pertanyaan penagihan, pelanggan menunggak, atau umur piutang.',
+      input_schema: { type: 'object', properties: scopeProps, additionalProperties: false },
+    },
+    run: async ({ invoices }, c, input) => {
+      const r: any = await invoices.receivables(c.user, scopeFor(c.user, c.scope, scopeInput.parse(input)), c.requestId);
+      return {
+        per_tanggal: r.asOf, periode: periodOf(r.period), cakupan: r.scope, kpi: r.kpi, umur: r.aging,
+        pelanggan: r.customers.slice(0, 30),
+        faktur_terbuka: r.invoices.slice(0, 40).map((i: any) => ({ nomor: i.docNo, cabang: i.branch, pelanggan: i.customerName, tanggal: i.date, jatuh_tempo: i.dueDate, total: i.total, sisa: i.open, hari_terlambat: i.overdueDays })),
+      };
     },
   },
 ];

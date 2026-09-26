@@ -37,7 +37,10 @@ export class ReconciliationService {
     const add = (id: string, label: string, module: string, source: string, sub: number, glv: number, note: string, count = false) =>
       res.push({ id, label, module, source, subledger: sub, ledger: glv, diff: sub - glv, ok: Math.abs(sub - glv) < 1, note, count });
 
-    const ar = await one(`SELECT coalesce(sum(total_gross - CASE WHEN coalesce(paid_date, invoice_date) <= $2 THEN paid_amount ELSE 0 END),0)::bigint AS v FROM invoices WHERE company_id = $1 AND invoice_date <= $2 AND ($3::text IS NULL OR branch_code = $3)`, [companyId, asOf, b]);
+    /* Faktur terbit s.d. tanggal (draf belum dijurnal; batal dihitung sampai tanggal pembatalannya) − penerimaan s.d. tanggal. */
+    const ar = await one(
+      `SELECT (SELECT coalesce(sum(total_gross),0) FROM invoices WHERE company_id = $1 AND status <> 'draf' AND invoice_date <= $2 AND (status <> 'batal' OR cancel_date > $2) AND ($3::text IS NULL OR branch_code = $3))
+            - (SELECT coalesce(sum(amount),0) FROM receipts WHERE company_id = $1 AND receipt_date <= $2 AND ($3::text IS NULL OR branch_code = $3)) AS v`, [companyId, asOf, b]);
     add('ar', 'Piutang usaha', 'faktur', 'Σ sisa tagihan faktur (modul Faktur)', ar, gl('1-1200'), 'Setiap faktur & penerimaan diposting otomatis ke 1-1200');
     const ap = await one(`SELECT coalesce(sum(total_gross - CASE WHEN coalesce(paid_date, invoice_date) <= $2 THEN paid_amount ELSE 0 END),0)::bigint AS v FROM ap_invoices WHERE company_id = $1 AND invoice_date <= $2 AND ($3::text IS NULL OR branch_code = $3)`, [companyId, asOf, b]);
     add('ap', 'Hutang usaha', 'hutang', 'Σ sisa bayar tagihan pemasok (modul Hutang)', ap, gl('2-1100'), 'Setiap tagihan & pembayaran diposting otomatis ke 2-1100');

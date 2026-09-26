@@ -79,7 +79,8 @@ async function main() {
   const pl = await call('/reports/income-statement', { token: andi, branch: 'ALL', period: '2026' });
   ok(pl.status === 200 && pl.body.net > 0 && pl.body.revenue > 30e9, 'laba rugi TA 2026 dari buku besar', pl.body?.net ?? pl.body);
   const rec = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-08' });
-  ok(rec.status === 200 && rec.body.checks.length === 11 && rec.body.checks.every((k: any) => k.ok), '11 rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k: any) => !k.ok) ?? rec.body);
+  /* Pemeriksaan potret (stok, aset, gaji) hanya muncul untuk periode termutakhir buku besar → 7 atau 11. */
+  ok(rec.status === 200 && [7, 11].includes(rec.body.checks.length) && rec.body.checks.every((k: any) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k: any) => !k.ok) ?? rec.body);
   const card = await call('/ledger/accounts/1-1100/card?bank=BNK-001', { token: andi, branch: 'JKT', period: '2026-08' });
   ok(card.status === 200 && card.body.lines.length > 0 && card.body.ending === card.body.lines.at(-1).balance, 'kartu buku besar rekening dengan saldo berjalan', card.body?.error);
   const kpi = await call('/reports/kpis', { token: andi, branch: 'CKR', period: '2026-08' });
@@ -307,6 +308,154 @@ async function main() {
   const badMail = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ email: 'bukan-email' }) });
   ok(badMail.status === 400 || badMail.status === 422, 'email pengaturan divalidasi', badMail.status);
 
+  console.log('Penjualan & piutang');
+  {
+    const tag = Date.now().toString(36);
+    const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token as string;
+    const pol0 = (await call('/settings', { token: admin })).body.policies;
+    await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ policies: { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true } }) });
+    const D = '2026-09-20';
+
+    /* Data induk */
+    const custs = await call('/sales/customers', { token: sari, branch: 'ALL' });
+    ok(custs.status === 200 && custs.body.length >= 11 && typeof custs.body[0].exposure?.total === 'number', 'daftar pelanggan dengan eksposur kredit', custs.body?.[0]);
+    ok((await call('/sales/customers', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin penjualan → 403');
+    const custBody = { name: `PT Uji Penjualan ${tag}`, segment: 'Langsung', city: 'Bekasi', branch: 'CKR', creditLimit: 50_000_000, termsDays: 30 };
+    ok((await call('/sales/customers', { method: 'POST', token: sari, body: JSON.stringify(custBody) })).status === 403, 'staf tanpa sales.customer.manage tidak dapat menambah pelanggan');
+    const zero = await call('/sales/customers', { method: 'POST', token: osmond, body: JSON.stringify({ ...custBody, creditLimit: 0 }) });
+    ok(zero.status === 422, 'pelanggan aktif wajib berplafon > 0', zero.body);
+    const cu = await call('/sales/customers', { method: 'POST', token: osmond, body: JSON.stringify(custBody) });
+    ok(cu.status === 201 && /^CUST-\d{4}$/.test(cu.body.code), 'manajer menambah pelanggan (kode otomatis)', cu.body);
+    ok((await call('/sales/customers', { method: 'POST', token: osmond, body: JSON.stringify(custBody) })).status === 409, 'nama pelanggan ganda ditolak');
+    const noReason = await call(`/sales/customers/${cu.body.id}`, { method: 'PATCH', token: osmond, body: JSON.stringify({ creditLimit: 60_000_000 }) });
+    ok(noReason.status === 422 && noReason.body.error.code === 'REASON_REQUIRED', 'ubah plafon wajib beralasan', noReason.body);
+    const lim = await call(`/sales/customers/${cu.body.id}`, { method: 'PATCH', token: osmond, body: JSON.stringify({ creditLimit: 60_000_000, reason: 'evaluasi kredit' }) });
+    ok(lim.status === 200 && lim.body.creditLimit === 60_000_000, 'plafon diperbarui dengan alasan', lim.body);
+    const prods = (await call('/sales/products', { token: sari, branch: 'ALL' })).body;
+    const braket = prods.find((p: any) => p.sku === 'BRG-1108');
+    const bearing = prods.find((p: any) => p.sku === 'BRG-2217');
+    const stockCkr = (p: any) => p.stock.filter((x: any) => x.branch === 'CKR').reduce((t: number, x: any) => t + Number(x.onHand), 0);
+    const stock0 = stockCkr(braket);
+    const pr = await call('/sales/products', { method: 'POST', token: osmond, body: JSON.stringify({ sku: `JAS-${tag}`.toUpperCase().slice(0, 30), name: 'Jasa uji e2e', kind: 'jasa', unit: 'paket', price: 5_000_000 }) });
+    ok(pr.status === 201 && pr.body.kind === 'jasa', 'produk jasa ditambahkan', pr.body);
+    const svc = pr.body;
+
+    /* Pesanan: lolos otomatis, perlu persetujuan, ditolak lalu diajukan ulang */
+    ok((await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'MDN', customerId: cu.body.id, orderDate: D, lines: [{ productId: svc.id, qty: 1 }] }) })).status === 403, 'pesanan cabang lain dari konteks CKR → 403');
+    const noProd = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ kind: 'barang', description: 'Barang tanpa produk', qty: 1, price: 1000 }] }) });
+    ok(noProd.status === 422 && noProd.body.error.code === 'SALES_INVALID_LINES', 'baris barang wajib memilih produk (stok & HPP)', noProd.body);
+    const so1 = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ productId: braket.id, qty: 10 }, { productId: svc.id, qty: 1, discPct: 10 }], submit: true }) });
+    const exp1 = Math.round(10 * braket.price) + 4_500_000;
+    ok(so1.status === 201 && so1.body.status === 'disetujui' && so1.body.net === exp1 && so1.body.ppn === Math.round(exp1 * 0.11) && so1.body.total === exp1 + Math.round(exp1 * 0.11), 'pesanan di bawah plafon & batas → disetujui otomatis, PPN 11% benar', so1.body);
+    const so2 = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ productId: braket.id, qty: 150 }], submit: true }) });
+    ok(so2.status === 201 && so2.body.status === 'menunggu' && so2.body.approvalReasons.some((r: string) => /plafon/.test(r)), 'pesanan melebihi sisa plafon → menunggu persetujuan', so2.body?.approvalReasons);
+    ok((await call(`/sales/orders/${so2.body.id}/approve`, { method: 'POST', token: sari, branch: 'CKR', body: '{}' })).status === 403, 'staf tidak dapat menyetujui pesanan');
+    const rej = await call(`/sales/orders/${so2.body.id}/reject`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ reason: 'kurangi kuantitas' }) });
+    ok(rej.status === 200 && rej.body.status === 'ditolak', 'manajer menolak pesanan dengan alasan', rej.body?.status);
+    const upd = await call(`/sales/orders/${so2.body.id}`, { method: 'PATCH', token: sari, branch: 'CKR', body: JSON.stringify({ lines: [{ productId: braket.id, qty: 20 }], submit: true }) });
+    ok(upd.status === 200 && upd.body.status === 'disetujui' && upd.body.timeline.some((t: any) => t.action === 'sales_order.rejected'), 'pesanan ditolak diubah lalu diajukan ulang → disetujui; linimasa tercatat', upd.body?.status);
+    const so3 = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ productId: braket.id, qty: 200 }], submit: true }) });
+    const ap3 = await call(`/sales/orders/${so3.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ note: 'disetujui khusus' }) });
+    ok(ap3.status === 200 && ap3.body.status === 'disetujui' && ap3.body.decidedByName === 'Osmond Pratama', 'manajer menyetujui pesanan', ap3.body?.status);
+    const cn3 = await call(`/sales/orders/${so3.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'pelanggan batal' }) });
+    ok(cn3.status === 200 && cn3.body.status === 'batal', 'pembuat membatalkan pesanan', cn3.body?.status);
+    await call(`/sales/customers/${cu.body.id}`, { method: 'PATCH', token: osmond, body: JSON.stringify({ status: 'ditahan', reason: 'uji status ditahan' }) });
+    const soHeld = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ productId: svc.id, qty: 1 }], submit: true }) });
+    ok(soHeld.body.status === 'menunggu' && soHeld.body.approvalReasons.some((r: string) => /ditahan/.test(r)), 'pelanggan ditahan → pesanan kecil pun menunggu persetujuan', soHeld.body?.approvalReasons);
+    await call(`/sales/orders/${soHeld.body.id}/cancel`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ reason: 'bersihkan uji' }) });
+    await call(`/sales/customers/${cu.body.id}`, { method: 'PATCH', token: osmond, body: JSON.stringify({ status: 'aktif', reason: 'aktif kembali' }) });
+
+    /* SoD per dokumen: pengguna yang memegang buat & setujui tetap tidak boleh menyetujui pesanannya sendiri. */
+    const rcode = `uji_jual_${tag}`.slice(0, 40);
+    const rr = await call('/admin/roles', { method: 'POST', token: admin, body: JSON.stringify({ code: rcode, name: 'Uji penjual-penyetuju', permissions: ['sales.invoice.read', 'sales.order.create', 'sales.order.approve', 'sales.invoice.create', 'sales.invoice.issue'] }) });
+    ok(rr.status === 201, 'peran uji penjual-penyetuju dibuat (pasangan buat/setujui ditegakkan per dokumen)', rr.body);
+    const suEmail = `jual.${tag}@knm.co.id`;
+    const su = await call('/admin/users', { method: 'POST', token: admin, body: JSON.stringify({ email: suEmail, name: 'Uji Penjual', roles: [{ role: rcode, branch: 'CKR' }] }) });
+    const suTok0 = (await authCall(suEmail, su.body.temporaryPassword)).body.access_token;
+    await call('/me/password', { method: 'POST', token: suTok0, body: JSON.stringify({ currentPassword: su.body.temporaryPassword, newPassword: 'Penjual-Uji-2026x' }) });
+    const suTok = (await authCall(suEmail, 'Penjual-Uji-2026x')).body.access_token;
+    const soS = await call('/sales/orders', { method: 'POST', token: suTok, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, orderDate: D, lines: [{ productId: braket.id, qty: 400 }], submit: true }) });
+    const selfAp = await call(`/sales/orders/${soS.body.id}/approve`, { method: 'POST', token: suTok, branch: 'CKR', body: '{}' });
+    ok(soS.body.status === 'menunggu' && selfAp.status === 403 && selfAp.body.error.code === 'SOD_ORDER', 'pembuat pesanan tidak dapat menyetujui pesanannya sendiri', selfAp.body);
+    await call(`/sales/orders/${soS.body.id}/cancel`, { method: 'POST', token: suTok, branch: 'CKR', body: JSON.stringify({ reason: 'bersihkan uji' }) });
+    const invS = await call('/sales/invoices', { method: 'POST', token: suTok, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, invoiceDate: D, lines: [{ productId: svc.id, qty: 1 }] }) });
+    const selfIss = await call(`/sales/invoices/${invS.body.id}/issue`, { method: 'POST', token: suTok, branch: 'CKR' });
+    ok(invS.status === 201 && selfIss.status === 403 && selfIss.body.error.code === 'SOD_INVOICE', 'pembuat faktur tidak dapat menerbitkan fakturnya sendiri', selfIss.body);
+    const cnDraft = await call(`/sales/invoices/${invS.body.id}/cancel`, { method: 'POST', token: suTok, branch: 'CKR', body: JSON.stringify({ reason: 'draf uji' }) });
+    ok(cnDraft.status === 200 && cnDraft.body.status === 'batal' && cnDraft.body.journals.length === 0, 'pembuat membatalkan draf fakturnya (tanpa jurnal)', cnDraft.body?.status);
+
+    /* Faktur dari pesanan → terbit (jurnal + HPP + stok) → penerimaan */
+    const ti = await call(`/sales/orders/${so1.body.id}/invoice`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ invoiceDate: D }) });
+    ok(ti.status === 200 && /^INV-2026-\d{4}$/.test(ti.body.invoiceNo) && ti.body.order.status === 'selesai', 'pesanan disetujui menjadi draf faktur; pesanan selesai', ti.body?.invoiceNo);
+    const invId = ti.body.invoiceId;
+    const detail0 = await call(`/sales/customers/${cu.body.id}`, { token: osmond, branch: 'ALL' });
+    ok(detail0.body.exposure.drafts === so1.body.total, 'faktur draf tetap dihitung dalam eksposur kredit', detail0.body.exposure);
+    ok((await call(`/sales/invoices/${invId}/issue`, { method: 'POST', token: sari, branch: 'CKR' })).status === 403, 'staf tanpa sales.invoice.issue tidak dapat menerbitkan');
+    const iss = await call(`/sales/invoices/${invId}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+    ok(iss.status === 200 && iss.body.status === 'belum-dibayar' && iss.body.cogs === 10 * 264_000, 'akuntan menerbitkan faktur; HPP = qty × harga pokok rata-rata', { s: iss.body?.status, cogs: iss.body?.cogs, e: iss.body?.error });
+    const rules = (iss.body.journals ?? []).map((j: any) => j.rule).sort();
+    ok(JSON.stringify(rules) === JSON.stringify(['SALES_COGS', 'SALES_INVOICE']), 'jurnal penjualan & HPP diposting otomatis', rules);
+    const jSales = await call(`/ledger/journals/${iss.body.journals.find((j: any) => j.rule === 'SALES_INVOICE').id}`, { token: andi, branch: 'ALL' });
+    const amt = (acc: string, side: 'debit' | 'credit') => jSales.body.lines.filter((l: any) => l.account === acc).reduce((t: number, l: any) => t + l[side], 0);
+    ok(jSales.body.status === 'posted' && amt('1-1200', 'debit') === iss.body.total && amt('4-1000', 'credit') === 10 * braket.price && amt('4-2000', 'credit') === 4_500_000 && amt('2-1400', 'credit') === iss.body.ppn,
+      'jurnal: Dr piutang total; Cr pendapatan barang, jasa, PPN keluaran', jSales.body.lines);
+    const prods2 = (await call('/sales/products', { token: sari, branch: 'ALL' })).body;
+    ok(stockCkr(prods2.find((p: any) => p.sku === 'BRG-1108')) === stock0 - 10, 'stok cabang berkurang saat faktur terbit', [stock0, stockCkr(prods2.find((p: any) => p.sku === 'BRG-1108'))]);
+    ok((await call(`/sales/invoices/${invId}/issue`, { method: 'POST', token: andi, branch: 'CKR' })).status === 409, 'faktur tidak dapat diterbitkan dua kali');
+    const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+    const ckrBank = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas').code;
+    const jktBank = banks.find((b: any) => b.branchCode === 'JKT' && b.status === 'aktif').code;
+    const over = await call(`/sales/invoices/${invId}/receipts`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ date: '2026-09-25', amount: iss.body.total + 1, bankAccount: ckrBank }) });
+    ok(over.status === 422 && over.body.error.code === 'RECEIPT_OVERPAY', 'penerimaan melebihi sisa tagihan ditolak', over.body);
+    const wrongBank = await call(`/sales/invoices/${invId}/receipts`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ date: '2026-09-25', amount: 1_000_000, bankAccount: jktBank }) });
+    ok(wrongBank.status === 422 && wrongBank.body.error.code === 'BANK_BRANCH', 'rekening cabang lain ditolak', wrongBank.body);
+    const r1 = await call(`/sales/invoices/${invId}/receipts`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ date: '2026-09-25', amount: 1_000_000, bankAccount: ckrBank, reference: 'TRF-1' }) });
+    ok(r1.status === 200 && r1.body.status === 'sebagian' && r1.body.open === iss.body.total - 1_000_000 && r1.body.receipts[0].journalNo, 'penerimaan sebagian → status sebagian, jurnal kas diposting', r1.body?.status);
+    const r2 = await call(`/sales/invoices/${invId}/receipts`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ date: '2026-09-25', amount: r1.body.open, bankAccount: ckrBank }) });
+    ok(r2.status === 200 && r2.body.status === 'lunas' && r2.body.open === 0, 'pelunasan → lunas', r2.body?.status);
+    ok((await call(`/sales/invoices/${invId}/receipts`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ amount: 1, bankAccount: ckrBank }) })).status === 409, 'faktur lunas tidak menerima penerimaan lagi');
+    const cnPaid = await call(`/sales/invoices/${invId}/cancel`, { method: 'POST', token: andi, branch: 'CKR', body: JSON.stringify({ reason: 'uji' }) });
+    ok(cnPaid.status === 409 && cnPaid.body.error.code === 'INVOICE_HAS_RECEIPTS', 'faktur yang sudah dibayar tidak dapat dibatalkan', cnPaid.body);
+
+    /* Faktur langsung: stok kurang, periode tertutup, pembatalan membalik jurnal & mengembalikan stok */
+    const short = await call('/sales/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, invoiceDate: D, lines: [{ productId: bearing.id, qty: 100000 }] }) });
+    const shortIss = await call(`/sales/invoices/${short.body.id}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+    const shortAfter = await call(`/sales/invoices/${short.body.id}`, { token: andi, branch: 'CKR' });
+    ok(shortIss.status === 422 && shortIss.body.error.code === 'STOCK_INSUFFICIENT' && shortAfter.body.status === 'draf' && shortAfter.body.journals.length === 0, 'stok tidak cukup → penerbitan ditolak utuh (tanpa jurnal)', shortIss.body);
+    await call(`/sales/invoices/${short.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'bersihkan' }) });
+    const oldInv = await call('/sales/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, invoiceDate: '2026-07-15', lines: [{ productId: svc.id, qty: 1 }] }) });
+    const oldIss = await call(`/sales/invoices/${oldInv.body.id}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+    ok(oldIss.status === 422 && oldIss.body.error.code === 'LEDGER_PERIOD_CLOSED', 'faktur bertanggal periode tertutup tidak dapat diterbitkan', oldIss.body);
+    await call(`/sales/invoices/${oldInv.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'bersihkan' }) });
+    const inv2 = await call('/sales/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cu.body.id, invoiceDate: D, lines: [{ productId: braket.id, qty: 5 }] }) });
+    await call(`/sales/invoices/${inv2.body.id}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+    const cn2 = await call(`/sales/invoices/${inv2.body.id}/cancel`, { method: 'POST', token: andi, branch: 'CKR', body: JSON.stringify({ reason: 'salah harga', date: '2026-09-25' }) });
+    const revd = (cn2.body.journals ?? []).filter((j: any) => j.status === 'reversed').length;
+    const revs = (cn2.body.journals ?? []).filter((j: any) => j.rule === 'REVERSAL').length;
+    ok(cn2.status === 200 && cn2.body.status === 'batal' && revd === 2 && revs === 2, 'pembatalan faktur terbit membalik jurnal penjualan & HPP', cn2.body?.journals);
+    const prods3 = (await call('/sales/products', { token: sari, branch: 'ALL' })).body;
+    ok(stockCkr(prods3.find((p: any) => p.sku === 'BRG-1108')) === stock0 - 10, 'stok dikembalikan saat faktur dibatalkan');
+
+    /* Integrasi buku besar & RLS */
+    for (const b of ['CKR', 'ALL']) {
+      const rec = await call('/reports/reconciliation', { token: andi, branch: b, period: '2026-09' });
+      const bad = rec.body.checks.filter((c: any) => !c.ok).map((c: any) => `${c.id}:${c.diff}`);
+      ok(rec.status === 200 && bad.length === 0, `rekonsiliasi ${b} Sep 2026 tetap cocok (piutang, kas, persediaan)`, bad);
+    }
+    const recAug = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-08' });
+    ok(recAug.body.checks.find((c: any) => c.id === 'ar').ok, 'rekonsiliasi piutang Agu 2026 (data awal + penerimaan historis) cocok');
+    const recv = await call('/sales/receivables', { token: andi, branch: 'ALL', period: '2026-08' });
+    ok(recv.status === 200 && recv.body.kpi.reconciled && recv.body.aging.reduce((t: number, b: any) => t + b.value, 0) === recv.body.kpi.total, 'umur piutang = saldo 1-1200 dan jumlah ember = total', recv.body?.kpi);
+    const tInv = await call('/sales/invoices', { token: taufik, branch: 'ALL' });
+    ok(tInv.status === 200 && tInv.body.length > 0 && tInv.body.every((i: any) => i.branch === 'MDN'), 'manajer Medan hanya melihat faktur Medan (RLS)');
+    ok((await call(`/sales/invoices/${invId}`, { token: taufik, branch: 'ALL' })).status === 404, 'faktur cabang lain → 404 bagi manajer Medan');
+    const aud = await call(`/admin/audit-log?entity=invoice&entityId=${ti.body.invoiceNo}&size=50`, { token: admin, branch: 'ALL' });
+    ok(aud.status === 200 && ['invoice.created', 'invoice.issued', 'invoice.receipt'].every((x) => aud.body.data.some((a: any) => a.action === x)), 'siklus faktur tercatat di jejak audit', aud.body?.data?.map((a: any) => a.action));
+
+    await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ policies: pol0 }) });
+    await call(`/admin/users/${su.body.id}`, { method: 'PATCH', token: admin, body: JSON.stringify({ status: 'nonaktif', reason: 'bersihkan uji' }) });
+  }
+
   console.log('Asisten AI');
   const assistant = app.get(AssistantService);
   assistant.useClientForTest(null);
@@ -350,7 +499,7 @@ async function main() {
   assistant.useClientForTest(m2.client);
   const c2 = await call('/assistant/chat', { method: 'POST', token: taufik, branch: 'MDN', period: '2026-08', body: JSON.stringify({ messages: [{ role: 'user', content: 'Tunjukkan neraca Jakarta' }] }) });
   const offered = m2.calls[0].tools.map((t: any) => t.name);
-  ok(c2.status === 200 && offered.includes('neraca') && offered.includes('konsolidasi'), 'alat ditawarkan sesuai izin pengguna', offered);
+  ok(c2.status === 200 && offered.includes('neraca') && offered.includes('konsolidasi') && offered.includes('piutang_usaha'), 'alat ditawarkan sesuai izin pengguna (termasuk piutang usaha)', offered);
   const res2 = m2.calls[1].messages[m2.calls[1].messages.length - 1].content;
   const jkt = res2.find((r: any) => r.tool_use_id === 'tu_1');
   ok(jkt.is_error === true && /akses ke cabang JKT/.test(jkt.content), 'manajer Medan tidak dapat membaca neraca Jakarta lewat asisten', jkt);

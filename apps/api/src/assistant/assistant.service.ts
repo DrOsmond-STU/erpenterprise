@@ -24,6 +24,7 @@ import { JournalsService } from '../ledger/journals.service.js';
 import { LedgerRefs } from '../ledger/ledger.shared.js';
 import { ReconciliationService } from '../ledger/reconciliation.service.js';
 import { ReportsService } from '../ledger/reports.service.js';
+import { InvoicesService } from '../sales/invoices.service.js';
 import { toolsFor, type ToolCall } from './assistant.tools.js';
 
 export interface ChatTurn { role: 'user' | 'assistant'; content: string }
@@ -69,6 +70,7 @@ export class AssistantService {
     private readonly reports: ReportsService,
     private readonly journals: JournalsService,
     private readonly recon: ReconciliationService,
+    private readonly invoices: InvoicesService,
   ) {
     if (this.cfg.ANTHROPIC_API_KEY) {
       this.client = new Anthropic({ apiKey: this.cfg.ANTHROPIC_API_KEY, timeout: 120_000, maxRetries: 1 });
@@ -155,7 +157,7 @@ export class AssistantService {
     const def = toolsFor(call.user).find((t) => t.spec.name === name);
     if (!def || !allowed.includes(name)) return { text: `Alat "${name}" tidak tersedia untuk pengguna ini.`, isError: true };
     try {
-      const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon }, call, input ?? {});
+      const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon, invoices: this.invoices }, call, input ?? {});
       let text = JSON.stringify(out);
       if (text.length > MAX_TOOL_RESULT_CHARS) text = `${text.slice(0, MAX_TOOL_RESULT_CHARS)}… [dipotong: hasil terlalu besar, persempit cakupan]`;
       return { text, isError: false };

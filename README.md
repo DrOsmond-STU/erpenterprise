@@ -123,6 +123,45 @@ peran seorang pengguna), menghapus peran yang masih dipakai, atau menyisakan
 sistem tanpa admin aktif. Menonaktifkan pengguna atau mengubah perannya
 mengeluarkan semua sesinya.
 
+## Penjualan & piutang
+
+Menu **Penjualan**: Pesanan Penjualan, Faktur, Piutang Usaha, Pelanggan, Produk & Jasa.
+
+```
+Pesanan (draf) ──ajukan──► cek plafon & batas ──► disetujui ──buat faktur──► Faktur (draf)
+                                   │ gagal                                      │ terbitkan (orang lain)
+                                   ▼                                            ▼
+                         menunggu → setujui / tolak (manajer)   Jurnal otomatis: Dr 1-1200 │ Cr 4-1000, 4-2000, 2-1400
+                                                                                 Dr 5-1000 │ Cr 1-1500/1-1400 (stok cabang −)
+                                                            Penerimaan ──► Dr 1-1100 (rekening cabang) │ Cr 1-1200
+```
+
+- **Plafon kredit** dihitung lintas cabang: piutang terbuka + faktur draf + pesanan
+  belum difakturkan. Pesanan menunggu persetujuan bila melebihi sisa plafon
+  (kebijakan *Blokir melebihi plafon*), pelanggan berstatus *ditahan*, atau di
+  atas *batas persetujuan* (Pengaturan → Kebijakan dokumen).
+- **Pemisahan tugas per dokumen**: pembuat pesanan ≠ penyetuju, pembuat faktur ≠
+  penerbit — berlaku walau satu peran memegang kedua izin.
+- **Terbitkan** memposting jurnal penjualan & HPP dalam transaksi yang sama dengan
+  pengurangan stok (harga pokok rata-rata gudang cabang); stok kurang atau periode
+  tertutup menggagalkan seluruhnya.
+- **Penerimaan** boleh sebagian; rekening harus milik cabang faktur.
+- **Batal**: draf langsung; faktur terbit hanya bila belum ada penerimaan — jurnal
+  dibalik, stok dikembalikan, pesanan asal kembali *disetujui*.
+- **Piutang Usaha** = faktur terbit − penerimaan per tanggal, sama dengan sumber
+  pemeriksaan rekonsiliasi 1-1200 (halaman Integrasi) sehingga selalu cocok.
+- Asisten AI mendapat alat baca `piutang_usaha` untuk pemegang `sales.invoice.read`.
+
+| Izin | Staf keuangan | Akuntan senior | Manajer |
+| --- | --- | --- | --- |
+| `sales.invoice.read` (lihat semua menu penjualan) | ✓ | ✓ | ✓ |
+| `sales.order.create`, `sales.invoice.create`, `sales.receipt.create` | ✓ | | |
+| `sales.invoice.issue`, `sales.invoice.cancel` | | ✓ | |
+| `sales.order.approve`, `sales.customer.manage` | | | ✓ |
+
+Basis data yang sudah berisi data contoh dilengkapi (pelanggan, produk, pesanan,
+penautan faktur lama) dengan menjalankan seed lagi — jalur *upgrade* idempoten.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

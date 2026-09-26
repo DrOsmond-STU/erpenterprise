@@ -28,6 +28,16 @@ export const NAV: NavGroup[] = [
       { path: '/integrasi', label: 'Integrasi & Rekonsiliasi', icon: 'link', permission: 'ledger.report.read' },
     ],
   },
+  {
+    label: 'Penjualan',
+    items: [
+      { path: '/pesanan-penjualan', label: 'Pesanan Penjualan', icon: 'cart', permission: 'sales.invoice.read' },
+      { path: '/faktur', label: 'Faktur', icon: 'invoice', permission: 'sales.invoice.read' },
+      { path: '/piutang', label: 'Piutang Usaha', icon: 'wallet', permission: 'sales.invoice.read' },
+      { path: '/pelanggan', label: 'Pelanggan', icon: 'handshake', permission: 'sales.invoice.read' },
+      { path: '/produk', label: 'Produk & Jasa', icon: 'boxes', permission: 'sales.invoice.read' },
+    ],
+  },
   { label: 'Cabang', items: [{ path: '/cabang', label: 'Manajemen Cabang', icon: 'map-pin', permission: 'org.branch.read' }] },
   {
     label: 'Sistem',
@@ -55,6 +65,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/periode', component: () => import('@/pages/PeriodsPage.vue'), meta: { title: 'Periode Fiskal', permission: 'org.period.read' } },
   { path: '/bagan-akun', component: () => import('@/pages/ChartOfAccountsPage.vue'), meta: { title: 'Bagan Akun', permission: 'ledger.account.read' } },
   { path: '/kas-bank', component: () => import('@/pages/BankAccountsPage.vue'), meta: { title: 'Kas & Bank', permission: 'ledger.report.read' } },
+  { path: '/pesanan-penjualan', component: () => import('@/pages/SalesOrdersPage.vue'), meta: { title: 'Pesanan Penjualan', permission: 'sales.invoice.read' } },
+  { path: '/faktur', component: () => import('@/pages/InvoicesPage.vue'), meta: { title: 'Faktur', permission: 'sales.invoice.read' } },
+  { path: '/piutang', component: () => import('@/pages/ReceivablesPage.vue'), meta: { title: 'Piutang Usaha', permission: 'sales.invoice.read' } },
+  { path: '/pelanggan', component: () => import('@/pages/CustomersPage.vue'), meta: { title: 'Pelanggan', permission: 'sales.invoice.read' } },
+  { path: '/produk', component: () => import('@/pages/ProductsPage.vue'), meta: { title: 'Produk & Jasa', permission: 'sales.invoice.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },
   { path: '/buku-besar', component: () => import('@/pages/LedgerCardPage.vue'), meta: { title: 'Kartu Buku Besar', permission: 'ledger.report.read' } },
   { path: '/neraca-saldo', component: () => import('@/pages/TrialBalancePage.vue'), meta: { title: 'Neraca Saldo', permission: 'ledger.report.read' } },

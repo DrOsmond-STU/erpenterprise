@@ -11,7 +11,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey));
 <template>
   <Teleport to="body">
     <div class="scrim" @click="emit('close')"></div>
-    <div class="modal" role="dialog" aria-modal="true" :aria-label="title" :style="width ? `max-width:${width}` : ''">
+    <div class="modal" role="dialog" aria-modal="true" :aria-label="title" :style="width ? `max-width:${width};width:min(${width}, calc(100vw - 32px))` : ''">
       <header class="modal-head">
         <div style="flex:1 1 auto">
           <h2 class="modal-title">{{ title }}</h2>

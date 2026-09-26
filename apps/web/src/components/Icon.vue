@@ -1,6 +1,12 @@
 <script setup lang="ts">
 /* Ikon garis 16×16 — subset dari purwarupa. */
 const ICONS: Record<string, string> = {
+  cart: '<circle cx="6.2" cy="13.2" r="1.1"/><circle cx="12" cy="13.2" r="1.1"/><path d="M1.4 2h2.2l1.9 8.1h7.3l1.6-5.9H4.2"/>',
+  invoice: '<path d="M3.6 1.6h8.8v12.8l-2.2-1.3-2.2 1.3-2.2-1.3-2.2 1.3z"/><path d="M6 5.2h4M6 8.2h4"/>',
+  truck: '<path d="M1.4 3.6h8.2v7.2H1.4z"/><path d="M9.6 6.2h2.6l2.4 2.6v2H9.6z"/><circle cx="4.6" cy="12.6" r="1.2"/><circle cx="11.6" cy="12.6" r="1.2"/>',
+  handshake: '<path d="M5.6 3.4V2.2a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1v1.2"/><rect x="1.5" y="3.4" width="13" height="9.4" rx="1.4"/><path d="M1.5 7.6h13"/>',
+  wallet: '<rect x="1.5" y="3.4" width="13" height="9.6" rx="1.5"/><path d="M1.5 6.6h13"/><circle cx="11.4" cy="9.9" r="1"/>',
+  edit: '<path d="M11 2.2 13.8 5l-8 8H3v-2.8z"/>',
   sparkles: '<path d="M6.4 1.8 7.5 5a2 2 0 0 0 1.3 1.3l3.2 1.1-3.2 1.1a2 2 0 0 0-1.3 1.3l-1.1 3.2-1.1-3.2A2 2 0 0 0 4 8.5L.8 7.4 4 6.3A2 2 0 0 0 5.3 5z"/><path d="M12.6 1.6v3M11.1 3.1h3M12.6 10.8v2.8M11.2 12.2H14"/>',
   send: '<path d="M14.4 1.6 7.2 8.8"/><path d="m14.4 1.6-4.6 12.8-2.6-5.6-5.6-2.6z"/>',
   minus: '<path d="M4 8h8"/>',

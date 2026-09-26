@@ -8,7 +8,8 @@ export const PERMISSIONS = [
   'ledger.journal.read', 'ledger.journal.create', 'ledger.journal.post', 'ledger.journal.reverse',
   'ledger.rules.manage', 'ledger.report.read',
   'report.consolidated', 'report.export',
-  'sales.invoice.read', 'sales.invoice.create', 'sales.invoice.issue', 'sales.receipt.create',
+  'sales.invoice.read', 'sales.customer.manage', 'sales.order.create', 'sales.order.approve',
+  'sales.invoice.create', 'sales.invoice.issue', 'sales.invoice.cancel', 'sales.receipt.create',
   'purchasing.invoice.read', 'purchasing.payment.create',
   'inventory.read', 'inventory.adjust', 'inventory.transfer',
   'admin.user.manage', 'admin.role.manage', 'admin.settings.manage', 'admin.audit.read',
@@ -16,9 +17,14 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number];
 
+/** Pasangan yang ditegakkan per dokumen (pembuat ≠ penyetuju), bukan per pengguna. */
+export const PER_DOCUMENT_SOD = new Set(['ledger.journal.create|ledger.journal.post', 'sales.order.create|sales.order.approve', 'sales.invoice.create|sales.invoice.issue']);
+
 /** Pasangan izin yang tidak boleh dipegang satu pengguna (pemisahan tugas, dok. 11 §3). */
 export const SOD_CONFLICTS: [Permission, Permission, string][] = [
   ['ledger.journal.create', 'ledger.journal.post', 'Pembuat jurnal tidak boleh memposting jurnal (kontrol empat mata); ditegakkan per jurnal.'],
+  ['sales.order.create', 'sales.order.approve', 'Pembuat pesanan tidak boleh menyetujui pesanannya sendiri; ditegakkan per pesanan.'],
+  ['sales.invoice.create', 'sales.invoice.issue', 'Pembuat faktur tidak boleh menerbitkan fakturnya sendiri; ditegakkan per faktur.'],
   ['admin.role.manage', 'ledger.journal.post', 'Admin peran tidak boleh memposting jurnal.'],
   ['ledger.period.close', 'ledger.period.reopen', 'Penutup periode tidak boleh membuka kembali periode.'],
   ['purchasing.payment.create', 'admin.user.manage', 'Pembuat pembayaran tidak boleh mengelola pengguna.'],
@@ -31,15 +37,15 @@ export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permiss
   },
   akuntan_senior: {
     name: 'Akuntan Senior',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'purchasing.invoice.read', 'inventory.read', 'admin.audit.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'inventory.read', 'admin.audit.read'],
   },
   staf_keuangan: {
     name: 'Staf Keuangan',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'inventory.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'inventory.read'],
   },
   manajer: {
     name: 'Manajer Operasional',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'purchasing.invoice.read', 'inventory.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'sales.customer.manage', 'sales.order.approve', 'purchasing.invoice.read', 'inventory.read'],
   },
   gudang: {
     name: 'Staf Gudang',
@@ -61,8 +67,10 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
   ] },
   { group: 'Laporan', items: [{ code: 'report.consolidated', label: 'Laporan konsolidasi' }, { code: 'report.export', label: 'Ekspor laporan' }] },
   { group: 'Penjualan', items: [
-    { code: 'sales.invoice.read', label: 'Lihat faktur' }, { code: 'sales.invoice.create', label: 'Buat faktur' },
-    { code: 'sales.invoice.issue', label: 'Terbitkan faktur' }, { code: 'sales.receipt.create', label: 'Catat penerimaan' },
+    { code: 'sales.invoice.read', label: 'Lihat penjualan & piutang' }, { code: 'sales.customer.manage', label: 'Kelola pelanggan, plafon & produk' },
+    { code: 'sales.order.create', label: 'Buat pesanan penjualan' }, { code: 'sales.order.approve', label: 'Setujui / tolak pesanan' },
+    { code: 'sales.invoice.create', label: 'Buat faktur' }, { code: 'sales.invoice.issue', label: 'Terbitkan faktur (posting)' },
+    { code: 'sales.invoice.cancel', label: 'Batalkan faktur' }, { code: 'sales.receipt.create', label: 'Catat penerimaan pelanggan' },
   ] },
   { group: 'Pembelian', items: [{ code: 'purchasing.invoice.read', label: 'Lihat tagihan pemasok' }, { code: 'purchasing.payment.create', label: 'Buat pembayaran pemasok' }] },
   { group: 'Inventaris', items: [{ code: 'inventory.read', label: 'Lihat stok' }, { code: 'inventory.adjust', label: 'Penyesuaian stok' }, { code: 'inventory.transfer', label: 'Transfer antar gudang' }] },
@@ -80,7 +88,7 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
 export function sodViolations(perms: Iterable<string>): string[] {
   const set = new Set(perms);
   return SOD_CONFLICTS
-    .filter(([a, b]) => !(a === 'ledger.journal.create' && b === 'ledger.journal.post'))
+    .filter(([a, b]) => !PER_DOCUMENT_SOD.has(`${a}|${b}`))
     .filter(([a, b]) => set.has(a) && set.has(b))
     .map(([, , why]) => why);
 }
