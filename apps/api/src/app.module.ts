@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminController } from './admin/admin.controller.js';
+import { AssistantModule } from './assistant/assistant.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AppExceptionFilter } from './common/errors.js';
@@ -13,7 +14,7 @@ import { OrgModule } from './org/org.module.js';
 @Module({
   imports: [
     ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule,
+    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule, AssistantModule,
   ],
   controllers: [AdminController],
   providers: [

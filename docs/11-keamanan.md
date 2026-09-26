@@ -177,6 +177,22 @@ pelanggaran yang ada:
 
 ---
 
+## 11a. Asisten AI
+
+Asisten AI (menu **Ikhtisar → Asisten AI**) menjawab pertanyaan tentang data buku besar dengan memanggil Claude API. Kontrolnya:
+
+| ID | Kontrol |
+| --- | --- |
+| K-90 | Hanya-baca. Alat yang tersedia bagi model: ringkasan KPI, neraca saldo, laba rugi, neraca, konsolidasi, kartu buku besar, daftar jurnal, rekonsiliasi, bagan akun, saldo kas & bank. Tidak ada alat yang membuat, memposting, membalik, atau menghapus data. |
+| K-91 | Alat berjalan atas nama pengguna yang bertanya: izin granular, RLS, dan batas cabang sama dengan UI. Alat yang izinnya tidak dimiliki tidak ditawarkan ke model; permintaan cabang di luar hak pengguna ditolak dengan aturan yang sama seperti `BranchContextGuard`. |
+| K-92 | Data dari basis data (uraian jurnal, nama pihak) diperlakukan sebagai data, bukan instruksi. Prompt sistem menegaskan hal ini; karena alat hanya-baca, injeksi prompt tidak dapat mengubah data. |
+| K-93 | Jawaban dirender dengan pengubah Markdown internal yang meng-escape seluruh HTML, tanpa tautan dan gambar (tidak ada XSS dari keluaran model). |
+| K-94 | Setiap pertanyaan dicatat di jejak audit (`assistant.query`: model, alat yang dipakai, jumlah token), tanpa menyimpan isi percakapan. Percakapan hanya ada di memori tab peramban dan dibuang saat pengguna berganti. |
+| K-95 | Batas laju 20 pertanyaan/menit per IP; riwayat maksimal 20 pesan × 4.000 karakter; maksimal 8 langkah alat per pertanyaan. |
+| K-96 | Kunci API hanya di `.env` server (`ANTHROPIC_API_KEY`), tidak pernah dikirim ke peramban. Tanpa kunci, fitur nonaktif (503). |
+
+**UU PDP & kerahasiaan.** Pertanyaan pengguna dan potongan data laporan yang dibutuhkan untuk menjawab dikirim ke Anthropic sebagai pemroses data. Sebelum dipakai dengan data produksi, pastikan perjanjian pemrosesan data dengan penyedia sudah ada dan kebijakan retensi organisasi di Console Anthropic sesuai kebutuhan perusahaan.
+
 ## 12. Respons insiden
 
 1. **Deteksi** — peringatan §10 atau laporan pengguna/peneliti (lihat

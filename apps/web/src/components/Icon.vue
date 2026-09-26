@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /* Ikon garis 16×16 — subset dari purwarupa. */
 const ICONS: Record<string, string> = {
+  sparkles: '<path d="M6.4 1.8 7.5 5a2 2 0 0 0 1.3 1.3l3.2 1.1-3.2 1.1a2 2 0 0 0-1.3 1.3l-1.1 3.2-1.1-3.2A2 2 0 0 0 4 8.5L.8 7.4 4 6.3A2 2 0 0 0 5.3 5z"/><path d="M12.6 1.6v3M11.1 3.1h3M12.6 10.8v2.8M11.2 12.2H14"/>',
+  send: '<path d="M14.4 1.6 7.2 8.8"/><path d="m14.4 1.6-4.6 12.8-2.6-5.6-5.6-2.6z"/>',
   grid: '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>',
   ledger: '<path d="M4 1.6h8.4a1 1 0 0 1 1 1v11.8H4a1.6 1.6 0 0 1 0-3.2h9.4"/><path d="M6.8 5.2h4M6.8 7.8h4"/>',
   tree: '<path d="M8 2v5M8 7H4.5M8 7h3.5M4.5 7v3M11.5 7v3M4.5 10H2.5v2.5h4V10H4.5zM11.5 10H9.5v2.5h4V10H11.5z"/>',

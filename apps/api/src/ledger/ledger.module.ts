@@ -8,6 +8,6 @@ import { ReportsService } from './reports.service.js';
 @Module({
   controllers: [LedgerController],
   providers: [LedgerRefs, JournalsService, ReportsService, ReconciliationService],
-  exports: [LedgerRefs, ReconciliationService, ReportsService],
+  exports: [LedgerRefs, ReconciliationService, ReportsService, JournalsService],
 })
 export class LedgerModule {}

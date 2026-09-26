@@ -86,11 +86,49 @@ ok(/diposting/.test(t2), 'akuntan senior memposting jurnal staf', t2);
 await page.goto(base + '/integrasi'); await page.waitForSelector('.pill'); await page.waitForTimeout(500);
 ok(await page.locator('.pill[data-tone=danger]').count() === 0, 'rekonsiliasi tetap cocok setelah posting lewat UI');
 
+console.log('Asisten AI');
+ok((await page.locator('.rail-link-text').allInnerTexts()).includes('Asisten AI'), 'menu Asisten AI tampil bagi akuntan senior');
+await page.goto(base + '/asisten'); await page.waitForSelector('.empty-title, .assistant', { timeout: 15000 });
+ok((await page.locator('.empty-title').innerText().catch(() => '')).includes('belum diaktifkan'), 'tanpa kunci API halaman asisten menjelaskan cara mengaktifkan');
+/* Respons asisten dicegat: menguji tampilan tanpa memanggil Claude API. */
+const chatBodies = [];
+const REPLY = [
+  '**Laba bersih** periode Agustus 2026 per cabang:',
+  '',
+  '| Cabang | Pendapatan | Laba bersih | Margin |',
+  '| --- | ---: | ---: | ---: |',
+  '| Jakarta | Rp 1.250.000.000 | Rp 180.000.000 | 14,4% |',
+  '| Surabaya | Rp 640.000.000 | Rp 52.000.000 | 8,1% |',
+  '',
+  '- Margin Surabaya paling rendah.',
+  '- Uraian jurnal berisi <img src=x onerror="window.__xss=1"> tetap tampil sebagai teks.',
+].join('\n');
+await page.route('**/api/v1/assistant/status', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, model: 'claude-opus-5' }) }));
+await page.route('**/api/v1/assistant/chat', async (r) => {
+  chatBodies.push(JSON.parse(r.request().postData() || '{}'));
+  await new Promise((res) => setTimeout(res, 400));
+  await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reply: REPLY, toolsUsed: [{ name: 'konsolidasi', ok: true }, { name: 'laba_rugi', ok: true }], usage: { inputTokens: 1, outputTokens: 1 }, model: 'claude-opus-5', stopReason: 'end_turn' }) });
+});
+await page.reload(); await page.waitForSelector('.assistant-suggest .chip', { timeout: 15000 });
+await page.click('.assistant-suggest .chip >> nth=0');
+await page.waitForSelector('.assistant-typing', { timeout: 5000 }).catch(() => null);
+await page.waitForSelector('.assistant-msg.is-assistant .md table', { timeout: 15000 });
+ok(chatBodies[0]?.messages?.length === 1 && chatBodies[0].messages[0].role === 'user', 'pertanyaan pertama dikirim tanpa riwayat', chatBodies[0]);
+ok(await page.locator('.assistant-msg.is-assistant .md table tbody tr').count() === 2, 'tabel Markdown jawaban dirender sebagai tabel');
+ok(await page.locator('.md td.ta-r.num').count() >= 6, 'kolom angka rata kanan');
+ok(await page.locator('.md img').count() === 0 && !(await page.evaluate(() => window.__xss)) && (await page.locator('.md').innerText()).includes('<img'), 'HTML di jawaban di-escape (tanpa XSS)');
+ok((await page.locator('.assistant-tools').innerText()).includes('Konsolidasi'), 'sumber data yang dibaca asisten ditampilkan');
+await page.fill('#assistant-input', 'Kenapa margin Surabaya rendah?'); await page.press('#assistant-input', 'Enter');
+await page.waitForFunction(() => document.querySelectorAll('.assistant-msg.is-assistant .md').length === 2, null, { timeout: 15000 });
+ok(chatBodies[1]?.messages?.length === 3 && chatBodies[1].messages.map((m) => m.role).join() === 'user,assistant,user', 'pertanyaan lanjutan membawa riwayat tanya-jawab', chatBodies[1]?.messages?.map((m) => m.role));
+await shot('19-asisten');
+await page.unroute('**/api/v1/assistant/status'); await page.unroute('**/api/v1/assistant/chat');
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);
 const nav = await page.locator('.rail-link-text').allInnerTexts();
-ok(!nav.includes('Neraca') && !nav.includes('Jurnal Umum'), 'menu laporan & jurnal tersembunyi bagi staf gudang', nav);
+ok(!nav.includes('Neraca') && !nav.includes('Jurnal Umum') && !nav.includes('Asisten AI'), 'menu laporan, jurnal & asisten tersembunyi bagi staf gudang', nav);
 ok(!(await page.locator('.contextbar').innerText()).includes('Semua cabang'), 'staf gudang tidak mendapat konteks semua cabang');
 await shot('17-gudang');
 
@@ -100,6 +138,11 @@ await mp.goto(base + '/masuk'); await mp.fill('#email', 'andi@knm.co.id'); await
 await mp.goto(base + '/laba-rugi'); await mp.waitForSelector('.report-stmt'); await mp.waitForTimeout(300);
 const overflow = await mp.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 ok(overflow <= 1, 'tampilan sempit tanpa luapan horizontal', overflow); await mp.screenshot({ path: `${out}/18-mobile-laba-rugi.png` });
+await mp.route('**/api/v1/assistant/status', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, model: 'claude-opus-5' }) }));
+await mp.route('**/api/v1/assistant/chat', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reply: REPLY, toolsUsed: [{ name: 'konsolidasi', ok: true }], usage: { inputTokens: 1, outputTokens: 1 }, model: 'claude-opus-5', stopReason: 'end_turn' }) }));
+await mp.goto(base + '/asisten'); await mp.waitForSelector('.assistant-suggest .chip'); await mp.click('.assistant-suggest .chip >> nth=0'); await mp.waitForSelector('.md table'); await mp.waitForTimeout(300);
+const overflowA = await mp.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+ok(overflowA <= 1, 'halaman asisten di ponsel tanpa luapan horizontal', overflowA); await mp.screenshot({ path: `${out}/20-mobile-asisten.png` });
 await browser.close();
 if (problems.length) { console.error(`GAGAL — ${problems.length} masalah:`); problems.forEach((p) => console.error('  · ' + p)); process.exit(1); }
 console.log('LULUS — uji peramban aplikasi web');

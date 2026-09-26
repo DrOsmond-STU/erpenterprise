@@ -7,7 +7,7 @@ export interface NavGroup { label: string; items: NavItem[] }
 
 /** Navigasi Fase 1 — hanya halaman yang benar-benar terhubung ke API. */
 export const NAV: NavGroup[] = [
-  { label: 'Ikhtisar', items: [{ path: '/dasbor', label: 'Dasbor', icon: 'grid', permission: 'ledger.report.read' }] },
+  { label: 'Ikhtisar', items: [{ path: '/dasbor', label: 'Dasbor', icon: 'grid', permission: 'ledger.report.read' }, { path: '/asisten', label: 'Asisten AI', icon: 'sparkles', permission: 'ledger.report.read' }] },
   {
     label: 'Keuangan',
     items: [
@@ -42,6 +42,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/', redirect: () => landingFor(useSession()) },
   { path: '/tanpa-akses', component: () => import('@/pages/NoAccessPage.vue'), meta: { title: 'Tanpa akses' } },
   { path: '/dasbor', component: () => import('@/pages/DashboardPage.vue'), meta: { title: 'Dasbor', permission: 'ledger.report.read' } },
+  { path: '/asisten', component: () => import('@/pages/AssistantPage.vue'), meta: { title: 'Asisten AI', permission: 'ledger.report.read' } },
   { path: '/bagan-akun', component: () => import('@/pages/ChartOfAccountsPage.vue'), meta: { title: 'Bagan Akun', permission: 'ledger.account.read' } },
   { path: '/kas-bank', component: () => import('@/pages/BankAccountsPage.vue'), meta: { title: 'Kas & Bank', permission: 'ledger.report.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },

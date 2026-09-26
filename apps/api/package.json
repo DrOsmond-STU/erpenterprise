@@ -2,7 +2,7 @@
   "name": "@erp/api",
   "version": "0.1.0",
   "private": true,
-  "description": "ERP Enterprise \u2014 API (NestJS + PostgreSQL)",
+  "description": "ERP Enterprise — API (NestJS + PostgreSQL)",
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -13,6 +13,7 @@
     "test:e2e": "node --env-file-if-exists=.env dist/test/e2e.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@erp/domain": "*",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",

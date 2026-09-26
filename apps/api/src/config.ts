@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Nilai kosong di .env (mis. `ANTHROPIC_API_KEY=`) dianggap tidak disetel. */
+const blank = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -10,6 +13,10 @@ const schema = z.object({
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(43200),
   SEED_PASSWORD: z.string().min(12).optional(),
+  /* Asisten AI (opsional). Tanpa kunci, fitur asisten nonaktif dan endpoint-nya menjawab 503. */
+  ANTHROPIC_API_KEY: z.preprocess(blank, z.string().min(20).optional()),
+  ASSISTANT_MODEL: z.preprocess(blank, z.string().regex(/^claude-[a-z0-9-]+$/).default('claude-opus-5')),
+  ASSISTANT_EFFORT: z.preprocess(blank, z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
 });
 
 export type AppConfig = z.infer<typeof schema>;

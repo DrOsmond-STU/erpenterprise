@@ -16,8 +16,8 @@ dengan eliminasi rekening koran antar kantor.
 | --- | --- |
 | `packages/domain` | `@erp/domain` — tipe, validasi jurnal (zod), pembulatan rupiah, klasifikasi akun, penyusun neraca saldo / laba rugi / neraca / konsolidasi, matriks izin. Dipakai API dan web. Uji regresi vitest terhadap data purwarupa. |
 | `packages/ui` | `@erp/ui` — token desain dan CSS bersama (disinkronkan dari purwarupa lewat `tools/sync-ui.mjs`). |
-| `apps/api` | `@erp/api` — NestJS 11 + PostgreSQL 16: autentikasi (Argon2id, JWT + refresh cookie berotasi), izin granular, konteks cabang/periode, jurnal, buku besar, laporan, konsolidasi, rekonsiliasi, log audit berantai hash, migrasi SQL, seed, uji e2e. |
-| `apps/web` | `@erp/web` — Vue 3 + Vite + Pinia + Vue Router: masuk, dasbor, jurnal, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, integrasi & rekonsiliasi, cabang, bagan akun, rekening bank, log audit. |
+| `apps/api` | `@erp/api` — NestJS 11 + PostgreSQL 16: autentikasi (Argon2id, JWT + refresh cookie berotasi), izin granular, konteks cabang/periode, jurnal, buku besar, laporan, konsolidasi, rekonsiliasi, log audit berantai hash, asisten AI (Claude API, alat hanya-baca), migrasi SQL, seed, uji e2e. |
+| `apps/web` | `@erp/web` — Vue 3 + Vite + Pinia + Vue Router: masuk, dasbor, asisten AI, jurnal, kartu buku besar, neraca saldo, laba rugi, neraca, konsolidasi, integrasi & rekonsiliasi, cabang, bagan akun, rekening bank, log audit. |
 | `infra/` | Skrip penyiapan basis data, Dockerfile API & web, konfigurasi nginx, `hosting/` (cPanel: .htaccess, runner cron, templat env). |
 | `docker-compose.yml` | Lingkungan lokal/staging: db + api + web pada satu origin (`http://localhost:8080`). |
 | `prototype/` | Purwarupa UI/UX (lihat bagian bawah). |
@@ -82,6 +82,19 @@ pemakaian ulang), pembatasan konteks cabang, pemisahan tugas pembuat ≠
 pemosting, invarian basis data (jurnal seimbang, akun detail, periode
 terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
 konsolidasi yang seimbang, serta rekonsiliasi sub-buku dan rantai audit.
+
+## Asisten AI
+
+Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya
+"cabang mana yang marginnya paling rendah bulan ini?". Asisten memakai Claude API
+dengan alat hanya-baca atas laporan yang sama dengan UI, sehingga izin dan batas
+cabang pengguna tetap berlaku. Kontrol keamanannya ada di dok. 11 §11a.
+
+Aktifkan dengan mengisi `ANTHROPIC_API_KEY` di `.env` API (di hosting:
+`~/erp-config/.env`), lalu nyalakan ulang API. Model bawaan `claude-opus-5`
+dengan `ASSISTANT_EFFORT=medium` agar waktu jawab tetap singkat; keduanya dapat
+diganti lewat variabel lingkungan. Permintaan memakai cadangan sisi server
+(`fallbacks: "default"`) bila model utama menolak.
 
 ## Pemasangan di shared hosting cPanel (erp.semestateknologiutama.com)
 
