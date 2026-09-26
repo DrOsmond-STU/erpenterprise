@@ -49,11 +49,12 @@ let AdminController = class AdminController {
                 args.push(q.entityId);
                 where.push(`a.entity_id = $${args.length}`);
             }
+            const total = (await c.query(`SELECT count(*)::int AS n FROM audit_log a WHERE ${where.join(' AND ')}`, args)).rows[0].n;
             args.push(q.size, (q.page - 1) * q.size);
             const rows = (await c.query(`SELECT a.id, a.at, a.branch_code, a.user_id, u.display_name AS user_name, a.action, a.entity_type, a.entity_id, a.before, a.after, host(a.ip) AS ip, a.request_id
            FROM audit_log a LEFT JOIN users u ON u.id = a.user_id WHERE ${where.join(' AND ')} ORDER BY a.id DESC LIMIT $${args.length - 1} OFFSET $${args.length}`, args)).rows;
             const chain = await this.audit.verifyChain(c, 5000);
-            return { data: rows, meta: { page: q.page, size: q.size, chain } };
+            return { data: rows, meta: { page: q.page, size: q.size, total, chain } };
         });
     }
 };

@@ -32,6 +32,11 @@ const branchSchema = zod_1.z.object({
 });
 const branchPatch = zod_1.z.object({
     name: zod_1.z.string().trim().min(3).max(120).optional(),
+    shortName: zod_1.z.string().trim().min(2).max(40).optional(),
+    type: zod_1.z.string().trim().min(3).max(60).optional(),
+    city: zod_1.z.string().trim().min(2).max(80).optional(),
+    address: zod_1.z.string().trim().max(300).optional(),
+    phone: zod_1.z.string().trim().max(40).optional(),
     managerName: zod_1.z.string().trim().max(120).optional(),
     status: zod_1.z.enum(['aktif', 'nonaktif']).optional(),
     targetMonthly: zod_1.z.number().int().min(0).optional(),

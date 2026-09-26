@@ -18,6 +18,7 @@ const zod_1 = require("zod");
 const context_js_1 = require("../common/context.js");
 const zod_pipe_js_1 = require("../common/zod.pipe.js");
 const journals_service_js_1 = require("./journals.service.js");
+const master_service_js_1 = require("./master.service.js");
 const reconciliation_service_js_1 = require("./reconciliation.service.js");
 const reports_service_js_1 = require("./reports.service.js");
 const listQuery = zod_1.z.object({
@@ -32,14 +33,39 @@ const reasonSchema = zod_1.z.object({ reason: zod_1.z.string().trim().min(3).max
 const reverseSchema = zod_1.z.object({ reason: zod_1.z.string().trim().min(3).max(300), date: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
 const cardQuery = zod_1.z.object({ bank: zod_1.z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() });
 const tbQuery = zod_1.z.object({ by_branch: zod_1.z.enum(['true', 'false']).optional() });
+const accountCreate = zod_1.z.object({
+    code: zod_1.z.string().trim().regex(/^\d-\d{4}$/, 'Kode akun berformat 9-9999'),
+    name: zod_1.z.string().trim().min(3).max(120),
+    type: zod_1.z.enum(['header', 'detail']),
+    parentCode: zod_1.z.string().trim().regex(/^\d-\d{4}$/, 'Kode induk berformat 9-9999'),
+    isContra: zod_1.z.boolean().optional(),
+});
+const accountPatch = zod_1.z.object({ name: zod_1.z.string().trim().min(3).max(120).optional(), status: zod_1.z.enum(['aktif', 'nonaktif']).optional(), reason: zod_1.z.string().trim().min(3).max(300) });
+const bankCreate = zod_1.z.object({
+    code: zod_1.z.string().trim().toUpperCase().pipe(zod_1.z.string().regex(/^[A-Z0-9-]{3,30}$/, 'Kode rekening 3–30 karakter huruf besar, angka, atau tanda hubung')),
+    branch: zod_1.z.string().trim().toUpperCase().pipe(zod_1.z.string().regex(/^[A-Z]{3}$/, 'Kode cabang 3 huruf')),
+    name: zod_1.z.string().trim().min(3).max(120),
+    bankName: zod_1.z.string().trim().min(2).max(60),
+    accountNoLast4: zod_1.z.string().trim().regex(/^\d{4}$/, 'Empat digit terakhir nomor rekening').optional().or(zod_1.z.literal('').transform(() => undefined)),
+});
+const bankPatch = zod_1.z.object({
+    name: zod_1.z.string().trim().min(3).max(120).optional(),
+    bankName: zod_1.z.string().trim().min(2).max(60).optional(),
+    accountNoLast4: zod_1.z.string().trim().regex(/^\d{4}$/, 'Empat digit terakhir nomor rekening').optional().or(zod_1.z.literal('')),
+    status: zod_1.z.enum(['aktif', 'nonaktif']).optional(),
+    reason: zod_1.z.string().trim().min(3).max(300),
+});
+const deleteSchema = zod_1.z.object({ reason: zod_1.z.string().trim().min(3).max(300) });
 let LedgerController = class LedgerController {
     journals;
     reports;
     recon;
-    constructor(journals, reports, recon) {
+    master;
+    constructor(journals, reports, recon, master) {
         this.journals = journals;
         this.reports = reports;
         this.recon = recon;
+        this.master = master;
     }
     /* --- Jurnal ------------------------------------------------------------ */
     list(q, u, s, r) {
@@ -69,6 +95,25 @@ let LedgerController = class LedgerController {
         return this.reports.ledgerCard(u, s, code, q.bank ?? null, r.requestId);
     }
     banks(u, s, r) { return this.reports.bankBalances(u, s, r.requestId); }
+    /* --- CRUD data induk (ledger.account.manage) ------------------------------ */
+    createAccount(b, u, s, r) {
+        return this.master.createAccount(u, s, b, r.requestId);
+    }
+    patchAccount(code, b, u, s, r) {
+        return this.master.patchAccount(u, s, code.slice(0, 10), b, r.requestId);
+    }
+    deleteAccount(code, b, u, s, r) {
+        return this.master.deleteAccount(u, s, code.slice(0, 10), b.reason, r.requestId);
+    }
+    createBank(b, u, s, r) {
+        return this.master.createBank(u, s, b, r.requestId);
+    }
+    patchBank(code, b, u, s, r) {
+        return this.master.patchBank(u, s, code.slice(0, 30).toUpperCase(), b, r.requestId);
+    }
+    deleteBank(code, b, u, s, r) {
+        return this.master.deleteBank(u, s, code.slice(0, 30).toUpperCase(), b.reason, r.requestId);
+    }
     /* --- Laporan -------------------------------------------------------------- */
     kpis(u, s, r) { return this.reports.kpis(u, s, r.requestId); }
     tb(q, u, s, r) {
@@ -195,6 +240,76 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], LedgerController.prototype, "banks", null);
 __decorate([
+    (0, common_1.Post)('ledger/accounts'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(accountCreate))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "createAccount", null);
+__decorate([
+    (0, common_1.Patch)('ledger/accounts/:code'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Param)('code')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(accountPatch))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "patchAccount", null);
+__decorate([
+    (0, common_1.Delete)('ledger/accounts/:code'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Param)('code')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(deleteSchema))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "deleteAccount", null);
+__decorate([
+    (0, common_1.Post)('ledger/bank-accounts'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(bankCreate))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "createBank", null);
+__decorate([
+    (0, common_1.Patch)('ledger/bank-accounts/:code'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Param)('code')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(bankPatch))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "patchBank", null);
+__decorate([
+    (0, common_1.Delete)('ledger/bank-accounts/:code'),
+    (0, context_js_1.RequirePermission)('ledger.account.manage'),
+    __param(0, (0, common_1.Param)('code')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(deleteSchema))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], LedgerController.prototype, "deleteBank", null);
+__decorate([
     (0, common_1.Get)('reports/kpis'),
     (0, context_js_1.RequirePermission)('ledger.report.read'),
     __param(0, (0, context_js_1.CurrentUser)()),
@@ -257,6 +372,6 @@ __decorate([
 ], LedgerController.prototype, "reconciliation", null);
 exports.LedgerController = LedgerController = __decorate([
     (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [journals_service_js_1.JournalsService, reports_service_js_1.ReportsService, reconciliation_service_js_1.ReconciliationService])
+    __metadata("design:paramtypes", [journals_service_js_1.JournalsService, reports_service_js_1.ReportsService, reconciliation_service_js_1.ReconciliationService, master_service_js_1.MasterDataService])
 ], LedgerController);
 //# sourceMappingURL=ledger.controller.js.map

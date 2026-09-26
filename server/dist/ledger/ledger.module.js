@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const journals_service_js_1 = require("./journals.service.js");
 const ledger_controller_js_1 = require("./ledger.controller.js");
 const ledger_shared_js_1 = require("./ledger.shared.js");
+const master_service_js_1 = require("./master.service.js");
 const reconciliation_service_js_1 = require("./reconciliation.service.js");
 const reports_service_js_1 = require("./reports.service.js");
 let LedgerModule = class LedgerModule {
@@ -19,7 +20,7 @@ exports.LedgerModule = LedgerModule;
 exports.LedgerModule = LedgerModule = __decorate([
     (0, common_1.Module)({
         controllers: [ledger_controller_js_1.LedgerController],
-        providers: [ledger_shared_js_1.LedgerRefs, journals_service_js_1.JournalsService, reports_service_js_1.ReportsService, reconciliation_service_js_1.ReconciliationService],
+        providers: [ledger_shared_js_1.LedgerRefs, journals_service_js_1.JournalsService, reports_service_js_1.ReportsService, reconciliation_service_js_1.ReconciliationService, master_service_js_1.MasterDataService],
         exports: [ledger_shared_js_1.LedgerRefs, reconciliation_service_js_1.ReconciliationService, reports_service_js_1.ReportsService, journals_service_js_1.JournalsService],
     })
 ], LedgerModule);
