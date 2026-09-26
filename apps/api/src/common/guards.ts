@@ -2,7 +2,9 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../auth/auth.service.js';
 import { AppRequest, PERMISSION_KEY, PUBLIC_KEY } from './context.js';
-import { forbidden } from './errors.js';
+import { DomainError, forbidden } from './errors.js';
+
+const MUST_CHANGE_ALLOWED = /^\/api\/v1\/(me|me\/password|me\/sessions(\/[^/]+)?|auth\/logout)$/;
 
 /** K-05/K-13: setiap endpoint (kecuali @Public) memerlukan access token yang sah. */
 @Injectable()
@@ -16,6 +18,10 @@ export class JwtAuthGuard implements CanActivate {
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) throw new UnauthorizedException('Token akses tidak ada.');
     req.user = await this.auth.userFromAccessToken(token);
+    /* K-02: pengguna baru / hasil reset hanya boleh membaca profil dan mengganti kata sandi. */
+    if (req.user.mustChangePassword && !MUST_CHANGE_ALLOWED.test(req.path)) {
+      throw new DomainError('PASSWORD_CHANGE_REQUIRED', 'Ganti kata sandi sementara Anda terlebih dahulu.', 403);
+    }
     return true;
   }
 }

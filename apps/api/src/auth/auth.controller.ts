@@ -9,6 +9,7 @@ import { loadConfig } from '../config.js';
 import { DbService, systemContext } from '../db/db.service.js';
 
 const loginSchema = z.object({ email: z.string().email().max(200), password: z.string().min(1).max(200) });
+const passwordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(1).max(200) });
 const REFRESH_COOKIE = 'erp_refresh';
 
 @Controller()
@@ -64,12 +65,19 @@ export class AuthController {
       (await c.query('SELECT code, label, date_from, date_to, period_group, status FROM fiscal_periods WHERE company_id = $1 ORDER BY date_from, date_to', [user.companyId])).rows);
     const company = await this.db.run(systemContext(user.companyId), async (c) => (await c.query('SELECT code, name FROM companies WHERE id = $1', [user.companyId])).rows[0]);
     return {
-      user: { id: user.id, email: user.email, name: user.name, permissions: [...user.permissions].sort(), branches: user.branches },
+      user: { id: user.id, email: user.email, name: user.name, permissions: [...user.permissions].sort(), branches: user.branches, mustChangePassword: Boolean(user.mustChangePassword) },
       company,
       branches: branches.filter((b: any) => user.branches === '*' || user.branches.includes(String(b.code).trim())).map((b: any) => ({ ...b, code: String(b.code).trim() })),
       allBranches: user.branches === '*' || user.permissions.has('report.consolidated'),
       periods: periods.map((p: any) => ({ id: p.code, label: p.label, from: p.date_from, to: p.date_to, status: p.status, group: p.period_group })),
     };
+  }
+
+  @Post('me/password')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  changePassword(@Body(new ZodValidationPipe(passwordSchema)) b: z.infer<typeof passwordSchema>, @CurrentUser() user: RequestUser, @Req() req: AppRequest) {
+    return this.auth.changeOwnPassword(user, b.currentPassword, b.newPassword, this.meta(req));
   }
 
   @Get('me/sessions')

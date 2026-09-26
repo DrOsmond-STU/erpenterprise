@@ -29,7 +29,15 @@ export const NAV: NavGroup[] = [
     ],
   },
   { label: 'Cabang', items: [{ path: '/cabang', label: 'Manajemen Cabang', icon: 'map-pin', permission: 'org.branch.read' }] },
-  { label: 'Sistem', items: [{ path: '/jejak-audit', label: 'Jejak Audit', icon: 'scroll', permission: 'admin.audit.read' }] },
+  {
+    label: 'Sistem',
+    items: [
+      { path: '/pengguna', label: 'Pengguna', icon: 'users', permission: 'admin.user.manage' },
+      { path: '/peran', label: 'Peran & Izin', icon: 'shield', permission: 'admin.role.manage' },
+      { path: '/pengaturan', label: 'Pengaturan', icon: 'gear' },
+      { path: '/jejak-audit', label: 'Jejak Audit', icon: 'scroll', permission: 'admin.audit.read' },
+    ],
+  },
 ];
 
 /** Halaman pertama yang boleh dibuka pengguna; '/tanpa-akses' bila tidak ada. */
@@ -55,6 +63,10 @@ const routes: RouteRecordRaw[] = [
   { path: '/konsolidasi', component: () => import('@/pages/ConsolidationPage.vue'), meta: { title: 'Laporan Konsolidasi', permission: 'report.consolidated' } },
   { path: '/integrasi', component: () => import('@/pages/IntegrationPage.vue'), meta: { title: 'Integrasi & Rekonsiliasi', permission: 'ledger.report.read' } },
   { path: '/cabang', component: () => import('@/pages/BranchesPage.vue'), meta: { title: 'Manajemen Cabang', permission: 'org.branch.read' } },
+  { path: '/pengguna', component: () => import('@/pages/UsersPage.vue'), meta: { title: 'Pengguna', permission: 'admin.user.manage' } },
+  { path: '/peran', component: () => import('@/pages/RolesPage.vue'), meta: { title: 'Peran & Izin', permission: 'admin.role.manage' } },
+  { path: '/pengaturan', component: () => import('@/pages/SettingsPage.vue'), meta: { title: 'Pengaturan' } },
+  { path: '/profil', component: () => import('@/pages/ProfilePage.vue'), meta: { title: 'Profil & Kata Sandi' } },
   { path: '/jejak-audit', component: () => import('@/pages/AuditLogPage.vue'), meta: { title: 'Jejak Audit', permission: 'admin.audit.read' } },
   { path: '/:pathMatch(.*)*', redirect: () => landingFor(useSession()) },
 ];
@@ -66,6 +78,8 @@ router.beforeEach(async (to) => {
   if (!session.ready) await session.restore();
   if (to.meta.public) return session.isAuthenticated ? landingFor(session) : true;
   if (!session.isAuthenticated) return { path: '/masuk', query: { next: to.fullPath } };
+  /* K-02: kata sandi sementara harus diganti sebelum membuka halaman lain (juga ditegakkan API). */
+  if (session.user?.mustChangePassword && to.path !== '/profil') return { path: '/profil', query: { wajib: '1' } };
   const perm = to.meta.permission as string | undefined;
   if (perm && !session.can(perm)) {
     useToast().push('Akses ditolak', `Halaman ${String(to.meta.title)} memerlukan izin ${perm}.`, 'warn');

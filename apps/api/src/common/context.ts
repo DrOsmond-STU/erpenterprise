@@ -11,6 +11,8 @@ export interface RequestUser {
   /** Kode cabang yang diizinkan; '*' = seluruh cabang. */
   branches: '*' | string[];
   sessionId: string;
+  /** Pengguna baru/hasil reset: hanya boleh mengganti kata sandi sampai selesai. */
+  mustChangePassword?: boolean;
 }
 
 /** Konteks cabang & periode dari header, sudah divalidasi terhadap hak pengguna. */

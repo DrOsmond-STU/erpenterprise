@@ -201,6 +201,65 @@ await page.click('[data-period="2026-11"] [data-action=reopen-period]'); await p
 await page.waitForFunction(() => document.querySelector('[data-period="2026-11"] .pill')?.textContent?.trim() === 'Terbuka', null, { timeout: 15000 });
 ok(true, 'admin membuka kembali periode');
 
+console.log('Pengguna, peran & pengaturan (admin)');
+const logout = async () => { await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/); };
+await page.goto(base + '/pengguna'); await page.waitForSelector('[data-table=users] tbody tr[data-user]');
+ok(await page.locator('[data-user="andi@knm.co.id"]').count() === 1, 'daftar pengguna memuat akun dari API'); await shot('30-pengguna');
+const newEmail = `uji.web.${Date.now()}@knm.co.id`;
+await page.click('[data-action=new-user]'); await page.fill('#user-name', 'Uji Peramban'); await page.fill('#user-email', newEmail);
+await page.selectOption('[data-assignment] [data-field=role]', 'staf_keuangan'); await page.selectOption('[data-assignment] [data-field=branch]', 'ALL');
+await shot('31-pengguna-baru'); await page.click('[data-action=save-user]');
+await page.waitForSelector('[data-temp-password]'); const tempPw = (await page.locator('[data-temp-password]').innerText()).trim();
+ok(/^[A-Za-z]{4}-\d{4}-[A-Za-z]{4}$/.test(tempPw), 'kata sandi sementara ditampilkan sekali', tempPw); await shot('32-sandi-sementara');
+await page.click('[data-action=close-temp]');
+await page.waitForSelector(`[data-user="${newEmail}"]`);
+ok((await page.locator(`[data-user="${newEmail}"] .pill`).allInnerTexts()).some((t) => t.includes('Kata sandi sementara')), 'pengguna baru ditandai wajib ganti kata sandi');
+await page.click(`[data-user="${newEmail}"] [data-action=edit-user]`); await page.fill('#user-name', 'Uji Peramban Ubah'); await page.fill('#user-reason', 'uji ubah nama');
+await page.click('[data-action=save-user]'); await page.waitForFunction((e) => document.querySelector(`[data-user="${e}"] .cell-strong`)?.textContent?.includes('Ubah'), newEmail, { timeout: 10000 });
+ok(true, 'ubah pengguna tersimpan');
+await page.fill('[data-filter=user]', 'uji peramban'); await page.waitForTimeout(200);
+ok(await page.locator('[data-table=users] tbody tr[data-user]').count() >= 1, 'pencarian pengguna menyaring tabel'); await page.fill('[data-filter=user]', '');
+
+await page.goto(base + '/peran'); await page.waitForSelector('[data-table=matrix] .perm');
+ok(await page.locator('[data-table=matrix] .perm').count() >= 28 * 5, 'matriks peran × izin dirender'); await shot('33-peran');
+const cell = '[data-cell="gudang:report.export"]';
+const before = await page.getAttribute(cell, 'aria-pressed');
+await page.click(cell); ok(await page.getAttribute(cell, 'data-level') === 'read', 'sel yang diubah ditandai belum disimpan');
+await page.click('[data-action=save-matrix]'); await page.fill('#reason-input', 'uji matriks izin'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(([c, b]) => document.querySelector(c)?.getAttribute('data-level') !== 'read' && document.querySelector(c)?.getAttribute('aria-pressed') !== b, [cell, before], { timeout: 10000 });
+ok(true, 'perubahan matriks tersimpan ke server');
+await page.click(cell); await page.click('[data-action=save-matrix]'); await page.fill('#reason-input', 'kembalikan uji'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction(([c, b]) => document.querySelector(c)?.getAttribute('aria-pressed') === b && document.querySelector(c)?.getAttribute('data-level') !== 'read', [cell, before], { timeout: 10000 });
+await page.click('[data-cell="akuntan_senior:ledger.period.reopen"]');
+ok(await page.locator('[data-sod-warning]').count() === 1 && await page.locator('[data-action=save-matrix]').isDisabled(), 'pelanggaran pemisahan tugas diperingatkan & simpan diblokir'); await shot('34-peran-sod');
+await page.click('[data-action=discard-matrix]');
+
+await page.goto(base + '/pengaturan'); await page.waitForSelector('#set-phone');
+const phone0 = await page.inputValue('#set-phone');
+await page.fill('#set-phone', '(021) 555-0199'); await page.click('[data-action=save-settings]'); await page.waitForTimeout(800);
+await page.reload(); await page.waitForSelector('#set-phone'); await page.waitForTimeout(300);
+ok(await page.inputValue('#set-phone') === '(021) 555-0199', 'pengaturan perusahaan tersimpan'); await shot('35-pengaturan');
+await page.fill('#set-phone', phone0); await page.click('[data-action=save-settings]'); await page.waitForTimeout(600);
+
+await logout();
+await page.goto(base + '/masuk'); await page.fill('#email', newEmail); await page.fill('#password', tempPw); await page.click('button[type=submit]');
+await page.waitForURL(/\/profil/, { timeout: 15000 }); await page.waitForSelector('[data-forced-change]');
+ok(true, 'pengguna dengan kata sandi sementara diarahkan ke Profil'); await shot('36-wajib-ganti');
+await page.goto(base + '/jurnal'); await page.waitForTimeout(600);
+ok(page.url().includes('/profil'), 'menu lain terkunci sebelum kata sandi diganti');
+await page.fill('#pw-current', tempPw); await page.fill('#pw-new', 'pendek'); await page.waitForTimeout(100);
+ok(await page.locator('.field-hint.neg').count() >= 1, 'petunjuk kebijakan kata sandi tampil');
+await page.fill('#pw-new', 'Kuat-Sekali-2026x'); await page.fill('#pw-confirm', 'Kuat-Sekali-2026x'); await page.click('[data-action=change-password]');
+await page.waitForURL(/\/(dasbor|jurnal)/, { timeout: 15000 });
+ok(true, 'ganti kata sandi membuka akses aplikasi');
+await page.goto(base + '/profil'); await page.waitForSelector('[data-table=sessions] tbody tr');
+ok((await page.locator('[data-table=sessions]').innerText()).includes('Sesi ini'), 'daftar sesi aktif menandai sesi ini'); await shot('37-profil');
+await logout(); await login('admin@knm.co.id');
+await page.goto(base + '/pengguna'); await page.waitForSelector(`[data-user="${newEmail}"]`);
+await page.click(`[data-user="${newEmail}"] [data-action=toggle-user]`); await page.fill('#reason-input', 'bersihkan akun uji'); await page.click('[data-action=confirm-reason]');
+await page.waitForFunction((e) => [...document.querySelectorAll(`[data-user="${e}"] .pill`)].some((p) => p.textContent.trim() === 'Nonaktif'), newEmail, { timeout: 10000 });
+ok(true, 'akun uji dinonaktifkan');
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);

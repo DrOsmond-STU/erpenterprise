@@ -20,7 +20,7 @@ async function submit() {
   try {
     await session.login(email.value.trim(), password.value);
     ctx.reconcile();
-    router.push(String(route.query.next || landingFor(session)));
+    router.push(session.user?.mustChangePassword ? { path: '/profil', query: { wajib: '1' } } : String(route.query.next || landingFor(session)));
   } catch (e) {
     error.value = (e as Error).message || 'Tidak dapat masuk.';
   } finally { busy.value = false; }

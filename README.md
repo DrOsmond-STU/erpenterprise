@@ -81,7 +81,9 @@ Uji e2e API memeriksa autentikasi (kunci akun, rotasi refresh, deteksi
 pemakaian ulang), pembatasan konteks cabang, pemisahan tugas pembuat ≠
 pemosting, invarian basis data (jurnal seimbang, akun detail, periode
 terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
-konsolidasi yang seimbang, serta rekonsiliasi sub-buku dan rantai audit.
+konsolidasi yang seimbang, rekonsiliasi sub-buku dan rantai audit, serta
+pengelolaan pengguna, peran & pengaturan (kata sandi sementara, wajib ganti,
+penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran).
 
 ## CRUD & paginasi
 
@@ -102,6 +104,24 @@ Semua tabel data memakai komponen `Pager` (10/25/50/100 baris per halaman): jurn
 jejak audit dipaginasi di server; bagan akun, rekening, kartu buku besar, neraca saldo,
 periode, integrasi, konsolidasi, dasbor, dan daftar cabang dipaginasi di klien. Laporan
 laba rugi dan neraca sengaja ditampilkan utuh karena subtotalnya harus terbaca bersama.
+
+## Pengguna, peran & pengaturan
+
+| Menu | Isi | Izin |
+| --- | --- | --- |
+| Sistem → Pengguna | tambah, ubah nama/email, atur peran per cabang, nonaktifkan/aktifkan, reset kata sandi, buka kunci | `admin.user.manage` |
+| Sistem → Peran & Izin | matriks peran × izin (klik sel, simpan dengan alasan), peran baru (salin dari peran lain), ubah nama, hapus peran yang tidak dipakai | `admin.role.manage` |
+| Sistem → Pengaturan | profil perusahaan, awal tahun buku, kebijakan dokumen, tema tampilan, ringkasan kebijakan keamanan | lihat: semua; ubah: `admin.settings.manage` |
+| Profil (menu pengguna) | ganti kata sandi sendiri, daftar & cabut sesi aktif | semua pengguna |
+
+Pengguna baru dan hasil reset mendapat **kata sandi sementara** yang ditampilkan
+sekali; saat masuk mereka diarahkan ke Profil dan seluruh API lain menolak
+(`PASSWORD_CHANGE_REQUIRED`) sampai kata sandi pribadi ditetapkan. Kebijakan kata
+sandi: minimal 12 karakter, huruf + angka, tidak memuat nama email. Server
+menolak perubahan yang melanggar pemisahan tugas (per peran maupun gabungan
+peran seorang pengguna), menghapus peran yang masih dipakai, atau menyisakan
+sistem tanpa admin aktif. Menonaktifkan pengguna atau mengubah perannya
+mengeluarkan semua sesinya.
 
 ## Asisten AI
 

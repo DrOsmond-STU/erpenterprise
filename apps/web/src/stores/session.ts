@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import type { Period } from '@erp/domain';
 import { api, get, post } from '@/lib/api';
 
-export interface SessionUser { id: string; email: string; name: string; permissions: string[]; branches: '*' | string[] }
+export interface SessionUser { id: string; email: string; name: string; permissions: string[]; branches: '*' | string[]; mustChangePassword?: boolean }
 export interface BranchInfo { code: string; name: string; short_name: string; type: string; city: string; is_head_office: boolean; status: string; target_monthly: number }
 
 export const useSession = defineStore('session', () => {

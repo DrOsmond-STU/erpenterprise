@@ -83,6 +83,7 @@ const others = computed(() => session.periods.filter((p) => p.group !== 'Bulan')
                 <Icon :name="t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'monitor'" /><span style="flex:1">{{ t === 'light' ? 'Terang' : t === 'dark' ? 'Gelap' : 'Ikuti sistem' }}</span><Icon v-if="ctx.theme === t" name="check" />
               </button>
               <div class="menu-sep"></div>
+              <RouterLink class="menu-item" to="/profil" data-action="open-profile" @click="close()"><Icon name="key" /> Profil &amp; kata sandi</RouterLink>
               <button class="menu-item" @click="logout"><Icon name="logout" /> Keluar</button>
             </div>
           </div>

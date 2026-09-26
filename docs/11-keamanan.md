@@ -40,6 +40,16 @@ integrasi pihak ketiga yang disusupi.
 | K-06 | Sesi idle 30 menit, absolut 12 jam; pengguna dapat melihat & mencabut sesi aktif (`/me/sessions`). |
 | K-07 | Akun layanan/integrasi memakai kredensial klien terpisah dengan cakupan izin minimal dan rotasi ≤ 90 hari. |
 
+**Status implementasi (fase kata sandi lokal, sebelum OIDC):** K-02 ditegakkan
+di server dan klien (`passwordProblems` di `@erp/domain`: ≥ 12 karakter, huruf +
+angka, tidak memuat nama email). Kata sandi dari admin (pengguna baru/reset)
+bersifat sementara: `must_change_password` membuat seluruh API selain `/me`,
+`/me/password`, `/me/sessions` dan `/auth/logout` menolak dengan
+`PASSWORD_CHANGE_REQUIRED` sampai pengguna menggantinya. Ganti kata sandi
+mencabut sesi lain. K-04 dan deteksi pemakaian ulang K-05 kini dicommit
+sebelum error dilempar (sebelumnya ikut ter-rollback sehingga penguncian tidak
+pernah tersimpan) dan dibuktikan oleh uji e2e.
+
 ---
 
 ## 3. Otorisasi (ASVS V4)
@@ -51,7 +61,7 @@ integrasi pihak ketiga yang disusupi.
 | K-12 | **Row-level security PostgreSQL** (dok. 09 §6) sebagai lapisan kedua; uji otomatis membuktikan pengguna cabang A tidak dapat membaca baris cabang B walau lolos ke SQL. |
 | K-13 | Otorisasi ditegakkan di server pada setiap endpoint (guard) dan pada setiap transisi status; UI hanya menyembunyikan, tidak melindungi. |
 | K-14 | Penolakan otorisasi mengembalikan `403` tanpa mengungkap keberadaan entitas cabang lain (`404` untuk entitas yang di luar cakupan). |
-| K-15 | Perubahan peran/izin memerlukan alasan, dicatat di `audit_log`, dan berlaku setelah pengguna terdampak login ulang (sesi dicabut). |
+| K-15 | Perubahan peran/izin memerlukan alasan dan dicatat di `audit_log`. Izin dibaca ulang dari basis data pada setiap permintaan, sehingga perubahan matriks langsung berlaku; perubahan penugasan peran atau status seorang pengguna juga mencabut semua sesinya. |
 
 ### Pemisahan tugas (Segregation of Duties)
 
