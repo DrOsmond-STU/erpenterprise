@@ -137,5 +137,8 @@ const others = computed(() => session.periods.filter((p) => p.group !== 'Bulan')
         <div class="content-inner"><slot /></div>
       </main>
     </div>
+    <RouterLink v-if="session.can('ledger.report.read') && route.path !== '/asisten'" to="/asisten" class="fab" aria-label="Buka Asisten AI">
+      <Icon name="sparkles" /><span class="fab-label">Tanya Asisten AI</span>
+    </RouterLink>
   </div>
 </template>

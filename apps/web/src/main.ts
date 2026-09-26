@@ -3,6 +3,17 @@ import { createPinia } from 'pinia';
 import '@erp/ui/tokens.css';
 import '@erp/ui/app.css';
 import './styles.css';
+/* Huruf dihosting sendiri (CSP font-src 'self'); hanya subset Latin. */
+import '@fontsource/plus-jakarta-sans/latin-600.css';
+import '@fontsource/plus-jakarta-sans/latin-700.css';
+import '@fontsource/plus-jakarta-sans/latin-800.css';
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-sans/latin-700.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
+import './theme-kg.css';
 import App from './App.vue';
 import { router } from './router';
 import { configureApi } from './lib/api';
