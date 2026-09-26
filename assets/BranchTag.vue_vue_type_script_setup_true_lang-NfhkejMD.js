@@ -1,0 +1,1 @@
+import{d as n,a as o,o as s,c,j as a,t as r}from"./index-CUIJfALQ.js";const i=["title"],_=n({__name:"BranchTag",props:{code:{}},setup(t){const e=o();return(l,m)=>(s(),c("span",{class:"branch-tag",title:a(e).nameOf(t.code)},r(a(e).shortOf(t.code)),9,i))}});export{_};
