@@ -20,7 +20,7 @@ exports.LedgerModule = LedgerModule = __decorate([
     (0, common_1.Module)({
         controllers: [ledger_controller_js_1.LedgerController],
         providers: [ledger_shared_js_1.LedgerRefs, journals_service_js_1.JournalsService, reports_service_js_1.ReportsService, reconciliation_service_js_1.ReconciliationService],
-        exports: [ledger_shared_js_1.LedgerRefs, reconciliation_service_js_1.ReconciliationService, reports_service_js_1.ReportsService],
+        exports: [ledger_shared_js_1.LedgerRefs, reconciliation_service_js_1.ReconciliationService, reports_service_js_1.ReportsService, journals_service_js_1.JournalsService],
     })
 ], LedgerModule);
 //# sourceMappingURL=ledger.module.js.map

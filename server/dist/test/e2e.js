@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
  */
 const main_js_1 = require("../main.js");
 const config_js_1 = require("../config.js");
+const assistant_service_js_1 = require("../assistant/assistant.service.js");
 const cfg = (0, config_js_1.loadConfig)();
 const PW = cfg.SEED_PASSWORD ?? 'Rahasia-2026!';
 let failures = 0;
@@ -134,6 +135,62 @@ async function main() {
     ok(cons2.body.branches.some((b) => b.code === code) && cons2.body.balanceSheet.combined.balanced, 'konsolidasi memuat cabang baru dan tetap seimbang');
     const off = await call(`/branches/${code}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji' }) });
     ok(off.status === 200 && off.body.status === 'nonaktif', 'cabang dinonaktifkan', off.body);
+    console.log('Asisten AI');
+    const assistant = app.get(assistant_service_js_1.AssistantService);
+    assistant.useClientForTest(null);
+    const st = await call('/assistant/status', { token: andi, branch: 'ALL' });
+    ok(st.status === 200 && st.body.enabled === false, 'status asisten: nonaktif tanpa kunci API', st.body);
+    const off1 = await call('/assistant/chat', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ messages: [{ role: 'user', content: 'Berapa laba bulan ini?' }] }) });
+    ok(off1.status === 503 && off1.body.error.code === 'ASSISTANT_DISABLED', 'chat tanpa kunci API → 503 ASSISTANT_DISABLED', off1.body);
+    const fitriChat = await call('/assistant/chat', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ messages: [{ role: 'user', content: 'halo' }] }) });
+    ok(fitriChat.status === 403, 'pengguna tanpa izin laporan tidak dapat memakai asisten', fitriChat.status);
+    const badShape = await call('/assistant/chat', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }] }) });
+    ok(badShape.status === 400 || badShape.status === 422, 'riwayat yang diakhiri pesan asisten ditolak', badShape.status);
+    /* Klien tiruan: langkah 1 memanggil alat, langkah 2 menjawab teks. */
+    const scripted = (toolUses) => {
+        const calls = [];
+        let n = 0;
+        const msg = (content, stop) => ({ id: `msg_${n}`, type: 'message', role: 'assistant', model: 'claude-opus-5', content, stop_reason: stop, stop_sequence: null, stop_details: null, usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+        return {
+            calls,
+            client: { beta: { messages: { create: async (params) => {
+                            calls.push(JSON.parse(JSON.stringify(params)));
+                            n += 1;
+                            if (n === 1)
+                                return msg([{ type: 'thinking', thinking: '', signature: 'sig' }, ...toolUses.map((t, i) => ({ type: 'tool_use', id: `tu_${i}`, name: t.name, input: t.input }))], 'tool_use');
+                            return msg([{ type: 'text', text: 'Laba bersih Surabaya tercatat pada periode ini.' }], 'end_turn');
+                        } } } },
+        };
+    };
+    const m1 = scripted([{ name: 'laba_rugi', input: { cabang: 'SBY', periode: '2026-08' } }, { name: 'konsolidasi', input: { periode: '2026-08' } }]);
+    assistant.useClientForTest(m1.client);
+    const c1 = await call('/assistant/chat', { method: 'POST', token: andi, branch: 'ALL', period: '2026-08', body: JSON.stringify({ messages: [{ role: 'user', content: 'Bandingkan laba Surabaya dengan konsolidasi' }] }) });
+    ok(c1.status === 200 && c1.body.reply.includes('Surabaya') && c1.body.toolsUsed.length === 2 && c1.body.toolsUsed.every((t) => t.ok), 'asisten menjalankan dua alat lalu menjawab', c1.body);
+    const req1 = m1.calls[0];
+    ok(req1.model === 'claude-opus-5' && req1.fallbacks === 'default' && req1.betas.includes('server-side-fallback-2026-07-01') && !('thinking' in req1), 'permintaan memakai model & cadangan sisi server bawaan', { model: req1.model, betas: req1.betas });
+    const results1 = m1.calls[1].messages[m1.calls[1].messages.length - 1].content;
+    ok(Array.isArray(results1) && results1.length === 2 && results1.every((r) => r.type === 'tool_result'), 'seluruh hasil alat dikirim dalam satu pesan pengguna');
+    const pl1 = JSON.parse(results1.find((r) => r.tool_use_id === 'tu_0').content);
+    ok(pl1.scope === 'SBY' && pl1.period.kode === '2026-08' && typeof pl1.net === 'number', 'alat laba_rugi memakai cabang & periode yang diminta', pl1.period);
+    ok(m1.calls[1].messages.some((mm) => mm.role === 'assistant' && mm.content.some((b) => b.type === 'thinking')), 'blok thinking dikembalikan utuh pada langkah berikutnya');
+    const m2 = scripted([{ name: 'konsolidasi', input: {} }, { name: 'neraca', input: { cabang: 'JKT' } }]);
+    assistant.useClientForTest(m2.client);
+    const c2 = await call('/assistant/chat', { method: 'POST', token: taufik, branch: 'MDN', period: '2026-08', body: JSON.stringify({ messages: [{ role: 'user', content: 'Tunjukkan neraca Jakarta' }] }) });
+    const offered = m2.calls[0].tools.map((t) => t.name);
+    ok(c2.status === 200 && offered.includes('neraca') && offered.includes('konsolidasi'), 'alat ditawarkan sesuai izin pengguna', offered);
+    const res2 = m2.calls[1].messages[m2.calls[1].messages.length - 1].content;
+    const jkt = res2.find((r) => r.tool_use_id === 'tu_1');
+    ok(jkt.is_error === true && /akses ke cabang JKT/.test(jkt.content), 'manajer Medan tidak dapat membaca neraca Jakarta lewat asisten', jkt);
+    const m3 = scripted([{ name: 'konsolidasi', input: {} }]);
+    assistant.useClientForTest(m3.client);
+    const sari2 = await login('sari@knm.co.id');
+    const c3 = await call('/assistant/chat', { method: 'POST', token: sari2, branch: 'JKT', period: '2026-08', body: JSON.stringify({ messages: [{ role: 'user', content: 'konsolidasi?' }] }) });
+    const offered3 = m3.calls[0].tools.map((t) => t.name);
+    const r3 = m3.calls[1].messages[m3.calls[1].messages.length - 1].content[0];
+    ok(c3.status === 200 && !offered3.includes('konsolidasi') && r3.is_error === true, 'alat konsolidasi tidak ditawarkan & ditolak tanpa report.consolidated', { offered3, r3 });
+    const aud = await call('/admin/audit-log?entity=assistant&size=5', { token: andi, branch: 'ALL' });
+    ok(aud.status === 200 && aud.body.data.some((a) => a.action === 'assistant.query' && Array.isArray(a.after?.tools)) && !JSON.stringify(aud.body.data).includes('Bandingkan laba'), 'pertanyaan tercatat di jejak audit tanpa isi percakapan', aud.body?.data?.[0]);
+    assistant.useClientForTest(null);
     console.log('Sesi');
     const logout = await call('/auth/logout', { method: 'POST', token: sari });
     ok(logout.status === 204, 'logout mencabut sesi', logout.status);

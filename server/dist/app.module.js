@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const throttler_1 = require("@nestjs/throttler");
 const admin_controller_js_1 = require("./admin/admin.controller.js");
+const assistant_module_js_1 = require("./assistant/assistant.module.js");
 const audit_module_js_1 = require("./audit/audit.module.js");
 const auth_module_js_1 = require("./auth/auth.module.js");
 const errors_js_1 = require("./common/errors.js");
@@ -25,7 +26,7 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             throttler_1.ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule,
+            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule, assistant_module_js_1.AssistantModule,
         ],
         controllers: [admin_controller_js_1.AdminController],
         providers: [

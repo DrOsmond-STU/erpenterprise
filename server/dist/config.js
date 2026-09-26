@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.loadConfig = loadConfig;
 const zod_1 = require("zod");
+/** Nilai kosong di .env (mis. `ANTHROPIC_API_KEY=`) dianggap tidak disetel. */
+const blank = (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 const schema = zod_1.z.object({
     NODE_ENV: zod_1.z.enum(['development', 'test', 'production']).default('development'),
     PORT: zod_1.z.coerce.number().int().min(1).max(65535).default(3000),
@@ -12,6 +14,10 @@ const schema = zod_1.z.object({
     ACCESS_TOKEN_TTL_SECONDS: zod_1.z.coerce.number().int().min(60).max(3600).default(900),
     REFRESH_TOKEN_TTL_SECONDS: zod_1.z.coerce.number().int().min(300).max(86400).default(43200),
     SEED_PASSWORD: zod_1.z.string().min(12).optional(),
+    /* Asisten AI (opsional). Tanpa kunci, fitur asisten nonaktif dan endpoint-nya menjawab 503. */
+    ANTHROPIC_API_KEY: zod_1.z.preprocess(blank, zod_1.z.string().min(20).optional()),
+    ASSISTANT_MODEL: zod_1.z.preprocess(blank, zod_1.z.string().regex(/^claude-[a-z0-9-]+$/).default('claude-opus-5')),
+    ASSISTANT_EFFORT: zod_1.z.preprocess(blank, zod_1.z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
 });
 let cached = null;
 /** Konfigurasi 12-factor: semua dari variabel lingkungan, divalidasi saat start (dok. 12 §3). */

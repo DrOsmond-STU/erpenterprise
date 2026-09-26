@@ -4,6 +4,7 @@
   "private": true,
   "description": "ERP Enterprise — artefak API untuk hosting",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
