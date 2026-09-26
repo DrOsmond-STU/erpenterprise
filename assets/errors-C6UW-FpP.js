@@ -1,0 +1,1 @@
+function t(r){return Array.isArray(r?.details)&&r.details.length?r.details.map(a=>typeof a=="string"?a:a?.path?`${Array.isArray(a.path)?a.path.join("."):a.path}: ${a.message}`:a?.message??String(a)):[r?.message??"Terjadi kesalahan."]}export{t as e};

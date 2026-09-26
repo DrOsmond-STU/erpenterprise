@@ -15,6 +15,7 @@ const core_1 = require("@nestjs/core");
 const auth_service_js_1 = require("../auth/auth.service.js");
 const context_js_1 = require("./context.js");
 const errors_js_1 = require("./errors.js");
+const MUST_CHANGE_ALLOWED = /^\/api\/v1\/(me|me\/password|me\/sessions(\/[^/]+)?|auth\/logout)$/;
 /** K-05/K-13: setiap endpoint (kecuali @Public) memerlukan access token yang sah. */
 let JwtAuthGuard = class JwtAuthGuard {
     reflector;
@@ -32,6 +33,10 @@ let JwtAuthGuard = class JwtAuthGuard {
         if (!token)
             throw new common_1.UnauthorizedException('Token akses tidak ada.');
         req.user = await this.auth.userFromAccessToken(token);
+        /* K-02: pengguna baru / hasil reset hanya boleh membaca profil dan mengganti kata sandi. */
+        if (req.user.mustChangePassword && !MUST_CHANGE_ALLOWED.test(req.path)) {
+            throw new errors_js_1.DomainError('PASSWORD_CHANGE_REQUIRED', 'Ganti kata sandi sementara Anda terlebih dahulu.', 403);
+        }
         return true;
     }
 };

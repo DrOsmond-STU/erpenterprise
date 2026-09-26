@@ -22,6 +22,7 @@ const context_js_1 = require("../common/context.js");
 const config_js_1 = require("../config.js");
 const db_service_js_1 = require("../db/db.service.js");
 const loginSchema = zod_1.z.object({ email: zod_1.z.string().email().max(200), password: zod_1.z.string().min(1).max(200) });
+const passwordSchema = zod_1.z.object({ currentPassword: zod_1.z.string().min(1).max(200), newPassword: zod_1.z.string().min(1).max(200) });
 const REFRESH_COOKIE = 'erp_refresh';
 let AuthController = class AuthController {
     auth;
@@ -62,12 +63,15 @@ let AuthController = class AuthController {
         const periods = await this.db.run((0, db_service_js_1.systemContext)(user.companyId), async (c) => (await c.query('SELECT code, label, date_from, date_to, period_group, status FROM fiscal_periods WHERE company_id = $1 ORDER BY date_from, date_to', [user.companyId])).rows);
         const company = await this.db.run((0, db_service_js_1.systemContext)(user.companyId), async (c) => (await c.query('SELECT code, name FROM companies WHERE id = $1', [user.companyId])).rows[0]);
         return {
-            user: { id: user.id, email: user.email, name: user.name, permissions: [...user.permissions].sort(), branches: user.branches },
+            user: { id: user.id, email: user.email, name: user.name, permissions: [...user.permissions].sort(), branches: user.branches, mustChangePassword: Boolean(user.mustChangePassword) },
             company,
             branches: branches.filter((b) => user.branches === '*' || user.branches.includes(String(b.code).trim())).map((b) => ({ ...b, code: String(b.code).trim() })),
             allBranches: user.branches === '*' || user.permissions.has('report.consolidated'),
             periods: periods.map((p) => ({ id: p.code, label: p.label, from: p.date_from, to: p.date_to, status: p.status, group: p.period_group })),
         };
+    }
+    changePassword(b, user, req) {
+        return this.auth.changeOwnPassword(user, b.currentPassword, b.newPassword, this.meta(req));
     }
     sessions(user) { return this.auth.listSessions(user); }
     revoke(user, id) { return this.auth.revokeSession(user, id); }
@@ -114,6 +118,17 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "me", null);
+__decorate([
+    (0, common_1.Post)('me/password'),
+    (0, common_1.HttpCode)(200),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(passwordSchema))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "changePassword", null);
 __decorate([
     (0, common_1.Get)('me/sessions'),
     __param(0, (0, context_js_1.CurrentUser)()),
