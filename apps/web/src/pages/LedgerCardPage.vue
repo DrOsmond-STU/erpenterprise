@@ -15,22 +15,34 @@ import JournalDrawer from '@/components/JournalDrawer.vue';
 const route = useRoute();
 const router = useRouter();
 const ctx = useContext();
-const account = ref(String(route.query.akun ?? '1-1100'));
-const bank = ref(String(route.query.rekening ?? ''));
+/* Kartu buku besar hanya untuk akun detail; tiap rekening kas/bank punya akun detail sendiri. */
+const account = ref(String(route.query.akun ?? ''));
 const openId = ref<string | null>(null);
 const { data: coa } = useLoader(() => get('/ledger/accounts'));
 const { data: banks } = useLoader(() => get('/ledger/bank-accounts'));
-const { data: card, loading, reload } = useLoader(() => get(`/ledger/accounts/${account.value}/card${account.value === '1-1100' && bank.value ? `?bank=${bank.value}` : ''}`), [account, bank]);
+watch([coa, banks], () => {
+  const list = coa.value?.accounts ?? [];
+  const cur = list.find((a: any) => a.code === account.value);
+  if (route.query.rekening && banks.value) account.value = banks.value.accounts.find((b: any) => b.code === route.query.rekening)?.glAccountCode ?? account.value;
+  else if (list.length && (!cur || cur.type !== 'detail')) account.value = list.find((a: any) => a.type === 'detail' && (!cur || a.code.startsWith(cur.code.replace(/0+$/, ''))))?.code ?? list.find((a: any) => a.type === 'detail')?.code ?? '';
+}, { immediate: true });
+const { data: card, loading, reload } = useLoader(() => (account.value ? get(`/ledger/accounts/${account.value}/card`) : Promise.resolve(null)), [account]);
 const pg = usePaged<any>(() => card.value?.lines ?? [], 50);
-watch([account, bank], pg.reset);
+watch(account, pg.reset);
 /** Saldo pindahan di awal halaman: saldo berjalan baris terakhir halaman sebelumnya. */
 const carried = computed(() => {
   const start = (pg.page.value - 1) * pg.size.value;
   return start === 0 ? card.value?.opening ?? 0 : card.value?.lines[start - 1]?.balance ?? 0;
 });
-watch([account, bank], () => router.replace({ query: { akun: account.value, ...(bank.value ? { rekening: bank.value } : {}) } }));
+watch(account, (a) => { if (a) router.replace({ query: { akun: a } }); });
 const details = computed(() => (coa.value?.accounts ?? []).filter((a: any) => a.type === 'detail' && !a.isComputed));
-const cats = computed(() => [...new Set(details.value.map((a: any) => a.category))]);
+const nameOf = computed(() => new Map((coa.value?.accounts ?? []).map((a: any) => [a.code, a.name])));
+const groups = computed(() => {
+  const m = new Map<string, any[]>();
+  for (const a of details.value) { const k = a.parentCode ?? a.code; (m.get(k) ?? m.set(k, []).get(k)!).push(a); }
+  return [...m.entries()].map(([code, items]) => ({ label: `${code} ${nameOf.value.get(code) ?? ''}`, items }));
+});
+const bankOf = computed(() => banks.value?.accounts?.find((b: any) => b.glAccountCode === account.value));
 </script>
 
 <template>
@@ -39,10 +51,9 @@ const cats = computed(() => [...new Set(details.value.map((a: any) => a.category
     <div class="toolbar" style="flex-wrap:wrap">
       <div class="field" style="min-width:320px;flex:1 1 320px"><label for="gl-account">Akun</label>
         <select id="gl-account" v-model="account" class="select" data-gl-select>
-          <optgroup v-for="c in cats" :key="String(c)" :label="String(c)"><option v-for="a in details.filter((x: any) => x.category === c)" :key="a.code" :value="a.code">{{ a.code }} · {{ a.name }}</option></optgroup>
-        </select></div>
-      <div v-if="account === '1-1100'" class="field" style="min-width:240px"><label for="gl-bank">Rekening</label>
-        <select id="gl-bank" v-model="bank" class="select"><option value="">Semua rekening</option><option v-for="b in banks?.accounts ?? []" :key="b.code" :value="b.code">{{ b.name }}</option></select></div>
+          <optgroup v-for="g in groups" :key="g.label" :label="g.label"><option v-for="a in g.items" :key="a.code" :value="a.code">{{ a.code }} · {{ a.name }}</option></optgroup>
+        </select>
+        <span v-if="bankOf" class="field-hint">Rekening {{ bankOf.code }} · cabang {{ bankOf.branchCode }} · {{ bankOf.accountNoMasked ?? '' }}</span></div>
       <div class="toolbar-spacer"></div>
       <span class="pager-info">{{ F.int(card?.lines?.length ?? 0) }} mutasi · {{ ctx.branchName }} · {{ ctx.periodLabel }}</span>
     </div>

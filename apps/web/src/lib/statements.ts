@@ -23,12 +23,16 @@ export function plRows(reports: IncomeStatement[], withPct: boolean): StmtRow[] 
   return rows;
 }
 
-/** Baris neraca; bila `elim` diberikan, kolom eliminasi & konsolidasi ditambahkan. */
-export function bsRows(reports: BalanceSheet[], combined?: BalanceSheet, eliminations?: { code: string; amount: number }[]): StmtRow[] {
+/**
+ * Baris neraca dari header level 2 (seksi) dan level 3 (baris); detail level 4–5
+ * sudah dijumlahkan oleh domain. Bila `combined` diberikan, kolom eliminasi &
+ * konsolidasi ditambahkan.
+ */
+export function bsRows(reports: BalanceSheet[], combined?: BalanceSheet, eliminations?: { code: string; amount: number; lineCode?: string }[]): StmtRow[] {
   const multi = Boolean(combined);
   const all = multi ? [...reports, combined!] : reports;
   const rows: StmtRow[] = [];
-  const elimOf = (code?: string) => (code && eliminations?.find((e) => e.code === code)?.amount) || 0;
+  const elimOf = (code?: string) => (code ? (eliminations ?? []).filter((e) => (e.lineCode ?? e.code) === code).reduce((s, e) => s + e.amount, 0) : 0);
   const push = (kind: StmtRow['kind'], label: string, f: (r: BalanceSheet) => number, code?: string, interco = false, elimTotal?: number) => {
     const vals: (number | null)[] = reports.map(f);
     if (multi) {
@@ -38,31 +42,30 @@ export function bsRows(reports: BalanceSheet[], combined?: BalanceSheet, elimina
     }
     rows.push({ kind, label, code, interco, values: vals });
   };
-  const find = (r: BalanceSheet, list: 'assets' | 'liabilities' | 'equity', code: string) => r[list].find((a) => a.code === code)?.amount ?? 0;
-  const codes = (list: 'assets' | 'liabilities' | 'equity', parent?: string) => {
+  type List = 'assets' | 'liabilities' | 'equity';
+  const find = (r: BalanceSheet, list: List, code: string) => r[list].find((a) => a.code === code)?.amount ?? 0;
+  const codes = (list: List, parent: string) => {
     const m = new Map<string, { name: string; interco: boolean }>();
-    for (const r of all) for (const a of r[list]) if (!parent || a.parentCode === parent) m.set(a.code, { name: a.name, interco: Boolean(a.interco) });
+    for (const r of all) for (const a of r[list]) if (a.parentCode === parent) m.set(a.code, { name: a.name, interco: Boolean(a.interco) });
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   };
-  const group = (list: 'assets' | 'liabilities' | 'equity', parent: string, label: string, subtotal: string) => {
+  const sections = new Map<string, string>();
+  for (const r of all) for (const sct of r.sections ?? []) sections.set(sct.code, sct.name);
+  const group = (list: List, parent: string, label: string) => {
     const cs = codes(list, parent); if (!cs.length) return;
     rows.push({ kind: 'section', label, values: [] });
     for (const [code, meta] of cs) push('line', meta.name, (r) => find(r, list, code), code, meta.interco);
     const elim = -cs.reduce((s, [code]) => s + elimOf(code), 0);
-    push('subtotal', subtotal, (r) => cs.reduce((s, [code]) => s + find(r, list, code), 0), undefined, false, multi ? elim : undefined);
+    push('subtotal', `Total ${label.toLowerCase()}`, (r) => cs.reduce((s, [code]) => s + find(r, list, code), 0), undefined, false, multi ? elim : undefined);
   };
+  const bySection = (prefix: string, list: List) => [...sections.entries()].filter(([c]) => c.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)).forEach(([c, n]) => group(list, c, n));
   const elimAssets = -(eliminations ?? []).filter((e) => e.code.startsWith('1')).reduce((s, e) => s + e.amount, 0);
   const elimEquity = -(eliminations ?? []).filter((e) => e.code.startsWith('3')).reduce((s, e) => s + e.amount, 0);
-  group('assets', '1-1000', 'Aset lancar', 'Total aset lancar');
-  group('assets', '1-2000', 'Aset tetap', 'Total aset tetap (neto)');
-  group('assets', '1-3000', 'Rekening koran antar kantor', 'Total RK antar kantor');
+  bySection('1', 'assets');
   push('total', 'TOTAL ASET', (r) => r.totalAssets, undefined, false, multi ? elimAssets : undefined);
-  group('liabilities', '2-1000', 'Liabilitas jangka pendek', 'Total liabilitas jangka pendek');
-  group('liabilities', '2-2000', 'Liabilitas jangka panjang', 'Total liabilitas jangka panjang');
+  bySection('2', 'liabilities');
   push('total', 'TOTAL LIABILITAS', (r) => r.totalLiab, undefined, false, multi ? 0 : undefined);
-  rows.push({ kind: 'section', label: 'Ekuitas', values: [] });
-  for (const [code, meta] of codes('equity')) push('line', meta.name, (r) => find(r, 'equity', code), code, meta.interco);
-  push('line', 'Laba (rugi) periode berjalan', (r) => r.profit, undefined, false, multi ? 0 : undefined);
+  bySection('3', 'equity');
   push('total', 'TOTAL EKUITAS', (r) => r.totalEquity, undefined, false, multi ? elimEquity : undefined);
   push('total', 'TOTAL LIABILITAS & EKUITAS', (r) => r.totalLiabEquity, undefined, false, multi ? elimEquity : undefined);
   return rows;

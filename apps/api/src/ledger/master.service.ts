@@ -14,16 +14,15 @@
  */
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import { AP_ACCOUNT, AR_ACCOUNT, CASH_ACCOUNT, CURRENT_EARNINGS, INVENTORY_ACCOUNTS, RK_CABANG, RK_PUSAT } from '@erp/domain';
+import { ACCOUNT_LINK_DEFS, bankParentOf, levelOfCode, parentOfCode, typeProblems } from '@erp/domain';
 import { AuditService } from '../audit/audit.service.js';
 import type { RequestUser, ScopeContext } from '../common/context.js';
 import { conflict, DomainError, forbidden, notFound } from '../common/errors.js';
 import { contextOf, DbService } from '../db/db.service.js';
-import { mapAccount } from './ledger.shared.js';
+import { LedgerRefs, mapAccount } from './ledger.shared.js';
 
-const SYSTEM_ACCOUNTS = new Set([RK_CABANG, RK_PUSAT, CASH_ACCOUNT, AR_ACCOUNT, AP_ACCOUNT, CURRENT_EARNINGS, ...INVENTORY_ACCOUNTS]);
 
-export interface AccountCreate { code: string; name: string; type: 'header' | 'detail'; parentCode: string; isContra?: boolean }
+export interface AccountCreate { code: string; name: string; type: 'header' | 'detail'; parentCode?: string; isContra?: boolean }
 export interface AccountPatch { name?: string; status?: 'aktif' | 'nonaktif'; reason: string }
 export interface BankCreate { code: string; branch: string; name: string; bankName: string; accountNoLast4?: string }
 export interface BankPatch { name?: string; bankName?: string; accountNoLast4?: string; status?: 'aktif' | 'nonaktif'; reason: string }
@@ -32,7 +31,7 @@ const invalid = (code: string, msg: string) => new DomainError(code, msg, HttpSt
 
 @Injectable()
 export class MasterDataService {
-  constructor(private readonly db: DbService, private readonly audit: AuditService) {}
+  constructor(private readonly db: DbService, private readonly audit: AuditService, private readonly refs: LedgerRefs) {}
 
   /* ------------------------------ Bagan akun ------------------------------ */
 
@@ -41,7 +40,16 @@ export class MasterDataService {
     if (!r) throw notFound(`Akun ${code}`);
     return r;
   }
-  private isSystem(a: any) { return SYSTEM_ACCOUNTS.has(a.code) || a.is_computed || a.is_intercompany || a.is_cash; }
+  /** Akun yang ditautkan ke fitur lain (pemetaan akun, rekening kas/bank) atau dihitung tidak boleh dinonaktifkan/dihapus. */
+  private async systemReason(c: PoolClient, companyId: string, a: any): Promise<string | null> {
+    if (a.is_computed) return 'akun dihitung otomatis';
+    if (a.is_intercompany) return 'akun antar kantor (dieliminasi pada konsolidasi)';
+    if (a.is_cash && a.type === 'detail') return 'akun rekening kas/bank — kelola lewat menu Kas & Bank';
+    if (a.is_cash) return 'header Kas/Bank';
+    const links = await this.refs.links(c, companyId);
+    const def = ACCOUNT_LINK_DEFS.find((d) => links[d.key as keyof typeof links] === a.code);
+    return def ? `ditautkan sebagai "${def.label}" di Pengaturan → Pemetaan akun` : null;
+  }
   private async usage(c: PoolClient, companyId: string, code: string) {
     const r = (await c.query(
       `SELECT count(*)::int AS lines, coalesce(sum(CASE WHEN j.status IN ('posted','reversed') THEN l.debit - l.credit ELSE 0 END),0)::bigint AS net
@@ -52,18 +60,24 @@ export class MasterDataService {
 
   async createAccount(u: RequestUser, s: ScopeContext, b: AccountCreate, requestId: string) {
     return this.db.run(contextOf(u, s, requestId), async (c) => {
+      const level = levelOfCode(b.code);
+      if (!level || level === 1) throw invalid('ACCOUNT_CODE', `Kode ${b.code} tidak sah. Pola: 9-9000 (level 2), 9-9900 (level 3), 9-9999 (level 4), 9-9999.99 (level 5).`);
+      const parentCode = parentOfCode(b.code)!;
+      if (b.parentCode && b.parentCode !== parentCode) throw invalid('ACCOUNT_PARENT_CODE', `Menurut pola kode, induk ${b.code} adalah ${parentCode}, bukan ${b.parentCode}.`);
+      const tp = typeProblems(level, b.type);
+      if (tp) throw invalid('ACCOUNT_LEVEL', tp);
       const dup = await c.query('SELECT 1 FROM chart_of_accounts WHERE company_id = $1 AND code = $2', [u.companyId, b.code]);
       if (dup.rowCount) throw conflict('ACCOUNT_EXISTS', `Kode akun ${b.code} sudah dipakai.`);
-      const parent = await this.account(c, u.companyId, b.parentCode);
+      const parent = (await c.query('SELECT * FROM chart_of_accounts WHERE company_id = $1 AND code = $2', [u.companyId, parentCode])).rows[0];
+      if (!parent) throw invalid('ACCOUNT_PARENT_MISSING', `Induk ${parentCode} belum ada; buat header level ${level - 1} terlebih dahulu.`);
       if (parent.type !== 'header') throw invalid('ACCOUNT_PARENT_DETAIL', `Induk ${parent.code} adalah akun detail; akun baru harus berada di bawah akun header.`);
       if (parent.status !== 'aktif') throw invalid('ACCOUNT_PARENT_INACTIVE', `Induk ${parent.code} nonaktif.`);
-      if (parent.is_computed) throw invalid('ACCOUNT_PARENT_COMPUTED', `Induk ${parent.code} adalah akun dihitung.`);
-      if (b.code[0] !== parent.code[0]) throw invalid('ACCOUNT_CODE_CATEGORY', `Kode ${b.code} harus diawali ${parent.code[0]} agar sekelompok dengan induk ${parent.code} (${parent.category}).`);
+      if (parent.is_cash) throw invalid('ACCOUNT_PARENT_CASH', `Akun di bawah ${parent.code} ${parent.name} dibuat otomatis saat menambah rekening di menu Kas & Bank.`);
       const normal = b.isContra ? (parent.normal_side === 'debit' ? 'credit' : 'debit') : parent.normal_side;
       const ins = await c.query(
         `INSERT INTO chart_of_accounts (company_id, code, name, type, category, parent_code, level, normal_side, is_contra)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [u.companyId, b.code, b.name, b.type, parent.category, parent.code, parent.level + 1, normal, Boolean(b.isContra)]);
+        [u.companyId, b.code, b.name, b.type, parent.category, parent.code, level, normal, Boolean(b.isContra)]);
       const row = mapAccount(ins.rows[0]);
       await this.audit.record(c, { companyId: u.companyId, userId: u.id, sessionId: u.sessionId, action: 'account.created', entityType: 'account', entityId: b.code, after: row, requestId });
       return row;
@@ -73,8 +87,10 @@ export class MasterDataService {
   async patchAccount(u: RequestUser, s: ScopeContext, code: string, p: AccountPatch, requestId: string) {
     return this.db.run(contextOf(u, s, requestId), async (c) => {
       const cur = await this.account(c, u.companyId, code);
+      if (cur.is_cash && cur.type === 'detail' && (p.name || p.status)) throw invalid('ACCOUNT_IS_BANK', `Akun ${code} milik rekening kas/bank; ubah nama atau status lewat menu Kas & Bank.`);
       if (p.status === 'nonaktif' && cur.status === 'aktif') {
-        if (this.isSystem(cur)) throw forbidden(`Akun ${code} adalah akun sistem dan tidak dapat dinonaktifkan.`);
+        const why = await this.systemReason(c, u.companyId, cur);
+        if (why) throw forbidden(`Akun ${code} tidak dapat dinonaktifkan: ${why}.`);
         const use = await this.usage(c, u.companyId, code);
         if (use.activeChildren > 0) throw invalid('ACCOUNT_HAS_CHILDREN', `Akun ${code} masih memiliki ${use.activeChildren} akun anak yang aktif.`);
         if (use.net !== 0) throw invalid('ACCOUNT_HAS_BALANCE', `Akun ${code} masih bersaldo; pindahkan saldonya dengan jurnal sebelum dinonaktifkan.`);
@@ -94,7 +110,8 @@ export class MasterDataService {
   async deleteAccount(u: RequestUser, s: ScopeContext, code: string, reason: string, requestId: string) {
     return this.db.run(contextOf(u, s, requestId), async (c) => {
       const cur = await this.account(c, u.companyId, code);
-      if (this.isSystem(cur)) throw forbidden(`Akun ${code} adalah akun sistem dan tidak dapat dihapus.`);
+      const why = await this.systemReason(c, u.companyId, cur);
+      if (why) throw forbidden(`Akun ${code} tidak dapat dihapus: ${why}.`);
       const use = await this.usage(c, u.companyId, code);
       if (use.children > 0) throw invalid('ACCOUNT_HAS_CHILDREN', `Akun ${code} memiliki akun anak; hapus atau pindahkan anaknya dahulu.`);
       if (use.lines > 0) throw invalid('ACCOUNT_IN_USE', `Akun ${code} sudah dipakai ${use.lines} baris jurnal; nonaktifkan saja.`);
@@ -106,7 +123,7 @@ export class MasterDataService {
 
   /* --------------------------- Rekening kas/bank -------------------------- */
 
-  private mapBank = (b: any) => ({ code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), currency: b.currency, status: b.status, accountNoMasked: b.account_no_masked });
+  private mapBank = (b: any) => ({ code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), currency: b.currency, status: b.status, accountNoMasked: b.account_no_masked, glAccountCode: b.gl_account_code });
 
   private async bank(c: PoolClient, companyId: string, code: string) {
     const r = (await c.query('SELECT * FROM bank_accounts WHERE company_id = $1 AND code = $2', [companyId, code])).rows[0];
@@ -146,6 +163,8 @@ export class MasterDataService {
         const bal = (await c.query(`SELECT coalesce(sum(l.debit - l.credit),0)::bigint AS n FROM journal_lines l JOIN journals j ON j.id = l.journal_id WHERE l.company_id = $1 AND l.bank_account_code = $2 AND j.status IN ('posted','reversed')`, [u.companyId, code])).rows[0].n;
         if (Number(bal) !== 0) throw invalid('BANK_HAS_BALANCE', `Rekening ${code} masih bersaldo; kosongkan dengan jurnal pemindahan sebelum dinonaktifkan.`);
       }
+      if (p.bankName && bankParentOf(p.bankName) !== bankParentOf(cur.bank_name))
+        throw invalid('BANK_KIND', 'Rekening kas tidak dapat diubah menjadi rekening bank (atau sebaliknya) karena akun buku besarnya berada di header berbeda; buat rekening baru.');
       const masked = p.accountNoLast4 === undefined ? null : p.accountNoLast4 ? `••••${p.accountNoLast4}` : '—';
       const upd = await c.query(
         'UPDATE bank_accounts SET name = coalesce($3, name), bank_name = coalesce($4, bank_name), account_no_masked = coalesce($5, account_no_masked), status = coalesce($6, status) WHERE company_id = $1 AND code = $2 RETURNING *',

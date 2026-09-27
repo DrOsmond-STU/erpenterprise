@@ -81,14 +81,26 @@ async function main() {
   const rec = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-08' });
   /* Pemeriksaan potret (stok, aset, gaji) hanya muncul untuk periode termutakhir buku besar → 7 atau 11. */
   ok(rec.status === 200 && [7, 11].includes(rec.body.checks.length) && rec.body.checks.every((k: any) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k: any) => !k.ok) ?? rec.body);
-  const card = await call('/ledger/accounts/1-1100/card?bank=BNK-001', { token: andi, branch: 'JKT', period: '2026-08' });
+  const banks0 = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL', period: '2026-08' })).body.accounts;
+  const glOf = (code: string) => banks0.find((b: any) => b.code === code)?.glAccountCode as string;
+  ok(banks0.every((b: any) => /^1-1[12]\d\d$/.test(b.glAccountCode ?? '')), 'setiap rekening kas/bank punya akun detail sendiri di bawah header Bank/Kas', banks0.map((b: any) => [b.code, b.glAccountCode]));
+  const tbLv = await call('/reports/trial-balance', { token: andi, branch: 'ALL', period: '2026-08' });
+  const coaLv = (await call('/ledger/accounts', { token: andi, branch: 'ALL', period: '2026-08' })).body.accounts;
+  const lvOf = (code: string) => coaLv.find((a: any) => a.code === code);
+  ok(tbLv.body.rows.every((r: any) => lvOf(r.code)?.type === 'detail' && lvOf(r.code)?.level >= 4), 'neraca saldo hanya berisi akun detail (level 4–5)');
+  const bsLv = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-08' });
+  const plLv = await call('/reports/income-statement', { token: andi, branch: 'ALL', period: '2026-08' });
+  const stmtRows = [...bsLv.body.assets, ...bsLv.body.liabilities, ...bsLv.body.equity, ...plLv.body.groups.flatMap((g: any) => g.rows)];
+  ok(stmtRows.length > 10 && stmtRows.every((r: any) => lvOf(r.code)?.type === 'header' && lvOf(r.code)?.level === 3), 'neraca & laba rugi disusun dari header level 1–3', stmtRows.filter((r: any) => lvOf(r.code)?.level !== 3).map((r: any) => r.code));
+  ok(coaLv.every((a: any) => (a.level <= 3 ? a.type === 'header' : true) && (a.level === 5 ? a.type === 'detail' : true)), 'bagan akun: level 1–3 header, detail di level 4–5');
+  const card = await call(`/ledger/accounts/${glOf('BNK-001')}/card`, { token: andi, branch: 'JKT', period: '2026-08' });
   ok(card.status === 200 && card.body.lines.length > 0 && card.body.ending === card.body.lines.at(-1).balance, 'kartu buku besar rekening dengan saldo berjalan', card.body?.error);
   const kpi = await call('/reports/kpis', { token: andi, branch: 'CKR', period: '2026-08' });
   ok(kpi.status === 200 && kpi.body.revenue > 0 && kpi.body.monthlyRevenue.length === 12, 'KPI dasbor cabang', kpi.body?.error);
 
   console.log('Jurnal memorial & pemisahan tugas');
   const draft = { date: '2026-08-14', branch: 'JKT', description: 'Uji e2e: perlengkapan kantor dari kas kecil', lines: [
-    { account: '5-3700', debit: 250000, credit: 0 }, { account: '1-1100', debit: 0, credit: 250000, bankAccountId: 'BNK-007' }] };
+    { account: '5-3701', debit: 250000, credit: 0 }, { account: glOf('BNK-007'), debit: 0, credit: 250000 }] };
   const created = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify(draft) });
   ok(created.status === 201 && created.body.status === 'pending', 'staf keuangan membuat jurnal → pending', created.body);
   const jid = created.body.id;
@@ -102,8 +114,10 @@ async function main() {
   ok(unbalanced.status === 422 && /seimbang/.test(JSON.stringify(unbalanced.body)), 'jurnal tidak seimbang ditolak', unbalanced.body);
   const header = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify({ ...draft, lines: [{ account: '5-0000', debit: 250000, credit: 0 }, draft.lines[1]] }) });
   ok(header.status === 422 && /header/.test(JSON.stringify(header.body)), 'akun header ditolak', header.body);
-  const noBank = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify({ ...draft, lines: [draft.lines[0], { account: '1-1100', debit: 0, credit: 250000 }] }) });
-  ok(noBank.status === 422 && /rekening/.test(JSON.stringify(noBank.body)), 'baris kas tanpa rekening ditolak', noBank.body);
+  const noBank = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify({ ...draft, lines: [draft.lines[0], { account: '1-1200', debit: 0, credit: 250000 }] }) });
+  ok(noBank.status === 422 && /header/.test(JSON.stringify(noBank.body)), 'header Kas (1-1200) tidak dapat dipakai transaksi', noBank.body);
+  const mism = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify({ ...draft, lines: [draft.lines[0], { ...draft.lines[1], bankAccountId: 'BNK-001' }] }) });
+  ok(mism.status === 422 && /tidak sesuai/.test(JSON.stringify(mism.body)), 'rekening yang tidak sesuai akun kas/bank ditolak', mism.body);
   const wrongBranch = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(draft) });
   ok(wrongBranch.status === 403, 'jurnal cabang JKT dari konteks CKR ditolak', wrongBranch.status);
   const rev = await call(`/ledger/journals/${jid}/reverse`, { method: 'POST', token: andi, branch: 'JKT', body: JSON.stringify({ reason: 'uji pembalikan', date: '2026-08-14' }) });
@@ -130,26 +144,37 @@ async function main() {
 
   console.log('CRUD data induk: bagan akun');
   const accs = (await call('/ledger/accounts', { token: admin, branch: 'ALL', period: '2026-08' })).body.accounts;
-  const denyAcc = await call('/ledger/accounts', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: '5-3990', name: 'Uji', type: 'detail', parentCode: '5-3000' }) });
+  const denyAcc = await call('/ledger/accounts', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: '5-3790', name: 'Uji', type: 'detail', parentCode: '5-3700' }) });
   ok(denyAcc.status === 403, 'akuntan tanpa ledger.account.manage tidak dapat menambah akun', denyAcc.status);
-  const newCode = `5-39${String(Date.now() % 90 + 10)}`;
-  const cAcc = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: newCode, name: 'Beban Uji Otomatis', type: 'detail', parentCode: '5-3000' }) });
-  const parent = accs.find((a: any) => a.code === '5-3000');
+  const newCode = `5-37${String(Date.now() % 90 + 10)}`;
+  const cAcc = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: newCode, name: 'Beban Uji Otomatis', type: 'detail', parentCode: '5-3700' }) });
+  const parent = accs.find((a: any) => a.code === '5-3700');
   ok(cAcc.status === 201 && cAcc.body.category === 'Beban' && cAcc.body.level === parent.level + 1 && cAcc.body.normalSide === parent.normalSide, 'akun baru mewarisi kategori, level, dan sisi normal induk', cAcc.body);
-  ok((await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: newCode, name: 'Dup', type: 'detail', parentCode: '5-3000' }) })).status === 409, 'kode akun ganda → 409');
-  const badCat = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '4-3991', name: 'Salah kelompok', type: 'detail', parentCode: '5-3000' }) });
-  ok(badCat.status === 422 && badCat.body.error.code === 'ACCOUNT_CODE_CATEGORY', 'kode akun harus sekelompok dengan induk', badCat.body);
+  ok((await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: newCode, name: 'Dup', type: 'detail', parentCode: '5-3700' }) })).status === 409, 'kode akun ganda → 409');
+  const badCat = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '4-3991', name: 'Salah kelompok', type: 'detail', parentCode: '5-3700' }) });
+  ok(badCat.status === 422 && badCat.body.error.code === 'ACCOUNT_PARENT_CODE', 'induk harus sesuai pola kode akun', badCat.body);
+  const lvl3Detail = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3800', name: 'Detail di level tiga', type: 'detail' }) });
+  ok(lvl3Detail.status === 422 && lvl3Detail.body.error.code === 'ACCOUNT_LEVEL', 'akun level 1–3 wajib header (detail ditolak)', lvl3Detail.body);
+  const h3 = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3800', name: 'Beban Pelatihan', type: 'header' }) });
+  const d4 = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3801', name: 'Beban Pelatihan Karyawan', type: 'detail' }) });
+  ok(h3.status === 201 && h3.body.level === 3 && d4.status === 201 && d4.body.level === 4 && d4.body.parentCode === '5-3800', 'header level 3 lalu detail level 4 di bawahnya (induk dari pola kode)', [h3.body, d4.body]);
+  const jHdr = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'JKT', body: JSON.stringify({ date: '2026-09-10', branch: 'JKT', description: 'Uji header', lines: [{ account: '5-3800', debit: 1000, credit: 0 }, { account: glOf('BNK-007'), debit: 0, credit: 1000 }] }) });
+  ok(jHdr.status === 422 && /header/.test(JSON.stringify(jHdr.body)), 'header baru tidak menerima jurnal', jHdr.body);
+  await call('/ledger/accounts/5-3801', { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'bersihkan' }) });
+  await call('/ledger/accounts/5-3800', { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'bersihkan' }) });
+  const underBank = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '1-1150', name: 'Bank manual', type: 'detail' }) });
+  ok(underBank.status === 422 && underBank.body.error.code === 'ACCOUNT_PARENT_CASH', 'akun di bawah header Bank dibuat lewat menu Kas & Bank', underBank.body);
   const someDetail = accs.find((a: any) => a.type === 'detail' && a.category === 'Beban' && !a.isComputed);
-  const badParent = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3992', name: 'Induk detail', type: 'detail', parentCode: someDetail.code }) });
+  const badParent = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: `${someDetail.code}.01`, name: 'Induk detail', type: 'detail' }) });
   ok(badParent.status === 422 && badParent.body.error.code === 'ACCOUNT_PARENT_DETAIL', 'akun tidak dapat dibuat di bawah akun detail', badParent.body);
-  const accBadShape = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '53990', name: 'x', type: 'detail', parentCode: '5-3000' }) });
+  const accBadShape = await call('/ledger/accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: '53990', name: 'x', type: 'detail', parentCode: '5-3700' }) });
   ok(accBadShape.status === 400 || accBadShape.status === 422, 'format kode & nama divalidasi', accBadShape.status);
   const renamed = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ name: 'Beban Uji Otomatis (ubah)', reason: 'uji ubah nama' }) });
   ok(renamed.status === 200 && renamed.body.name === 'Beban Uji Otomatis (ubah)', 'nama akun dapat diubah', renamed.body);
   const accOff = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji nonaktif' }) });
   ok(accOff.status === 200 && accOff.body.status === 'nonaktif', 'akun tanpa saldo dapat dinonaktifkan', accOff.body);
   const sariX = await login('sari@knm.co.id');
-  const jInactive = await call('/ledger/journals', { method: 'POST', token: sariX, branch: 'JKT', body: JSON.stringify({ date: '2026-09-10', branch: 'JKT', description: 'Uji akun nonaktif', lines: [{ account: newCode, debit: 1000, credit: 0 }, { account: '2-1100', debit: 0, credit: 1000 }] }) });
+  const jInactive = await call('/ledger/journals', { method: 'POST', token: sariX, branch: 'JKT', body: JSON.stringify({ date: '2026-09-10', branch: 'JKT', description: 'Uji akun nonaktif', lines: [{ account: newCode, debit: 1000, credit: 0 }, { account: '2-1101', debit: 0, credit: 1000 }] }) });
   ok(jInactive.status === 422 && /nonaktif/.test(JSON.stringify(jInactive.body)), 'jurnal ke akun nonaktif ditolak', jInactive.body);
   const on1 = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'aktif', reason: 'uji aktif' }) });
   ok(on1.status === 200 && on1.body.status === 'aktif', 'akun dapat diaktifkan kembali');
@@ -157,8 +182,10 @@ async function main() {
   const after = (await call('/ledger/accounts', { token: admin, branch: 'ALL' })).body.accounts;
   ok(delAcc.status === 200 && !after.some((a: any) => a.code === newCode), 'akun yang belum dipakai dapat dihapus', delAcc.body);
   const delSys = await call('/ledger/accounts/1-1100', { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
-  ok(delSys.status === 403, 'akun sistem tidak dapat dihapus', delSys.status);
-  const used = accs.find((a: any) => a.type === 'detail' && a.category === 'Beban' && a.balance !== 0 && !a.isComputed);
+  ok(delSys.status === 403, 'header Bank tidak dapat dihapus', delSys.status);
+  const offLinked = await call('/ledger/accounts/1-1301', { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji' }) });
+  ok(offLinked.status === 403 && /Pemetaan akun/.test(offLinked.body.error.message), 'akun yang ditautkan (piutang usaha) tidak dapat dinonaktifkan', offLinked.body);
+  const used = accs.find((a: any) => a.code === '5-3101' && a.balance !== 0);   // beban utilitas: bersaldo, tidak ditautkan
   const delUsed = await call(`/ledger/accounts/${used.code}`, { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
   ok(delUsed.status === 422 && delUsed.body.error.code === 'ACCOUNT_IN_USE', 'akun yang sudah dipakai jurnal tidak dapat dihapus', delUsed.body);
   const offUsed = await call(`/ledger/accounts/${used.code}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji' }) });
@@ -170,6 +197,8 @@ async function main() {
   const bankCode = `BNK-CKR-U${String(Date.now() % 1000)}`;
   const cBank = await call('/ledger/bank-accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: bankCode.toLowerCase(), branch: 'ckr', name: 'Mandiri — Rekening Uji', bankName: 'Mandiri', accountNoLast4: '4321' }) });
   ok(cBank.status === 201 && cBank.body.code === bankCode && cBank.body.branchCode === 'CKR' && cBank.body.accountNoMasked === '••••4321', 'rekening baru dibuat (kode & cabang dinormalkan, nomor tersamar)', cBank.body);
+  const bankGlAcc = (await call('/ledger/accounts', { token: admin, branch: 'ALL' })).body.accounts.find((a: any) => a.code === cBank.body.glAccountCode);
+  ok(bankGlAcc && bankGlAcc.type === 'detail' && bankGlAcc.parentCode === '1-1100' && bankGlAcc.level === 4 && bankGlAcc.isCash, 'rekening baru otomatis mendapat akun detail di bawah header Bank', bankGlAcc);
   ok((await call('/ledger/bank-accounts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: bankCode, branch: 'CKR', name: 'Dup rekening', bankName: 'BCA' }) })).status === 409, 'kode rekening ganda → 409');
   const scopedBank = await call('/ledger/bank-accounts', { method: 'POST', token: admin, branch: 'JKT', body: JSON.stringify({ code: 'BNK-CKR-X1', branch: 'CKR', name: 'Beda konteks', bankName: 'BCA' }) });
   ok(scopedBank.status === 403, 'rekening cabang lain tidak dapat dibuat dari konteks cabang berbeda', scopedBank.status);
@@ -177,10 +206,10 @@ async function main() {
   ok(eBank.status === 200 && eBank.body.name.endsWith('(ubah)') && eBank.body.accountNoMasked === '••••9876', 'data rekening dapat diubah', eBank.body);
   const offBank = await call(`/ledger/bank-accounts/${bankCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji' }) });
   ok(offBank.status === 200 && offBank.body.status === 'nonaktif', 'rekening tanpa saldo dapat dinonaktifkan');
-  const jBank = await call('/ledger/journals', { method: 'POST', token: sariX, branch: 'CKR', body: JSON.stringify({ date: '2026-09-10', branch: 'CKR', description: 'Uji rekening nonaktif', lines: [{ account: '1-1100', debit: 1000, credit: 0, bankAccountId: bankCode }, { account: '2-1100', debit: 0, credit: 1000 }] }) });
+  const jBank = await call('/ledger/journals', { method: 'POST', token: sariX, branch: 'CKR', body: JSON.stringify({ date: '2026-09-10', branch: 'CKR', description: 'Uji rekening nonaktif', lines: [{ account: cBank.body.glAccountCode, debit: 1000, credit: 0 }, { account: '2-1101', debit: 0, credit: 1000 }] }) });
   ok(jBank.status === 422 && /nonaktif/.test(JSON.stringify(jBank.body)), 'jurnal ke rekening nonaktif ditolak', jBank.body);
   const delBank = await call(`/ledger/bank-accounts/${bankCode}`, { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji hapus' }) });
-  ok(delBank.status === 200, 'rekening yang belum dipakai dapat dihapus', delBank.body);
+  ok(delBank.status === 200 && !(await call('/ledger/accounts', { token: admin, branch: 'ALL' })).body.accounts.some((a: any) => a.code === cBank.body.glAccountCode), 'rekening yang belum dipakai dapat dihapus (akun bukunya ikut terhapus)', delBank.body);
   const jktBranch = (await call('/branches', { token: admin })).body.find((b: any) => b.code === 'JKT');
   const delMain = await call(`/ledger/bank-accounts/${jktBranch.mainBankAccountId}`, { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
   ok(delMain.status === 422 && delMain.body.error.code === 'BANK_IS_BRANCH_MAIN', 'rekening utama cabang tidak dapat dihapus', delMain.body);
@@ -303,6 +332,16 @@ async function main() {
   const settingsRead = await call('/settings', { token: andi });
   ok(settingsRead.status === 200 && settingsRead.body.baseCurrency === 'IDR' && typeof settingsRead.body.policies.salesApprovalThreshold === 'number', 'pengaturan dapat dibaca', settingsRead.body);
   ok((await call('/settings', { method: 'PATCH', token: andi, body: JSON.stringify({ npwp: '01.234.567.8-052.000' }) })).status === 403, 'tanpa admin.settings.manage tidak dapat mengubah pengaturan');
+  ok(settingsRead.body.accountLinks?.ar === '1-1301' && settingsRead.body.accountLinks?.salesGoods === '4-1101', 'pemetaan akun bawaan tersedia', settingsRead.body.accountLinks);
+  const linkHdr = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ accountLinks: { ar: '1-1300' }, reason: 'uji' }) });
+  ok(linkHdr.status === 422 && /header/.test(linkHdr.body.error.message), 'header tidak dapat ditautkan di pemetaan akun', linkHdr.body);
+  const linkCat = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ accountLinks: { ar: '2-1101' }, reason: 'uji' }) });
+  ok(linkCat.status === 422 && /kategori/.test(linkCat.body.error.message), 'pemetaan akun memeriksa kategori', linkCat.body);
+  const linkNoReason = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ accountLinks: { salesService: '4-2101' } }) });
+  ok(linkNoReason.status === 422 && linkNoReason.body.error.code === 'REASON_REQUIRED', 'perubahan pemetaan akun wajib beralasan', linkNoReason.body);
+  const linkOk = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ accountLinks: { salesService: '4-2101' }, reason: 'uji pemetaan' }) });
+  const linkBack = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ accountLinks: { salesService: '4-1201' }, reason: 'kembalikan' }) });
+  ok(linkOk.status === 200 && linkOk.body.accountLinks.salesService === '4-2101' && linkBack.body.accountLinks.salesService === '4-1201', 'pemetaan akun detail dapat diubah & dikembalikan', linkOk.body?.accountLinks);
   const sp = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ npwp: '01.234.567.8-052.000', address: 'Jl. Industri Raya No. 42, Cikarang', phone: '021-555-0000', policies: { salesApprovalThreshold: 200000000, allowPartialShipment: true } }) });
   ok(sp.status === 200 && sp.body.npwp === '01.234.567.8-052.000' && sp.body.policies.salesApprovalThreshold === 200000000 && sp.body.policies.allowPartialShipment === true && sp.body.policies.blockOverCreditLimit === true, 'profil & kebijakan disimpan (kebijakan lain tetap)', sp.body);
   const badMail = await call('/settings', { method: 'PATCH', token: admin, body: JSON.stringify({ email: 'bukan-email' }) });
@@ -397,7 +436,7 @@ async function main() {
     ok(JSON.stringify(rules) === JSON.stringify(['SALES_COGS', 'SALES_INVOICE']), 'jurnal penjualan & HPP diposting otomatis', rules);
     const jSales = await call(`/ledger/journals/${iss.body.journals.find((j: any) => j.rule === 'SALES_INVOICE').id}`, { token: andi, branch: 'ALL' });
     const amt = (acc: string, side: 'debit' | 'credit') => jSales.body.lines.filter((l: any) => l.account === acc).reduce((t: number, l: any) => t + l[side], 0);
-    ok(jSales.body.status === 'posted' && amt('1-1200', 'debit') === iss.body.total && amt('4-1000', 'credit') === 10 * braket.price && amt('4-2000', 'credit') === 4_500_000 && amt('2-1400', 'credit') === iss.body.ppn,
+    ok(jSales.body.status === 'posted' && amt('1-1301', 'debit') === iss.body.total && amt('4-1101', 'credit') === 10 * braket.price && amt('4-1201', 'credit') === 4_500_000 && amt('2-1401', 'credit') === iss.body.ppn,
       'jurnal: Dr piutang total; Cr pendapatan barang, jasa, PPN keluaran', jSales.body.lines);
     const prods2 = (await call('/sales/products', { token: sari, branch: 'ALL' })).body;
     ok(stockCkr(prods2.find((p: any) => p.sku === 'BRG-1108')) === stock0 - 10, 'stok cabang berkurang saat faktur terbit', [stock0, stockCkr(prods2.find((p: any) => p.sku === 'BRG-1108'))]);

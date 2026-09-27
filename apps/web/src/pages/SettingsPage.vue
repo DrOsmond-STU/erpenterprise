@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { ACCOUNT_LINK_DEFS, linkProblem } from '@erp/domain';
 import { get, patch } from '@/lib/api';
 import { errorList } from '@/lib/errors';
 import * as F from '@/lib/format';
@@ -18,20 +19,29 @@ const { data, loading, reload } = useLoader<any>(() => get('/settings', { scoped
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 const blank = () => ({ name: '', npwp: '', address: '', phone: '', email: '', website: '', fiscalYearStartMonth: 1,
-  policies: { salesApprovalThreshold: 0, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true } });
+  policies: { salesApprovalThreshold: 0, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true },
+  accountLinks: {} as Record<string, string> });
+/* Pemetaan akun: pilihan hanya akun detail yang lolos aturan tautan (bukan header). */
+const { data: coa } = useLoader<any>(() => (session.can('ledger.account.read') ? get('/ledger/accounts') : Promise.resolve({ accounts: [] })));
+const accountsBy = computed(() => new Map<string, any>((coa.value?.accounts ?? []).map((a: any) => [a.code, a])));
+const optionsFor = (d: (typeof ACCOUNT_LINK_DEFS)[number]) => (coa.value?.accounts ?? []).filter((a: any) => !linkProblem(d, a));
+const linkGroups = [...new Set(ACCOUNT_LINK_DEFS.map((d) => d.group))];
+const linkReason = ref('');
 const form = ref(blank());
 function fill() {
   const d = data.value; if (!d) return;
   form.value = { name: d.name ?? '', npwp: d.npwp ?? '', address: d.address ?? '', phone: d.phone ?? '', email: d.email ?? '', website: d.website ?? '',
-    fiscalYearStartMonth: d.fiscalYearStartMonth ?? 1, policies: { ...d.policies } };
+    fiscalYearStartMonth: d.fiscalYearStartMonth ?? 1, policies: { ...d.policies }, accountLinks: { ...d.accountLinks } };
+  linkReason.value = '';
 }
 watch(data, fill, { immediate: true });
 const dirty = computed(() => {
   const d = data.value; if (!d) return false;
   const f = form.value;
   return ['name', 'npwp', 'address', 'phone', 'email', 'website'].some((k) => (f as any)[k] !== ((d as any)[k] ?? ''))
-    || f.fiscalYearStartMonth !== d.fiscalYearStartMonth || JSON.stringify(f.policies) !== JSON.stringify(d.policies);
+    || f.fiscalYearStartMonth !== d.fiscalYearStartMonth || JSON.stringify(f.policies) !== JSON.stringify(d.policies) || linksDirty.value;
 });
+const linksDirty = computed(() => Boolean(data.value) && ACCOUNT_LINK_DEFS.some((x) => form.value.accountLinks[x.key] !== data.value.accountLinks?.[x.key]));
 const threshold = computed({
   get: () => F.int(form.value.policies.salesApprovalThreshold),
   set: (v: string) => { form.value.policies.salesApprovalThreshold = Number(String(v).replace(/\D/g, '').slice(0, 13)) || 0; },
@@ -41,7 +51,8 @@ const busy = ref(false);
 async function save() {
   errors.value = []; busy.value = true;
   try {
-    await patch('/settings', form.value);
+    const { accountLinks, ...rest } = form.value;
+    await patch('/settings', linksDirty.value ? { ...rest, accountLinks, reason: linkReason.value } : rest);
     toast.push('Pengaturan disimpan', 'Profil perusahaan dan kebijakan dokumen diperbarui.', 'ok');
     await Promise.all([reload(), session.loadMe()]);
   } catch (e) { errors.value = errorList(e); } finally { busy.value = false; }
@@ -93,6 +104,22 @@ async function save() {
             <div class="field"><label for="set-currency">Mata uang dasar</label><input id="set-currency" class="input" :value="data.baseCurrency" disabled><span class="field-hint">Tetap; semua buku besar dalam {{ data.baseCurrency }}.</span></div>
             <div class="field"><label for="set-fy">Awal tahun buku</label><select id="set-fy" v-model.number="form.fiscalYearStartMonth" class="select"><option v-for="(m, i) in MONTHS" :key="m" :value="i + 1">{{ m }}</option></select>
               <span class="field-hint">Berlaku untuk tahun buku berikutnya yang dibuat.</span></div>
+          </fieldset>
+        </article>
+        <article class="card" data-account-links>
+          <div class="card-head"><div class="card-head-text"><h2 class="card-title"><Icon name="link" /> Pemetaan akun</h2><span class="card-note">Akun detail yang dipakai posting otomatis (faktur, penerimaan, HPP, konsolidasi). Header tidak dapat ditautkan.</span></div></div>
+          <fieldset class="card-body" :disabled="!canManage" style="border:0;margin:0">
+            <template v-for="g in linkGroups" :key="g">
+              <span class="section-title" style="margin-top:var(--sp-2)">{{ g }}</span>
+              <div v-for="d in ACCOUNT_LINK_DEFS.filter((x) => x.group === g)" :key="d.key" class="setting-row">
+                <div class="setting-text"><span class="setting-name">{{ d.label }}</span><span class="setting-note">{{ d.note }}</span></div>
+                <div class="setting-control"><select v-model="form.accountLinks[d.key]" class="select" style="min-width:260px" :data-link="d.key" :aria-label="d.label">
+                  <option v-if="form.accountLinks[d.key] && !optionsFor(d).some((a: any) => a.code === form.accountLinks[d.key])" :value="form.accountLinks[d.key]">{{ form.accountLinks[d.key] }} · {{ accountsBy.get(form.accountLinks[d.key])?.name ?? '?' }}</option>
+                  <option v-for="a in optionsFor(d)" :key="a.code" :value="a.code">{{ a.code }} · {{ a.name }}</option>
+                </select></div>
+              </div>
+            </template>
+            <div v-if="linksDirty" class="field" style="margin-top:var(--sp-3)"><label for="link-reason">Alasan perubahan pemetaan (wajib, tercatat di jejak audit)</label><input id="link-reason" v-model="linkReason" class="input" maxlength="300" placeholder="Mis. pendapatan jasa dipisah per jenis layanan"></div>
           </fieldset>
         </article>
         <article class="card">

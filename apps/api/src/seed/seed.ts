@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pg from 'pg';
-import { fromPrototype, ROLE_TEMPLATES } from '@erp/domain';
+import { LEGACY_ACCOUNT_MAP, LEGACY_CASH_ACCOUNT, ROLE_TEMPLATES, STANDARD_COA } from '@erp/domain';
 import { AuthService } from '../auth/auth.service.js';
 import { seedSales } from './sales-seed.js';
 import { loadConfig } from '../config.js';
@@ -61,15 +61,18 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
       await c.query(`INSERT INTO fiscal_periods (company_id, code, label, date_from, date_to, period_group, status) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [company, p.id, p.label, p.from, p.to, p.group ?? 'Bulan', p.closed ? 'closed' : 'open']);
     }
-    for (const raw of DATA.chartOfAccounts) {
-      const a = fromPrototype(raw);
+    /* COA bertingkat standar (header 1–3, detail 4–5); purwarupa berstruktur lama dipetakan di bawah. */
+    for (const a of STANDARD_COA) {
       await c.query(`INSERT INTO chart_of_accounts (company_id, code, name, type, category, parent_code, level, normal_side, is_intercompany, is_contra, is_cash, is_computed, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [company, a.code, a.name, a.type, a.category, a.parentCode, a.level, a.normalSide, a.isIntercompany, a.isContra, a.isCash, a.isComputed, a.status]);
     }
-    for (const k of DATA.bankAccounts) {
+    /* Urut kode: trigger memberi tiap rekening akun detail di bawah Bank/Kas secara berurutan. */
+    const bankGl: Record<string, string> = {};
+    for (const k of [...DATA.bankAccounts].sort((x: any, y: any) => x.id.localeCompare(y.id))) {
       const masked = k.accountNo && k.accountNo !== '—' ? `****${k.accountNo.replace(/\D/g, '').slice(-4)}` : '—';
       await c.query(`INSERT INTO bank_accounts (company_id, branch_code, code, name, bank_name, account_no_masked, currency, opening_balance, opening_date, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'2026-01-01',$9)`,
         [company, k.branch, k.id, k.name, k.bank, masked, k.currency, k.opening, k.status]);
+      bankGl[k.id] = (await c.query('SELECT gl_account_code FROM bank_accounts WHERE company_id = $1 AND code = $2', [company, k.id])).rows[0].gl_account_code;
     }
 
     /* Peran & pengguna dev (K-11: pembatasan cabang berbeda-beda) */
@@ -112,7 +115,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
       for (const l of j.lines) {
         ln += 1;
         await c.query(`INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, counter_branch) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [ins.rows[0].id, company, j.branch, j.date, ln, l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.interBranch ?? null]);
+          [ins.rows[0].id, company, j.branch, j.date, ln, l.account === LEGACY_CASH_ACCOUNT ? bankGl[l.bank] : LEGACY_ACCOUNT_MAP[l.account] ?? l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.interBranch ?? null]);
       }
       n += 1;
     }
@@ -125,7 +128,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
     }
     for (const a of DATA.payables) {
       await c.query(`INSERT INTO ap_invoices (company_id, branch_code, doc_no, supplier_name, po_ref, kind, expense_account_code, invoice_date, due_date, total_gross, paid_amount, paid_date, bank_account_code, three_way_matched, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-        [company, a.branch, a.id, a.supplier, a.poRef, a.kind === 'jasa' ? 'service' : 'goods', a.account ?? null, a.date, a.dueDate, a.amount, a.paid, a.paidDate ?? null, a.bank ?? null, a.matched, a.status]);
+        [company, a.branch, a.id, a.supplier, a.poRef, a.kind === 'jasa' ? 'service' : 'goods', a.account ? LEGACY_ACCOUNT_MAP[a.account] ?? a.account : null, a.date, a.dueDate, a.amount, a.paid, a.paidDate ?? null, a.bank ?? null, a.matched, a.status]);
     }
     for (const s of DATA.stockItems) {
       await c.query(`INSERT INTO stock_items (company_id, branch_code, warehouse_code, sku, name, category, uom, on_hand, min_qty, max_qty, avg_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
@@ -133,7 +136,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
     }
     for (const a of DATA.assets) {
       await c.query(`INSERT INTO assets (company_id, branch_code, code, name, category, gl_account_code, acquisition_date, acquisition_cost, book_value, monthly_depreciation, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [company, a.branch, a.id, a.name, a.category, a.account, a.acquisitionDate, a.acquisitionCost, a.bookValue, a.monthlyDepr, a.status]);
+        [company, a.branch, a.id, a.name, a.category, LEGACY_ACCOUNT_MAP[a.account] ?? a.account, a.acquisitionDate, a.acquisitionCost, a.bookValue, a.monthlyDepr, a.status]);
     }
     for (const p of DATA.payroll) {
       await c.query(`INSERT INTO payslips (company_id, branch_code, doc_no, employee_code, employee_name, dept, period_code, basic, allowance, overtime, deduction, net_pay, status) VALUES ($1,$2,$3,$4,$5,$6,'2026-08',$7,$8,$9,$10,$11,$12)`,

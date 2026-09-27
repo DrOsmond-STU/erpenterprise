@@ -10,7 +10,7 @@ import { ReportsService } from './reports.service.js';
 const listQuery = z.object({
   status: z.enum(['draft', 'pending', 'posted', 'rejected', 'reversed']).optional(),
   source: z.string().regex(/^[a-z_-]{2,30}$/).optional(),
-  account: z.string().regex(/^\d-\d{4}$/).optional(),
+  account: z.string().regex(/^[1-5]-\d{4}(\.\d{2})?$/).optional(),
   q: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(25),
@@ -20,10 +20,10 @@ const reverseSchema = z.object({ reason: z.string().trim().min(3).max(300), date
 const cardQuery = z.object({ bank: z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() });
 const tbQuery = z.object({ by_branch: z.enum(['true', 'false']).optional() });
 const accountCreate = z.object({
-  code: z.string().trim().regex(/^\d-\d{4}$/, 'Kode akun berformat 9-9999'),
+  code: z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode akun berformat 9-9999 (level 1–4) atau 9-9999.99 (level 5)'),
   name: z.string().trim().min(3).max(120),
   type: z.enum(['header', 'detail']),
-  parentCode: z.string().trim().regex(/^\d-\d{4}$/, 'Kode induk berformat 9-9999'),
+  parentCode: z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode induk tidak sah').optional(),
   isContra: z.boolean().optional(),
 });
 const accountPatch = z.object({ name: z.string().trim().min(3).max(120).optional(), status: z.enum(['aktif', 'nonaktif']).optional(), reason: z.string().trim().min(3).max(300) });

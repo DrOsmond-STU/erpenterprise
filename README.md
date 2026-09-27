@@ -85,6 +85,32 @@ konsolidasi yang seimbang, rekonsiliasi sub-buku dan rantai audit, serta
 pengelolaan pengguna, peran & pengaturan (kata sandi sementara, wajib ganti,
 penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran).
 
+## Bagan akun bertingkat
+
+| Level | Pola kode | Tipe | Contoh | Tampil di |
+| --- | --- | --- | --- | --- |
+| 1 | `9-0000` | header | 1-0000 Aset | neraca, laba rugi |
+| 2 | `9-9000` | header | 1-1000 Aset Lancar | neraca, laba rugi (seksi & subtotal) |
+| 3 | `9-9900` | header | 1-1100 Bank, 1-1200 Kas | neraca, laba rugi (baris) |
+| 4 | `9-9999` | detail (atau header pengelompok) | 1-1101 BCA — Giro Operasional | neraca saldo, kartu buku besar |
+| 5 | `9-9999.99` | detail | 1-1101.01 | neraca saldo, kartu buku besar |
+
+- Induk ditentukan pola kode (1-1101 → 1-1100 → 1-1000 → 1-0000); basis data
+  menolak detail di level 1–3 dan header di level 5.
+- **Hanya akun detail** yang menerima jurnal, tampil di neraca saldo & kartu buku
+  besar, dan dapat **ditautkan** ke fitur lain. Neraca & laba rugi menjumlahkan
+  detail ke header level 3.
+- Setiap rekening di **Kas & Bank** otomatis mendapat akun detail sendiri di
+  bawah header 1-1100 Bank (atau 1-1200 Kas untuk rekening berjenis "Kas"); jurnal
+  cukup memilih akun tersebut, rekening sub-bukunya diturunkan otomatis.
+- **Pengaturan → Pemetaan akun** menentukan akun detail untuk posting otomatis
+  (piutang, pendapatan barang/jasa, PPN, HPP, persediaan, utang, RK antar
+  kantor, laba berjalan/ditahan). Header ditolak; perubahan wajib beralasan.
+  Akun yang ditautkan tidak dapat dinonaktifkan atau dihapus.
+- Migrasi `0005_coa_levels.sql` memindahkan data lama (struktur level 0–2) ke
+  struktur ini: tiap akun detail lama menjadi header level 3 + detail `…01`,
+  dan baris "Kas & Setara Kas" dipecah ke akun tiap rekening. Saldo tidak berubah.
+
 ## CRUD & paginasi
 
 | Data | Tambah | Ubah | Nonaktif/aktif | Hapus | Izin |

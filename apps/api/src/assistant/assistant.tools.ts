@@ -128,12 +128,12 @@ export const TOOLS: ToolDef[] = [
       description: 'Kartu buku besar satu akun detail: saldo awal, mutasi debit/kredit, saldo berjalan, dan saldo akhir. Baris dibatasi 80 mutasi terakhir; total tetap mencakup seluruh periode.',
       input_schema: {
         type: 'object',
-        properties: { kode_akun: { type: 'string', description: 'Kode akun detail berformat 9-9999, mis. 1-1100 (kas), 1-1200 (piutang usaha), 4-1100 (penjualan).' }, rekening_bank: { type: 'string', description: 'Opsional: kode rekening bank untuk menyaring mutasi kas/bank.' }, ...scopeProps },
+        properties: { kode_akun: { type: 'string', description: 'Kode akun DETAIL (level 4/5) berformat 9-9999, mis. 1-1101 (rekening bank pertama), 1-1301 (piutang usaha), 4-1101 (pendapatan penjualan). Header (level 1–3, mis. 1-1100 Bank) tidak punya kartu buku besar; pakai alat bagan_akun untuk mencari detailnya.' }, rekening_bank: { type: 'string', description: 'Opsional: kode rekening bank untuk menyaring mutasi kas/bank.' }, ...scopeProps },
         required: ['kode_akun'], additionalProperties: false,
       },
     },
     run: async ({ reports }, c, input) => {
-      const i = scopeInput.extend({ kode_akun: z.string().regex(/^\d-\d{4}$/), rekening_bank: z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() }).parse(input);
+      const i = scopeInput.extend({ kode_akun: z.string().regex(/^[1-5]-\d{4}(\.\d{2})?$/), rekening_bank: z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() }).parse(input);
       const r: any = await reports.ledgerCard(c.user, scopeFor(c.user, c.scope, i), i.kode_akun, i.rekening_bank ?? null, c.requestId);
       const lines = r.lines.slice(-80).map((l: any) => ({ tanggal: l.date, jurnal: l.journal_no, uraian: l.description, ref: l.ref, sumber: l.source, cabang: l.branch, debit: l.debit, kredit: l.credit, saldo: l.balance }));
       return { period: periodOf(r.period), scope: r.scope, account: r.account, opening: r.opening, debit: r.debit, credit: r.credit, ending: r.ending, jumlahMutasi: r.lines.length, mutasiTerakhir: lines };

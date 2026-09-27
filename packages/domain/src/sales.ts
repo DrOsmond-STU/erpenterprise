@@ -5,12 +5,6 @@
 import { PPN_RATE, round } from './money.js';
 import type { Rupiah } from './types.js';
 
-export const REVENUE_GOODS = '4-1000';
-export const REVENUE_SERVICE = '4-2000';
-export const PPN_OUT = '2-1400';
-export const COGS_ACCOUNT = '5-1000';
-export const FINISHED_GOODS = '1-1500';
-export const RAW_MATERIALS = '1-1400';
 
 export type ItemKind = 'barang' | 'jasa';
 export interface SalesLineInput { qty: number; price: Rupiah; discPct?: number; kind: ItemKind }

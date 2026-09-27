@@ -28,7 +28,8 @@ const { data: bs } = useLoader(() => get('/reports/balance-sheet'));
 const idr = computed(() => (data.value?.accounts ?? []).filter((a: any) => a.currency === 'IDR'));
 const totalIDR = computed(() => idr.value.reduce((s: number, a: any) => s + a.balance, 0));
 const petty = computed(() => idr.value.filter((a: any) => a.bankName === 'Kas'));
-const gl = computed(() => bs.value?.assets.find((a: any) => a.code === '1-1100')?.amount ?? 0);
+/* Header Bank (1-1100) + Kas (1-1200) di neraca = Σ akun detail rekening. */
+const gl = computed(() => (bs.value?.assets ?? []).filter((a: any) => a.code === '1-1100' || a.code === '1-1200').reduce((t: number, a: any) => t + a.amount, 0));
 
 /* Saringan + paginasi */
 const q = ref('');
@@ -96,7 +97,7 @@ async function confirm(reason: string) {
     <div class="kpi-row" style="margin-bottom:var(--sp-4)">
       <KpiTile label="Total saldo IDR" :value="F.rpCompact(totalIDR)" :foot="`${idr.length} rekening`" />
       <KpiTile label="Kas kecil" :value="F.rpCompact(petty.reduce((s: number, a: any) => s + a.balance, 0))" :foot="`${petty.length} lokasi`" />
-      <KpiTile label="Buku besar 1-1100" :value="F.rpCompact(gl)" :foot="Math.abs(gl - totalIDR) < 1 ? 'Cocok dengan sub-buku bank' : `Selisih ${F.rpCompact(gl - totalIDR)}`" :tone="Math.abs(gl - totalIDR) < 1 ? '' : 'neg'" />
+      <KpiTile label="Buku besar Bank + Kas" :value="F.rpCompact(gl)" :foot="Math.abs(gl - totalIDR) < 1 ? 'Cocok dengan sub-buku bank' : `Selisih ${F.rpCompact(gl - totalIDR)}`" :tone="Math.abs(gl - totalIDR) < 1 ? '' : 'neg'" />
       <KpiTile label="Per tanggal" :value="F.date(data.period.to)" :foot="ctx.periodLabel" />
     </div>
     <article class="card">
@@ -105,10 +106,10 @@ async function confirm(reason: string) {
         <select v-model="status" class="select" style="width:auto" aria-label="Saring status"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select>
       </div>
       <div class="table-scroll"><table class="table" data-table="banks">
-        <thead><tr><th>Kode</th><th>Nama rekening</th><th>Cabang</th><th>Mata uang</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>Kode · akun</th><th>Nama rekening</th><th>Cabang</th><th>Mata uang</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
         <tbody>
-          <tr v-for="a in pg.pageRows.value" :key="a.code" :data-bank="a.code" @click="router.push({ path: '/buku-besar', query: { akun: '1-1100', rekening: a.code } })">
-            <td class="code">{{ a.code }}</td><td><span class="cell-strong">{{ a.name }}</span><span class="cell-sub">{{ a.bankName }} · {{ a.accountNoMasked ?? '—' }}</span></td><td><BranchTag :code="a.branchCode" /></td><td>{{ a.currency }}</td>
+          <tr v-for="a in pg.pageRows.value" :key="a.code" :data-bank="a.code" @click="router.push({ path: '/buku-besar', query: { akun: a.glAccountCode } })">
+            <td><span class="code cell-strong">{{ a.code }}</span><span class="cell-sub">akun <span class="code">{{ a.glAccountCode }}</span></span></td><td><span class="cell-strong">{{ a.name }}</span><span class="cell-sub">{{ a.bankName }} · {{ a.accountNoMasked ?? '—' }}</span></td><td><BranchTag :code="a.branchCode" /></td><td>{{ a.currency }}</td>
             <td class="ta-r num">{{ a.currency === 'IDR' ? F.rpCompact(a.balance) : `${a.currency} ${F.int(a.balance)}` }}</td><td><Pill :status="a.status" /></td>
             <td v-if="canManage" @click.stop>
               <div class="row-actions">

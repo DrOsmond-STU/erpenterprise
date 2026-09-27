@@ -9,7 +9,7 @@
  */
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import { addDays, aging, AR_ACCOUNT, CASH_ACCOUNT, COGS_ACCOUNT, daysBetween, FINISHED_GOODS, invoiceStatus, overdueDays, PPN_OUT, RAW_MATERIALS, REVENUE_GOODS, REVENUE_SERVICE } from '@erp/domain';
+import { addDays, aging, daysBetween, invoiceStatus, overdueDays } from '@erp/domain';
 import { AuditService } from '../audit/audit.service.js';
 import type { RequestUser, ScopeContext } from '../common/context.js';
 import { conflict, DomainError, forbidden, notFound } from '../common/errors.js';
@@ -142,6 +142,7 @@ export class InvoicesService {
       const lines = (await c.query('SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_no', [id])).rows;
       if (!lines.length) throw invalid('SALES_NO_LINES', 'Faktur tanpa baris tidak dapat diterbitkan.');
 
+      const links = await this.refs.links(c, u.companyId);   // akun posting dari Pengaturan → Pemetaan akun
       /* HPP: keluarkan stok dari gudang cabang faktur dengan harga pokok rata-rata. */
       const cogsByAccount = new Map<string, number>();
       const errs: string[] = [];
@@ -159,7 +160,7 @@ export class InvoicesService {
         await c.query(`INSERT INTO stock_moves (company_id, branch_code, warehouse_code, sku, move_date, qty, unit_cost, ref_type, ref_id, ref_no, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,'invoice',$8,$9,$10)`,
           [u.companyId, branch, st.warehouse_code, l.sku, i.invoice_date, -qty, st.avg_cost, id, i.doc_no, u.id]);
         await c.query('UPDATE invoice_lines SET cost_amount = $2 WHERE id = $1', [l.id, cost]);
-        const acct = st.category === 'Barang jadi' ? FINISHED_GOODS : RAW_MATERIALS;
+        const acct = st.category === 'Barang jadi' ? links.invFinished : links.invRaw;
         cogsByAccount.set(acct, (cogsByAccount.get(acct) ?? 0) + cost);
       }
       if (errs.length) throw invalid('STOCK_INSUFFICIENT', errs[0], errs);
@@ -170,9 +171,9 @@ export class InvoicesService {
       const j1 = await postAutoJournal(c, u, {
         branch, date: i.invoice_date, source: 'invoice', sourceId: id, rule: 'SALES_INVOICE', ref: i.doc_no, description: `Faktur ${i.doc_no} — ${cust.name}`,
         lines: [
-          { account: AR_ACCOUNT, debit: i.total_gross, credit: 0, party },
-          { account: REVENUE_GOODS, debit: 0, credit: goods }, { account: REVENUE_SERVICE, debit: 0, credit: service },
-          { account: PPN_OUT, debit: 0, credit: i.ppn_amount },
+          { account: links.ar, debit: i.total_gross, credit: 0, party },
+          { account: links.salesGoods, debit: 0, credit: goods }, { account: links.salesService, debit: 0, credit: service },
+          { account: links.ppnOut, debit: 0, credit: i.ppn_amount },
         ],
       });
       const cogs = [...cogsByAccount.values()].reduce((t, v) => t + v, 0);
@@ -180,7 +181,7 @@ export class InvoicesService {
       if (cogs > 0) {
         j2 = await postAutoJournal(c, u, {
           branch, date: i.invoice_date, source: 'invoice', sourceId: id, rule: 'SALES_COGS', ref: i.doc_no, description: `HPP faktur ${i.doc_no}`,
-          lines: [{ account: COGS_ACCOUNT, debit: cogs, credit: 0 }, ...[...cogsByAccount].map(([account, v]) => ({ account, debit: 0, credit: v }))],
+          lines: [{ account: links.cogs, debit: cogs, credit: 0 }, ...[...cogsByAccount].map(([account, v]) => ({ account, debit: 0, credit: v }))],
         });
       }
       await c.query(`UPDATE invoices SET status = 'belum-dibayar', cogs_amount = $2, issued_by = $3, issued_by_name = $4, issued_at = now(), updated_at = now() WHERE id = $1`, [id, cogs, u.id, u.name]);
@@ -203,6 +204,8 @@ export class InvoicesService {
       if (!bank) throw invalid('BANK_UNKNOWN', `Rekening ${b.bankAccount} tidak dikenal.`);
       if (trimBranch(bank.branch_code) !== branch) throw invalid('BANK_BRANCH', `Rekening ${bank.code} milik cabang ${trimBranch(bank.branch_code)}, bukan cabang faktur ${branch}.`);
       if (bank.status !== 'aktif' || bank.currency !== 'IDR') throw invalid('BANK_INACTIVE', `Rekening ${bank.code} nonaktif atau berdenominasi valas.`);
+      if (!bank.gl_account_code) throw invalid('BANK_NO_ACCOUNT', `Rekening ${bank.code} belum memiliki akun buku besar.`);
+      const links = await this.refs.links(c, u.companyId);
       const docNo = await nextDocNo(c, u.companyId, 'RCV', Number(date.slice(0, 4)));
       const r = (await c.query(
         `INSERT INTO receipts (company_id, branch_code, doc_no, receipt_date, invoice_id, customer_id, amount, bank_account_code, method, reference, created_by, created_by_name)
@@ -210,7 +213,7 @@ export class InvoicesService {
         [u.companyId, branch, docNo, date, id, i.customer_id, b.amount, bank.code, b.method ?? 'transfer', b.reference ?? null, u.id, u.name])).rows[0];
       const j = await postAutoJournal(c, u, {
         branch, date, source: 'receipt', sourceId: r.id, rule: 'SALES_RECEIPT', ref: i.doc_no, description: `Penerimaan ${docNo} — ${i.customer_name} (${i.doc_no})`,
-        lines: [{ account: CASH_ACCOUNT, debit: b.amount, credit: 0, bank: bank.code }, { account: AR_ACCOUNT, debit: 0, credit: b.amount, party: i.customer_name }],
+        lines: [{ account: bank.gl_account_code, debit: b.amount, credit: 0, bank: bank.code }, { account: links.ar, debit: 0, credit: b.amount, party: i.customer_name }],
       });
       await c.query('UPDATE receipts SET journal_id = $2 WHERE id = $1', [r.id, j.id]);
       const paid = i.paid_amount + b.amount;
@@ -290,7 +293,7 @@ export class InvoicesService {
         `SELECT coalesce(sum(amount),0)::bigint AS v FROM receipts WHERE company_id = $1 AND receipt_date BETWEEN $2 AND $3 AND ($4::text IS NULL OR branch_code = $4)`,
         [u.companyId, period.from, asOf, b])).rows[0].v);
       const bal = await this.refs.balances(c, u.companyId, b, period.from, asOf);
-      const gl = bal[AR_ACCOUNT]?.ending ?? 0;
+      const gl = bal[(await this.refs.links(c, u.companyId)).ar]?.ending ?? 0;
       return {
         asOf, period, scope: s.branch,
         kpi: { total, overdue, overduePct: total ? overdue / total : 0, count: open.length, dso: sales90 ? Math.round((total / sales90) * 90) : 0, collected, ledger: gl, reconciled: Math.abs(gl - total) < 1 },

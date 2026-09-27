@@ -79,7 +79,7 @@ const isOwn = () => j.value?.createdBy === session.user?.id;
         <button class="btn btn-danger" :disabled="busy || reason.length < 3" @click="act('reject')"><Icon name="x" /> Tolak</button>
       </template>
       <button v-else-if="j?.status === 'posted' && session.can('ledger.journal.reverse')" class="btn" :disabled="busy || reason.length < 3" @click="act('reverse')">Buat jurnal balik</button>
-      <button v-if="j" class="btn" @click="openCard(j.lines[0]?.account ?? '1-1100')"><Icon name="book" /> Kartu buku besar</button>
+      <button v-if="j" class="btn" @click="openCard(j.lines[0]?.account ?? '')"><Icon name="book" /> Kartu buku besar</button>
       <div class="toolbar-spacer"></div>
       <button class="btn btn-ghost" @click="emit('close')">Tutup</button>
     </template>

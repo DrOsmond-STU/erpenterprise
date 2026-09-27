@@ -55,6 +55,8 @@ export interface BankAccount {
   branchCode: string;
   currency: string;
   openingBalance: Rupiah;
+  /** Akun detail buku besar milik rekening ini (di bawah header Bank/Kas). */
+  glAccountCode?: string | null;
 }
 
 export type JournalStatus = 'draft' | 'pending' | 'posted' | 'rejected' | 'reversed';
@@ -130,7 +132,9 @@ export interface TrialBalance {
   balanced: boolean;
 }
 
+/** Baris laporan = header level 3 (jumlah seluruh detail di bawahnya); parentCode = header level 2. */
 export interface ReportLine { code: string; name: string; amount: Rupiah; parentCode?: string | null; interco?: boolean }
+export interface ReportSection { code: string; name: string; category: AccountCategory }
 
 export interface IncomeStatement {
   groups: { id: string; label: string; rows: ReportLine[] }[];
@@ -141,6 +145,8 @@ export interface IncomeStatement {
 
 export interface BalanceSheet {
   asOf: ISODate;
+  /** Header level 2 yang memiliki baris, urut kode (Aset Lancar, Aset Tetap, …). */
+  sections: ReportSection[];
   assets: ReportLine[];
   liabilities: ReportLine[];
   equity: ReportLine[];
@@ -154,7 +160,8 @@ export interface ConsolidationColumn<T> { branch: string; label: string; report:
 export interface Consolidation<T> {
   columns: ConsolidationColumn<T>[];
   combined: T;
-  eliminations: { code: string; name: string; amount: Rupiah }[];
+  /** code = akun detail antar kantor; lineCode = baris laporan (header level 3) tempatnya tampil. */
+  eliminations: { code: string; name: string; amount: Rupiah; lineCode: string }[];
 }
 
 export interface ReconciliationCheck {

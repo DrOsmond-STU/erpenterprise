@@ -18,8 +18,14 @@ describe('golden dataset purwarupa', () => {
       const tb = trialBalance(accounts, bal);
       const ref = Ledger.trialBalance({ branch, period: pid });
       expect(tb.balanced).toBe(true);
-      expect(tb.totals).toEqual(ref.totals);
-      expect(tb.rows.map((r) => r.code)).toEqual(ref.rows.map((r: any) => r.code));
+      /* Kas & setara kas kini dirinci per rekening; total mutasi tetap identik. */
+      expect(tb.totals.debit).toBe(ref.totals.debit);
+      expect(tb.totals.credit).toBe(ref.totals.credit);
+      expect(tb.totals.endD - tb.totals.endK).toBe(ref.totals.endD - ref.totals.endK);
+      expect(tb.rows.every((r) => accounts.get(r.code)?.type === 'detail' && accounts.get(r.code)!.level >= 4)).toBe(true);
+      const cashRef = ref.rows.find((r: any) => r.code === '1-1100');
+      const cashNew = tb.rows.filter((r) => r.code.startsWith('1-11') || r.code.startsWith('1-12')).reduce((t, r) => t + r.end.d - r.end.k, 0);
+      expect(cashNew).toBe(cashRef ? cashRef.end.d - cashRef.end.k : 0);
     });
     it(`laba rugi & neraca ${branch} ${pid} sama dengan purwarupa`, () => {
       const p = period(pid);
@@ -42,10 +48,11 @@ describe('golden dataset purwarupa', () => {
     const p = period('2026-08');
     const perBranch = DATA.branches.map((b: any) => ({ branch: b.id, label: b.short, balances: balancesFromLines(scoped(b.id), p.from, p.to) }));
     const cons = consolidate(accounts, perBranch, (bal) => balanceSheet(accounts, bal, p.to));
-    expect(cons.eliminations.map((e) => e.code).sort()).toEqual(['1-3100', '3-1500']);
+    expect(cons.eliminations.map((e) => e.code).sort()).toEqual(['1-3101', '3-1501']);
+    expect(cons.eliminations.map((e) => e.lineCode).sort()).toEqual(['1-3100', '3-1500']);
     const combined = balancesFromLines(lines, p.from, p.to);
     expect(intercompanyMismatch(accounts, combined)).toBe(0);
-    const elim = cons.eliminations.find((e) => e.code === '1-3100')!.amount;
+    const elim = cons.eliminations.find((e) => e.code === '1-3101')!.amount;
     expect(cons.combined.totalAssets - elim).toBe(cons.combined.totalLiabEquity - elim);
     expect(cons.columns).toHaveLength(4);
   });
@@ -55,13 +62,13 @@ describe('validasi jurnal', () => {
   const ctx = { accounts, periods: world.periods, branches: DATA.branches.map((b: any) => ({ code: b.id, status: b.status })), bankAccounts: world.bankAccounts };
   it('menerima jurnal seimbang dengan rekening pada baris kas', () => {
     const errs = validateJournal({ date: '2026-08-14', branch: 'JKT', description: 'Uji', lines: [
-      { account: '5-3700', debit: 100000, credit: 0 }, { account: '1-1100', debit: 0, credit: 100000, bankAccountId: 'BNK-007' },
+      { account: '5-3701', debit: 100000, credit: 0 }, { account: world.bankGl.get('BNK-007')!, debit: 0, credit: 100000 },
     ] }, ctx);
     expect(errs).toEqual([]);
   });
   it('menolak periode tertutup, akun header, tidak seimbang, dan rekening cabang lain', () => {
     const errs = validateJournal({ date: '2026-07-05', branch: 'CKR', description: 'Uji', lines: [
-      { account: '1-0000', debit: 5, credit: 0 }, { account: '1-1100', debit: 0, credit: 4, bankAccountId: 'BNK-007' },
+      { account: '1-1000', debit: 5, credit: 0 }, { account: world.bankGl.get('BNK-007')!, debit: 0, credit: 4 },
     ] }, ctx);
     expect(errs.join('\n')).toMatch(/ditutup/);
     expect(errs.join('\n')).toMatch(/akun header/);
@@ -84,5 +91,37 @@ describe('uang', () => {
   });
   it('mengalokasikan sisa pembulatan', () => {
     expect(allocate(100, [1, 1, 1])).toEqual([34, 33, 33]);
+  });
+});
+
+describe('struktur COA bertingkat', () => {
+  it('header level 1–3, detail level 4–5, induk mengikuti pola kode', async () => {
+    const { levelOfCode, parentOfCode, typeProblems, STANDARD_COA } = await import('../src/coa.js');
+    expect([levelOfCode('1-0000'), levelOfCode('1-1000'), levelOfCode('1-1100'), levelOfCode('1-1101'), levelOfCode('1-1101.01')]).toEqual([1, 2, 3, 4, 5]);
+    expect([parentOfCode('1-1101.01'), parentOfCode('1-1101'), parentOfCode('1-1100'), parentOfCode('1-1000')]).toEqual(['1-1101', '1-1100', '1-1000', '1-0000']);
+    expect(levelOfCode('1-1101.00')).toBeNull();
+    expect(typeProblems(3, 'detail')).toMatch(/harus header/);
+    expect(typeProblems(4, 'detail')).toBeNull();
+    expect(typeProblems(5, 'header')).toMatch(/harus detail/);
+    for (const a of STANDARD_COA) expect(typeProblems(a.level, a.type)).toBeNull();
+    expect(STANDARD_COA.every((a) => !a.parentCode || STANDARD_COA.some((p) => p.code === a.parentCode && p.type === 'header'))).toBe(true);
+  });
+  it('rekening kas/bank menjadi akun detail di bawah header Bank/Kas', () => {
+    expect(world.bankGl.get('BNK-001')).toBe('1-1101');
+    expect(world.bankGl.get('BNK-005')).toBe('1-1201');
+    expect(accounts.get('1-1201')!.parentCode).toBe('1-1200');
+  });
+  it('neraca & laba rugi hanya berisi header level 3; neraca saldo hanya detail', () => {
+    const p = period('2026-08');
+    const bal = balancesFromLines(lines, p.from, p.to);
+    const bs = balanceSheet(accounts, bal, p.to);
+    const pl = incomeStatement(accounts, bal);
+    for (const r of [...bs.assets, ...bs.liabilities, ...bs.equity, ...pl.groups.flatMap((g) => g.rows)]) {
+      expect(accounts.get(r.code)!.level).toBe(3);
+      expect(accounts.get(r.code)!.type).toBe('header');
+    }
+    expect(bs.sections.map((s) => s.code)).toContain('1-1000');
+    expect(bs.equity.find((r) => r.code === '3-2200')!.amount).toBe(bs.profit);
+    expect(bs.assets.find((r) => r.code === '1-1100')!.amount + bs.assets.find((r) => r.code === '1-1200')!.amount).toBe(Ledger.balanceSheet({ branch: 'ALL', period: '2026-08' }).assets.find((a: any) => a.code === '1-1100').amount);
   });
 });

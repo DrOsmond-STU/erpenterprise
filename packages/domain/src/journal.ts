@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { AccountIndex } from './accounts.js';
-import { CASH_ACCOUNT } from './accounts.js';
 import type { BankAccount, JournalInput, JournalLineInput, Period, Rupiah } from './types.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
@@ -69,15 +68,14 @@ export function validateJournal(input: JournalInput, ctx: ValidationContext): st
     if (a.status !== 'aktif') errs.push(`Akun ${a.code} nonaktif.`);
     if (l.debit && l.credit) errs.push(`Baris ${l.account}: isi debit atau kredit, bukan keduanya.`);
     if (l.debit < 0 || l.credit < 0) errs.push(`Baris ${l.account}: nilai tidak boleh negatif.`);
-    if (a.code === CASH_ACCOUNT || a.isCash) {
-      if (!l.bankAccountId) errs.push('Baris Kas & Bank harus menyebut rekening agar sub-buku bank tetap cocok dengan buku besar.');
-      else {
-        const k = ctx.bankAccounts.find((b) => b.id === l.bankAccountId || b.code === l.bankAccountId);
-        if (!k) errs.push(`Rekening ${l.bankAccountId} tidak dikenal.`);
-        else if ((k as { status?: string }).status && (k as { status?: string }).status !== 'aktif') errs.push(`Rekening ${l.bankAccountId} nonaktif.`);
-        else if (k.branchCode !== input.branch) errs.push(`Rekening ${k.name} milik cabang ${k.branchCode}, bukan ${input.branch}.`);
-        else if (k.currency !== 'IDR') errs.push(`Rekening ${k.name} berdenominasi ${k.currency}; buku besar rupiah tidak menerima baris valas.`);
-      }
+    if (a.isCash && a.type === 'detail') {
+      /* Akun kas/bank terhubung 1:1 dengan rekening; rekening sub-buku diturunkan dari akunnya. */
+      const k = ctx.bankAccounts.find((b) => b.glAccountCode === a.code);
+      if (!k) errs.push(`Akun ${a.code} ${a.name} belum terhubung ke rekening kas/bank.`);
+      else if (l.bankAccountId && l.bankAccountId !== k.code && l.bankAccountId !== k.id) errs.push(`Baris ${a.code}: rekening ${l.bankAccountId} tidak sesuai dengan akun ${a.code} (${k.code}).`);
+      else if ((k as { status?: string }).status && (k as { status?: string }).status !== 'aktif') errs.push(`Rekening ${k.code} ${k.name} nonaktif.`);
+      else if (k.branchCode !== input.branch) errs.push(`Rekening ${k.name} milik cabang ${k.branchCode}, bukan ${input.branch}.`);
+      else if (k.currency !== 'IDR') errs.push(`Rekening ${k.name} berdenominasi ${k.currency}; buku besar rupiah tidak menerima baris valas.`);
     }
   }
   const dr = sumDebit(lines), cr = sumCredit(lines);

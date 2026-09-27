@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import { AccountIndex, BalanceMap, balancesFromAggregates, type Account, type BankAccount, type Period } from '@erp/domain';
+import { AccountIndex, BalanceMap, balancesFromAggregates, DEFAULT_ACCOUNT_LINKS, type Account, type AccountLinks, type BankAccount, type Period } from '@erp/domain';
 import { notFound } from '../common/errors.js';
 
 export interface PeriodRow extends Period { }
@@ -45,7 +45,13 @@ export class LedgerRefs {
 
   async bankAccounts(c: PoolClient, companyId: string): Promise<(BankAccount & { bankName: string; branch: string; status: string; accountNoMasked: string | null })[]> {
     const { rows } = await c.query('SELECT * FROM bank_accounts WHERE company_id = $1 ORDER BY branch_code, code', [companyId]);
-    return rows.map((b: any) => ({ id: b.code, code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), branch: String(b.branch_code).trim(), currency: b.currency, openingBalance: b.opening_balance, status: b.status, accountNoMasked: b.account_no_masked }));
+    return rows.map((b: any) => ({ id: b.code, code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), branch: String(b.branch_code).trim(), currency: b.currency, openingBalance: b.opening_balance, status: b.status, accountNoMasked: b.account_no_masked, glAccountCode: b.gl_account_code }));
+  }
+
+  /** Pemetaan akun perusahaan (Pengaturan → Pemetaan akun), dilengkapi nilai bawaan. */
+  async links(c: PoolClient, companyId: string): Promise<AccountLinks> {
+    const r = (await c.query('SELECT settings FROM companies WHERE id = $1', [companyId])).rows[0];
+    return { ...DEFAULT_ACCOUNT_LINKS, ...(r?.settings?.accountLinks ?? {}) };
   }
 
   async branches(c: PoolClient, companyId: string): Promise<{ code: string; name: string; short: string; status: string; isHeadOffice: boolean; targetMonthly: number }[]> {
@@ -97,3 +103,7 @@ export class LedgerRefs {
     return rows.map((r: any) => ({ month: r.month, amount: r.amount }));
   }
 }
+
+/** Σ saldo akhir akun detail kas/bank (anak header Bank & Kas). */
+export const cashBalance = (accounts: AccountIndex, bal: BalanceMap) =>
+  accounts.details().filter((a) => a.isCash).reduce((t, a) => t + (bal[a.code]?.ending ?? 0), 0);

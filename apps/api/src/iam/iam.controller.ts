@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
-import { PERMISSION_CATALOG, PASSWORD_MIN } from '@erp/domain';
+import { ACCOUNT_LINK_DEFS, PERMISSION_CATALOG, PASSWORD_MIN } from '@erp/domain';
 import { AppRequest, CurrentUser, RequirePermission, RequestUser } from '../common/context.js';
 import { forbidden } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -48,6 +48,8 @@ const settingsPatch = z.object({
     allowPartialShipment: z.boolean().optional(),
     autoDocumentNumbering: z.boolean().optional(),
   }).optional(),
+  accountLinks: z.partialRecord(z.enum(ACCOUNT_LINK_DEFS.map((d) => d.key) as [string, ...string[]]), z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode akun tidak sah')).optional(),
+  reason: z.string().trim().max(300).optional(),
 });
 
 @Controller()
