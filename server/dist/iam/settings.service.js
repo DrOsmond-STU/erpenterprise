@@ -17,7 +17,8 @@ const errors_js_1 = require("../common/errors.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const audit_service_js_1 = require("../audit/audit.service.js");
 const db_service_js_1 = require("../db/db.service.js");
-exports.DEFAULT_POLICIES = { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true };
+exports.DEFAULT_POLICIES = { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true,
+    purchaseApprovalThreshold: 150_000_000, paymentDualApprovalThreshold: 100_000_000 };
 let SettingsService = class SettingsService {
     db;
     audit;

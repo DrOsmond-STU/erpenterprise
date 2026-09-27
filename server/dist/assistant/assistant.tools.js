@@ -205,6 +205,22 @@ exports.TOOLS = [
             };
         },
     },
+    {
+        permission: 'purchasing.invoice.read',
+        spec: {
+            name: 'hutang_usaha',
+            description: 'Hutang usaha per akhir periode (paling lambat hari ini): total, jatuh tempo, jatuh tempo 7 hari ke depan, DPO, pembayaran yang menunggu persetujuan, umur hutang per ember, hutang per pemasok, dan daftar tagihan pemasok terbuka. Pakai untuk rencana pembayaran, pemasok yang harus dibayar, atau umur hutang.',
+            input_schema: { type: 'object', properties: scopeProps, additionalProperties: false },
+        },
+        run: async ({ payables }, c, input) => {
+            const r = await payables.payables(c.user, scopeFor(c.user, c.scope, scopeInput.parse(input)), c.requestId);
+            return {
+                per_tanggal: r.asOf, periode: periodOf(r.period), cakupan: r.scope, kpi: r.kpi, umur: r.aging,
+                pemasok: r.suppliers.slice(0, 30),
+                tagihan_terbuka: r.invoices.slice(0, 40).map((i) => ({ nomor: i.docNo, cabang: i.branch, pemasok: i.supplierName, tanggal: i.date, jatuh_tempo: i.dueDate, total: i.total, sisa: i.open, hari_terlambat: i.overdueDays, pembayaran_diproses: i.pendingPayments })),
+            };
+        },
+    },
 ];
 const toolsFor = (u) => exports.TOOLS.filter((t) => u.permissions.has(t.permission));
 exports.toolsFor = toolsFor;

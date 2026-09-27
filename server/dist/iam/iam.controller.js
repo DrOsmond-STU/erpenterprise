@@ -61,6 +61,8 @@ const settingsPatch = zod_1.z.object({
         blockOverCreditLimit: zod_1.z.boolean().optional(),
         allowPartialShipment: zod_1.z.boolean().optional(),
         autoDocumentNumbering: zod_1.z.boolean().optional(),
+        purchaseApprovalThreshold: zod_1.z.number().int().min(0).max(1e13).optional(),
+        paymentDualApprovalThreshold: zod_1.z.number().int().min(0).max(1e13).optional(),
     }).optional(),
     accountLinks: zod_1.z.partialRecord(zod_1.z.enum(domain_1.ACCOUNT_LINK_DEFS.map((d) => d.key)), zod_1.z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode akun tidak sah')).optional(),
     reason: zod_1.z.string().trim().max(300).optional(),

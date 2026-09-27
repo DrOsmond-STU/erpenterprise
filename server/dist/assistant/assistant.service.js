@@ -38,6 +38,7 @@ const journals_service_js_1 = require("../ledger/journals.service.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const reconciliation_service_js_1 = require("../ledger/reconciliation.service.js");
 const reports_service_js_1 = require("../ledger/reports.service.js");
+const payments_service_js_1 = require("../purchasing/payments.service.js");
 const invoices_service_js_1 = require("../sales/invoices.service.js");
 const assistant_tools_js_1 = require("./assistant.tools.js");
 const MAX_STEPS = 8;
@@ -62,10 +63,11 @@ let AssistantService = class AssistantService {
     journals;
     recon;
     invoices;
+    payables;
     cfg = (0, config_js_1.loadConfig)();
     log = new common_1.Logger('Assistant');
     client = null;
-    constructor(db, audit, refs, reports, journals, recon, invoices) {
+    constructor(db, audit, refs, reports, journals, recon, invoices, payables) {
         this.db = db;
         this.audit = audit;
         this.refs = refs;
@@ -73,6 +75,7 @@ let AssistantService = class AssistantService {
         this.journals = journals;
         this.recon = recon;
         this.invoices = invoices;
+        this.payables = payables;
         if (this.cfg.ANTHROPIC_API_KEY) {
             this.client = new sdk_1.default({ apiKey: this.cfg.ANTHROPIC_API_KEY, timeout: 120_000, maxRetries: 1 });
         }
@@ -155,7 +158,7 @@ let AssistantService = class AssistantService {
         if (!def || !allowed.includes(name))
             return { text: `Alat "${name}" tidak tersedia untuk pengguna ini.`, isError: true };
         try {
-            const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon, invoices: this.invoices }, call, input ?? {});
+            const out = await def.run({ reports: this.reports, journals: this.journals, recon: this.recon, invoices: this.invoices, payables: this.payables }, call, input ?? {});
             let text = JSON.stringify(out);
             if (text.length > MAX_TOOL_RESULT_CHARS)
                 text = `${text.slice(0, MAX_TOOL_RESULT_CHARS)}… [dipotong: hasil terlalu besar, persempit cakupan]`;
@@ -219,7 +222,8 @@ exports.AssistantService = AssistantService = __decorate([
         reports_service_js_1.ReportsService,
         journals_service_js_1.JournalsService,
         reconciliation_service_js_1.ReconciliationService,
-        invoices_service_js_1.InvoicesService])
+        invoices_service_js_1.InvoicesService,
+        payments_service_js_1.SupplierPaymentsService])
 ], AssistantService);
 function textOf(content) {
     return content.filter((b) => b.type === 'text').map((b) => b.text).join('\n\n').trim();

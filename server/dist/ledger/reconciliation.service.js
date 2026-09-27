@@ -51,8 +51,15 @@ let ReconciliationService = class ReconciliationService {
         const ar = await one(`SELECT (SELECT coalesce(sum(total_gross),0) FROM invoices WHERE company_id = $1 AND status <> 'draf' AND invoice_date <= $2 AND (status <> 'batal' OR cancel_date > $2) AND ($3::text IS NULL OR branch_code = $3))
             - (SELECT coalesce(sum(amount),0) FROM receipts WHERE company_id = $1 AND receipt_date <= $2 AND ($3::text IS NULL OR branch_code = $3)) AS v`, [companyId, asOf, b]);
         add('ar', 'Piutang usaha', 'faktur', 'Σ sisa tagihan faktur (modul Faktur)', ar, gl(links.ar), `Setiap faktur & penerimaan diposting otomatis ke ${links.ar}`);
-        const ap = await one(`SELECT coalesce(sum(total_gross - CASE WHEN coalesce(paid_date, invoice_date) <= $2 THEN paid_amount ELSE 0 END),0)::bigint AS v FROM ap_invoices WHERE company_id = $1 AND invoice_date <= $2 AND ($3::text IS NULL OR branch_code = $3)`, [companyId, asOf, b]);
+        /* Tagihan terposting s.d. tanggal (batal dihitung sampai tanggal pembatalannya) − pembayaran dibayar s.d. tanggal. */
+        const ap = await one(`SELECT (SELECT coalesce(sum(total_gross),0) FROM ap_invoices WHERE company_id = $1 AND status <> 'draf' AND invoice_date <= $2 AND (status <> 'batal' OR cancel_date > $2) AND ($3::text IS NULL OR branch_code = $3))
+            - (SELECT coalesce(sum(amount),0) FROM supplier_payments WHERE company_id = $1 AND status = 'dibayar' AND payment_date <= $2 AND ($3::text IS NULL OR branch_code = $3)) AS v`, [companyId, asOf, b]);
         add('ap', 'Hutang usaha', 'hutang', 'Σ sisa bayar tagihan pemasok (modul Hutang)', ap, gl(links.ap), `Setiap tagihan & pembayaran diposting otomatis ke ${links.ap}`);
+        /* Barang diterima s.d. tanggal yang belum ditagih lewat tagihan terposting s.d. tanggal itu. */
+        const grni = await one(`SELECT coalesce(sum(l.value),0)::bigint AS v FROM goods_receipt_lines l JOIN goods_receipts g ON g.id = l.receipt_id LEFT JOIN ap_invoices i ON i.id = l.invoice_id
+        WHERE l.company_id = $1 AND g.receipt_date <= $2 AND ($3::text IS NULL OR l.branch_code = $3)
+          AND NOT (i.id IS NOT NULL AND i.status NOT IN ('draf','batal') AND i.invoice_date <= $2)`, [companyId, asOf, b]);
+        add('grni', 'Barang diterima belum ditagih', 'penerimaan-barang', 'Σ nilai penerimaan barang yang belum ditagih pemasok', grni, gl(links.grni), `Penerimaan barang mengkredit ${links.grni}; tagihan pemasok mendebitnya sebesar nilai yang sama`);
         const bank = await one(`SELECT coalesce(sum(jl.debit - jl.credit),0)::bigint AS v FROM journal_lines jl JOIN journals j ON j.id = jl.journal_id JOIN bank_accounts ba ON ba.company_id = jl.company_id AND ba.code = jl.bank_account_code
         WHERE jl.company_id = $1 AND j.status IN ('posted','reversed') AND jl.journal_date <= $2 AND ba.currency = 'IDR' AND ($3::text IS NULL OR ba.branch_code = $3)`, [companyId, asOf, b]);
         add('bank', 'Kas & bank', 'kas-bank', 'Σ saldo rekening IDR (modul Kas & Bank)', bank, (0, ledger_shared_js_1.cashBalance)(accounts, bal), 'Tiap rekening punya akun detail sendiri di bawah header Bank/Kas; rekening valas tidak dikonsolidasi ke IDR');

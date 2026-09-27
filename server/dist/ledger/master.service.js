@@ -68,7 +68,8 @@ let MasterDataService = class MasterDataService {
         const children = (await c.query(`SELECT count(*) FILTER (WHERE status = 'aktif')::int AS active, count(*)::int AS total FROM chart_of_accounts WHERE company_id = $1 AND parent_code = $2`, [companyId, code])).rows[0];
         const refs = (await c.query(`SELECT (SELECT count(*) FROM bank_accounts WHERE company_id = $1 AND gl_account_code = $2)::int AS banks,
               (SELECT count(*) FROM ap_invoices WHERE company_id = $1 AND expense_account_code = $2)::int AS ap,
-              (SELECT count(*) FROM assets WHERE company_id = $1 AND gl_account_code = $2)::int AS assets`, [companyId, code])).rows[0];
+              (SELECT count(*) FROM assets WHERE company_id = $1 AND gl_account_code = $2)::int AS assets,
+              ((SELECT count(*) FROM purchase_order_lines WHERE company_id = $1 AND expense_account_code = $2) + (SELECT count(*) FROM ap_invoice_lines WHERE company_id = $1 AND account_code = $2))::int AS purchasing`, [companyId, code])).rows[0];
         const linked = [];
         if (refs.banks)
             linked.push('rekening kas/bank');
@@ -76,6 +77,8 @@ let MasterDataService = class MasterDataService {
             linked.push(`${refs.ap} tagihan pemasok`);
         if (refs.assets)
             linked.push(`${refs.assets} aset tetap`);
+        if (refs.purchasing)
+            linked.push(`${refs.purchasing} baris PO/tagihan pemasok`);
         return { lines: r.lines, net: Number(r.net), activeChildren: children.active, children: children.total, linked };
     }
     /* Operasi data induk bersifat lintas cabang: pemeriksaan pemakaian tidak boleh terpotong RLS. */

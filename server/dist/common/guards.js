@@ -58,9 +58,10 @@ let PermissionsGuard = class PermissionsGuard {
         const req = ctx.switchToHttp().getRequest();
         if (!req.user)
             return false;
-        const missing = required.filter((p) => !req.user.permissions.has(p));
+        /* 'a|b' = salah satu izin cukup (mis. baca PO bagi bagian keuangan maupun gudang). */
+        const missing = required.filter((p) => !p.split('|').some((x) => req.user.permissions.has(x)));
         if (missing.length)
-            throw (0, errors_js_1.forbidden)(`Memerlukan izin ${missing.join(', ')}.`);
+            throw (0, errors_js_1.forbidden)(`Memerlukan izin ${missing.map((m) => m.replace(/\|/g, ' atau ')).join(', ')}.`);
         return true;
     }
 };
