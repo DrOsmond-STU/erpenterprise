@@ -179,6 +179,15 @@ async function main() {
     ok(accBadShape.status === 400 || accBadShape.status === 422, 'format kode & nama divalidasi', accBadShape.status);
     const renamed = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ name: 'Beban Uji Otomatis (ubah)', reason: 'uji ubah nama' }) });
     ok(renamed.status === 200 && renamed.body.name === 'Beban Uji Otomatis (ubah)', 'nama akun dapat diubah', renamed.body);
+    const codeEdit = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3799', name: 'Ganti nomor', reason: 'uji' }) });
+    ok(codeEdit.status === 422 && codeEdit.body.error.code === 'ACCOUNT_CODE_IMMUTABLE', 'nomor akun tidak dapat diubah', codeEdit.body);
+    const toHeader = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ type: 'header', isContra: true, reason: 'uji tipe' }) });
+    const toDetail = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ type: 'detail', isContra: false, reason: 'uji tipe' }) });
+    ok(toHeader.status === 200 && toHeader.body.type === 'header' && toHeader.body.isContra && toDetail.status === 200 && toDetail.body.type === 'detail' && !toDetail.body.isContra, 'selain nomor akun (tipe level 4, sifat kontra) dapat diubah', [toHeader.body, toDetail.body]);
+    const hdrDel = await call('/ledger/accounts/5-3700', { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
+    ok(hdrDel.status === 422 && hdrDel.body.error.code === 'ACCOUNT_HAS_CHILDREN', 'header yang masih memiliki akun detail tidak dapat dihapus', hdrDel.body);
+    const usedToHeader = await call('/ledger/accounts/5-3101', { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ type: 'header', reason: 'uji' }) });
+    ok(usedToHeader.status === 422 && usedToHeader.body.error.code === 'ACCOUNT_IN_USE', 'akun detail yang sudah bertransaksi tidak dapat dijadikan header', usedToHeader.body);
     const accOff = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji nonaktif' }) });
     ok(accOff.status === 200 && accOff.body.status === 'nonaktif', 'akun tanpa saldo dapat dinonaktifkan', accOff.body);
     const sariX = await login('sari@knm.co.id');
@@ -190,7 +199,7 @@ async function main() {
     const after = (await call('/ledger/accounts', { token: admin, branch: 'ALL' })).body.accounts;
     ok(delAcc.status === 200 && !after.some((a) => a.code === newCode), 'akun yang belum dipakai dapat dihapus', delAcc.body);
     const delSys = await call('/ledger/accounts/1-1100', { method: 'DELETE', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
-    ok(delSys.status === 403, 'header Bank tidak dapat dihapus', delSys.status);
+    ok(delSys.status === 422 && delSys.body.error.code === 'ACCOUNT_HAS_CHILDREN', 'header Bank tidak dapat dihapus selama masih memiliki akun detail', delSys.body);
     const offLinked = await call('/ledger/accounts/1-1301', { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji' }) });
     ok(offLinked.status === 403 && /Pemetaan akun/.test(offLinked.body.error.message), 'akun yang ditautkan (piutang usaha) tidak dapat dinonaktifkan', offLinked.body);
     const used = accs.find((a) => a.code === '5-3101' && a.balance !== 0); // beban utilitas: bersaldo, tidak ditautkan

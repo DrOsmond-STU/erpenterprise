@@ -40,7 +40,11 @@ const accountCreate = zod_1.z.object({
     parentCode: zod_1.z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode induk tidak sah').optional(),
     isContra: zod_1.z.boolean().optional(),
 });
-const accountPatch = zod_1.z.object({ name: zod_1.z.string().trim().min(3).max(120).optional(), status: zod_1.z.enum(['aktif', 'nonaktif']).optional(), reason: zod_1.z.string().trim().min(3).max(300) });
+const accountPatch = zod_1.z.object({
+    code: zod_1.z.string().trim().optional(), // hanya untuk menolak perubahan nomor akun secara eksplisit
+    name: zod_1.z.string().trim().min(3).max(120).optional(), status: zod_1.z.enum(['aktif', 'nonaktif']).optional(),
+    type: zod_1.z.enum(['header', 'detail']).optional(), isContra: zod_1.z.boolean().optional(), reason: zod_1.z.string().trim().min(3).max(300),
+});
 const bankCreate = zod_1.z.object({
     code: zod_1.z.string().trim().toUpperCase().pipe(zod_1.z.string().regex(/^[A-Z0-9-]{3,30}$/, 'Kode rekening 3–30 karakter huruf besar, angka, atau tanda hubung')),
     branch: zod_1.z.string().trim().toUpperCase().pipe(zod_1.z.string().regex(/^[A-Z]{3}$/, 'Kode cabang 3 huruf')),

@@ -61,12 +61,25 @@ let MasterDataService = class MasterDataService {
         const def = domain_1.ACCOUNT_LINK_DEFS.find((d) => links[d.key] === a.code);
         return def ? `ditautkan sebagai "${def.label}" di Pengaturan → Pemetaan akun` : null;
     }
+    /** Pemakaian akun lintas cabang: baris jurnal, akun anak, dan tautan dokumen/fitur lain. */
     async usage(c, companyId, code) {
         const r = (await c.query(`SELECT count(*)::int AS lines, coalesce(sum(CASE WHEN j.status IN ('posted','reversed') THEN l.debit - l.credit ELSE 0 END),0)::bigint AS net
          FROM journal_lines l JOIN journals j ON j.id = l.journal_id WHERE l.company_id = $1 AND l.account_code = $2`, [companyId, code])).rows[0];
         const children = (await c.query(`SELECT count(*) FILTER (WHERE status = 'aktif')::int AS active, count(*)::int AS total FROM chart_of_accounts WHERE company_id = $1 AND parent_code = $2`, [companyId, code])).rows[0];
-        return { lines: r.lines, net: Number(r.net), activeChildren: children.active, children: children.total };
+        const refs = (await c.query(`SELECT (SELECT count(*) FROM bank_accounts WHERE company_id = $1 AND gl_account_code = $2)::int AS banks,
+              (SELECT count(*) FROM ap_invoices WHERE company_id = $1 AND expense_account_code = $2)::int AS ap,
+              (SELECT count(*) FROM assets WHERE company_id = $1 AND gl_account_code = $2)::int AS assets`, [companyId, code])).rows[0];
+        const linked = [];
+        if (refs.banks)
+            linked.push('rekening kas/bank');
+        if (refs.ap)
+            linked.push(`${refs.ap} tagihan pemasok`);
+        if (refs.assets)
+            linked.push(`${refs.assets} aset tetap`);
+        return { lines: r.lines, net: Number(r.net), activeChildren: children.active, children: children.total, linked };
     }
+    /* Operasi data induk bersifat lintas cabang: pemeriksaan pemakaian tidak boleh terpotong RLS. */
+    ctx(u, s, requestId) { return { ...(0, db_service_js_1.contextOf)(u, s, requestId), branches: '*' }; }
     async createAccount(u, s, b, requestId) {
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
             const level = (0, domain_1.levelOfCode)(b.code);
@@ -98,16 +111,23 @@ let MasterDataService = class MasterDataService {
             return row;
         });
     }
+    /**
+     * Nomor akun tidak dapat diubah (acuan seluruh riwayat jurnal). Yang dapat diubah:
+     * nama, status, sifat kontra (bila belum bertransaksi), dan tipe header/detail
+     * khusus level 4 (bila tidak ada anak, transaksi, maupun tautan).
+     */
     async patchAccount(u, s, code, p, requestId) {
-        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
+        return this.db.run(this.ctx(u, s, requestId), async (c) => {
             const cur = await this.account(c, u.companyId, code);
+            if (p.code !== undefined && p.code !== code)
+                throw invalid('ACCOUNT_CODE_IMMUTABLE', `Nomor akun ${code} tidak dapat diubah; yang dapat diubah hanya nama, status, tipe (level 4), dan sifat kontra.`);
             if (cur.is_cash && cur.type === 'detail' && (p.name || p.status))
                 throw invalid('ACCOUNT_IS_BANK', `Akun ${code} milik rekening kas/bank; ubah nama atau status lewat menu Kas & Bank.`);
+            const use = await this.usage(c, u.companyId, code);
             if (p.status === 'nonaktif' && cur.status === 'aktif') {
                 const why = await this.systemReason(c, u.companyId, cur);
                 if (why)
                     throw (0, errors_js_1.forbidden)(`Akun ${code} tidak dapat dinonaktifkan: ${why}.`);
-                const use = await this.usage(c, u.companyId, code);
                 if (use.activeChildren > 0)
                     throw invalid('ACCOUNT_HAS_CHILDREN', `Akun ${code} masih memiliki ${use.activeChildren} akun anak yang aktif.`);
                 if (use.net !== 0)
@@ -118,23 +138,49 @@ let MasterDataService = class MasterDataService {
                 if (parent.status !== 'aktif')
                     throw invalid('ACCOUNT_PARENT_INACTIVE', `Aktifkan dahulu akun induk ${parent.code}.`);
             }
-            const upd = await c.query('UPDATE chart_of_accounts SET name = coalesce($3, name), status = coalesce($4, status) WHERE company_id = $1 AND code = $2 RETURNING *', [u.companyId, code, p.name ?? null, p.status ?? null]);
+            if (p.type && p.type !== cur.type) {
+                const tp = (0, domain_1.typeProblems)(cur.level, p.type);
+                if (tp)
+                    throw invalid('ACCOUNT_LEVEL', tp);
+                if (cur.is_cash || cur.is_computed || cur.is_intercompany)
+                    throw (0, errors_js_1.forbidden)(`Tipe akun ${code} tidak dapat diubah (akun sistem).`);
+                if (p.type === 'detail' && use.children > 0)
+                    throw invalid('ACCOUNT_HAS_CHILDREN', `Header ${code} masih memiliki ${use.children} akun di bawahnya; tidak dapat diubah menjadi detail.`);
+                if (p.type === 'header') {
+                    const why = await this.systemReason(c, u.companyId, cur);
+                    if (why)
+                        throw (0, errors_js_1.forbidden)(`Akun ${code} tidak dapat diubah menjadi header: ${why}.`);
+                    if (use.lines > 0)
+                        throw invalid('ACCOUNT_IN_USE', `Akun ${code} sudah dipakai ${use.lines} baris jurnal; header tidak boleh bertransaksi.`);
+                    if (use.linked.length)
+                        throw invalid('ACCOUNT_LINKED', `Akun ${code} masih terkait ${use.linked.join(', ')}.`);
+                }
+            }
+            if (p.isContra !== undefined && p.isContra !== cur.is_contra && use.lines > 0)
+                throw invalid('ACCOUNT_IN_USE', `Sifat kontra akun ${code} tidak dapat diubah karena sudah dipakai ${use.lines} baris jurnal.`);
+            const parent = cur.parent_code ? await this.account(c, u.companyId, cur.parent_code) : null;
+            const normal = p.isContra === undefined || !parent ? cur.normal_side : p.isContra ? (parent.normal_side === 'debit' ? 'credit' : 'debit') : parent.normal_side;
+            const upd = await c.query(`UPDATE chart_of_accounts SET name = coalesce($3, name), status = coalesce($4, status), type = coalesce($5, type), is_contra = coalesce($6, is_contra), normal_side = $7
+          WHERE company_id = $1 AND code = $2 RETURNING *`, [u.companyId, code, p.name ?? null, p.status ?? null, p.type ?? null, p.isContra ?? null, normal]);
             const row = (0, ledger_shared_js_1.mapAccount)(upd.rows[0]);
             await this.audit.record(c, { companyId: u.companyId, userId: u.id, sessionId: u.sessionId, action: 'account.updated', entityType: 'account', entityId: code, before: (0, ledger_shared_js_1.mapAccount)(cur), after: { ...row, reason: p.reason }, requestId });
             return row;
         });
     }
+    /** Header: hanya bila tidak punya akun di bawahnya. Detail: hanya bila belum bertransaksi dan tidak terkait fitur lain. */
     async deleteAccount(u, s, code, reason, requestId) {
-        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
+        return this.db.run(this.ctx(u, s, requestId), async (c) => {
             const cur = await this.account(c, u.companyId, code);
+            const use = await this.usage(c, u.companyId, code);
+            if (use.children > 0)
+                throw invalid('ACCOUNT_HAS_CHILDREN', `Header ${code} masih memiliki ${use.children} akun di bawahnya; hapus akun-akun tersebut terlebih dahulu.`);
             const why = await this.systemReason(c, u.companyId, cur);
             if (why)
                 throw (0, errors_js_1.forbidden)(`Akun ${code} tidak dapat dihapus: ${why}.`);
-            const use = await this.usage(c, u.companyId, code);
-            if (use.children > 0)
-                throw invalid('ACCOUNT_HAS_CHILDREN', `Akun ${code} memiliki akun anak; hapus atau pindahkan anaknya dahulu.`);
             if (use.lines > 0)
                 throw invalid('ACCOUNT_IN_USE', `Akun ${code} sudah dipakai ${use.lines} baris jurnal; nonaktifkan saja.`);
+            if (use.linked.length)
+                throw invalid('ACCOUNT_LINKED', `Akun ${code} terkait ${use.linked.join(', ')}; lepaskan tautannya atau nonaktifkan saja.`);
             await c.query('DELETE FROM chart_of_accounts WHERE company_id = $1 AND code = $2', [u.companyId, code]);
             await this.audit.record(c, { companyId: u.companyId, userId: u.id, sessionId: u.sessionId, action: 'account.deleted', entityType: 'account', entityId: code, before: (0, ledger_shared_js_1.mapAccount)(cur), after: { reason }, requestId });
             return { code, deleted: true };
