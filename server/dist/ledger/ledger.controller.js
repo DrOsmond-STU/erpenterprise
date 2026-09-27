@@ -24,7 +24,7 @@ const reports_service_js_1 = require("./reports.service.js");
 const listQuery = zod_1.z.object({
     status: zod_1.z.enum(['draft', 'pending', 'posted', 'rejected', 'reversed']).optional(),
     source: zod_1.z.string().regex(/^[a-z_-]{2,30}$/).optional(),
-    account: zod_1.z.string().regex(/^\d-\d{4}$/).optional(),
+    account: zod_1.z.string().regex(/^[1-5]-\d{4}(\.\d{2})?$/).optional(),
     q: zod_1.z.string().trim().max(100).optional(),
     page: zod_1.z.coerce.number().int().min(1).default(1),
     size: zod_1.z.coerce.number().int().min(1).max(200).default(25),
@@ -34,10 +34,10 @@ const reverseSchema = zod_1.z.object({ reason: zod_1.z.string().trim().min(3).ma
 const cardQuery = zod_1.z.object({ bank: zod_1.z.string().regex(/^[A-Z0-9-]{3,30}$/).optional() });
 const tbQuery = zod_1.z.object({ by_branch: zod_1.z.enum(['true', 'false']).optional() });
 const accountCreate = zod_1.z.object({
-    code: zod_1.z.string().trim().regex(/^\d-\d{4}$/, 'Kode akun berformat 9-9999'),
+    code: zod_1.z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode akun berformat 9-9999 (level 1–4) atau 9-9999.99 (level 5)'),
     name: zod_1.z.string().trim().min(3).max(120),
     type: zod_1.z.enum(['header', 'detail']),
-    parentCode: zod_1.z.string().trim().regex(/^\d-\d{4}$/, 'Kode induk berformat 9-9999'),
+    parentCode: zod_1.z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode induk tidak sah').optional(),
     isContra: zod_1.z.boolean().optional(),
 });
 const accountPatch = zod_1.z.object({ name: zod_1.z.string().trim().min(3).max(120).optional(), status: zod_1.z.enum(['aktif', 'nonaktif']).optional(), reason: zod_1.z.string().trim().min(3).max(300) });

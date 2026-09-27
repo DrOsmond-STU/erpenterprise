@@ -62,6 +62,8 @@ const settingsPatch = zod_1.z.object({
         allowPartialShipment: zod_1.z.boolean().optional(),
         autoDocumentNumbering: zod_1.z.boolean().optional(),
     }).optional(),
+    accountLinks: zod_1.z.partialRecord(zod_1.z.enum(domain_1.ACCOUNT_LINK_DEFS.map((d) => d.key)), zod_1.z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode akun tidak sah')).optional(),
+    reason: zod_1.z.string().trim().max(300).optional(),
 });
 let IamController = class IamController {
     iam;

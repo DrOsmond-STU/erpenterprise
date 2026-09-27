@@ -12,6 +12,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SettingsService = exports.DEFAULT_POLICIES = void 0;
 /** Pengaturan perusahaan: profil dan kebijakan dokumen (halaman Pengaturan). */
 const common_1 = require("@nestjs/common");
+const domain_1 = require("@erp/domain");
+const errors_js_1 = require("../common/errors.js");
+const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const audit_service_js_1 = require("../audit/audit.service.js");
 const db_service_js_1 = require("../db/db.service.js");
 exports.DEFAULT_POLICIES = { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true };
@@ -27,6 +30,7 @@ let SettingsService = class SettingsService {
             code: r.code, name: r.name, npwp: r.npwp, address: r.address, phone: r.phone, email: r.email, website: r.website,
             baseCurrency: r.base_currency, fiscalYearStartMonth: r.fiscal_year_start_month,
             policies: { ...exports.DEFAULT_POLICIES, ...(r.settings?.policies ?? {}) },
+            accountLinks: { ...domain_1.DEFAULT_ACCOUNT_LINKS, ...(r.settings?.accountLinks ?? {}) },
             security: { passwordMinLength: 12, lockAfterFailedLogins: 5, lockMinutes: 15, idleMinutes: 30, accessTokenMinutes: 15 },
             updatedAt: r.updated_at,
         };
@@ -38,10 +42,21 @@ let SettingsService = class SettingsService {
         return this.db.run({ ...(0, db_service_js_1.systemContext)(u.companyId), userId: u.id, requestId }, async (c) => {
             const cur = (await c.query('SELECT * FROM companies WHERE id = $1', [u.companyId])).rows[0];
             const policies = { ...exports.DEFAULT_POLICIES, ...(cur.settings?.policies ?? {}), ...(p.policies ?? {}) };
+            /* Pemetaan akun: hanya akun detail aktif berkategori sesuai; header tidak dapat ditautkan. */
+            const links = { ...domain_1.DEFAULT_ACCOUNT_LINKS, ...(cur.settings?.accountLinks ?? {}), ...(p.accountLinks ?? {}) };
+            if (p.accountLinks && Object.keys(p.accountLinks).length) {
+                const rows = (await c.query('SELECT * FROM chart_of_accounts WHERE company_id = $1', [u.companyId])).rows.map(ledger_shared_js_1.mapAccount);
+                const byCode = new Map(rows.map((a) => [a.code, a]));
+                const errs = domain_1.ACCOUNT_LINK_DEFS.filter((d) => d.key in p.accountLinks).map((d) => (0, domain_1.linkProblem)(d, byCode.get(links[d.key]))).filter(Boolean);
+                if (errs.length)
+                    throw new errors_js_1.DomainError('ACCOUNT_LINK_INVALID', errs[0], 422, errs);
+                if (!p.reason || p.reason.trim().length < 3)
+                    throw new errors_js_1.DomainError('REASON_REQUIRED', 'Perubahan pemetaan akun wajib diberi alasan (memengaruhi posting otomatis).', 422);
+            }
             const upd = await c.query(`UPDATE companies SET name = coalesce($2, name), npwp = coalesce($3, npwp), address = coalesce($4, address), phone = coalesce($5, phone),
             email = coalesce($6, email), website = coalesce($7, website), fiscal_year_start_month = coalesce($8, fiscal_year_start_month),
-            settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{policies}', $9::jsonb), updated_at = now()
-          WHERE id = $1 RETURNING *`, [u.companyId, p.name ?? null, p.npwp ?? null, p.address ?? null, p.phone ?? null, p.email ?? null, p.website ?? null, p.fiscalYearStartMonth ?? null, JSON.stringify(policies)]);
+            settings = jsonb_set(jsonb_set(coalesce(settings, '{}'::jsonb), '{policies}', $9::jsonb), '{accountLinks}', $10::jsonb), updated_at = now()
+          WHERE id = $1 RETURNING *`, [u.companyId, p.name ?? null, p.npwp ?? null, p.address ?? null, p.phone ?? null, p.email ?? null, p.website ?? null, p.fiscalYearStartMonth ?? null, JSON.stringify(policies), JSON.stringify(links)]);
             await this.audit.record(c, { companyId: u.companyId, userId: u.id, sessionId: u.sessionId, action: 'settings.updated', entityType: 'company', entityId: cur.code,
                 before: this.map(cur), after: p, requestId });
             return this.map(upd.rows[0]);

@@ -6,7 +6,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LedgerRefs = exports.mapPeriod = exports.mapAccount = void 0;
+exports.cashBalance = exports.LedgerRefs = exports.mapPeriod = exports.mapAccount = void 0;
 const common_1 = require("@nestjs/common");
 const domain_1 = require("@erp/domain");
 const errors_js_1 = require("../common/errors.js");
@@ -46,7 +46,12 @@ let LedgerRefs = class LedgerRefs {
     }
     async bankAccounts(c, companyId) {
         const { rows } = await c.query('SELECT * FROM bank_accounts WHERE company_id = $1 ORDER BY branch_code, code', [companyId]);
-        return rows.map((b) => ({ id: b.code, code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), branch: String(b.branch_code).trim(), currency: b.currency, openingBalance: b.opening_balance, status: b.status, accountNoMasked: b.account_no_masked }));
+        return rows.map((b) => ({ id: b.code, code: b.code, name: b.name, bankName: b.bank_name, branchCode: String(b.branch_code).trim(), branch: String(b.branch_code).trim(), currency: b.currency, openingBalance: b.opening_balance, status: b.status, accountNoMasked: b.account_no_masked, glAccountCode: b.gl_account_code }));
+    }
+    /** Pemetaan akun perusahaan (Pengaturan → Pemetaan akun), dilengkapi nilai bawaan. */
+    async links(c, companyId) {
+        const r = (await c.query('SELECT settings FROM companies WHERE id = $1', [companyId])).rows[0];
+        return { ...domain_1.DEFAULT_ACCOUNT_LINKS, ...(r?.settings?.accountLinks ?? {}) };
     }
     async branches(c, companyId) {
         const { rows } = await c.query('SELECT code, name, short_name, status, is_head_office, target_monthly FROM branches WHERE company_id = $1 ORDER BY is_head_office DESC, code', [companyId]);
@@ -97,4 +102,7 @@ exports.LedgerRefs = LedgerRefs;
 exports.LedgerRefs = LedgerRefs = __decorate([
     (0, common_1.Injectable)()
 ], LedgerRefs);
+/** Σ saldo akhir akun detail kas/bank (anak header Bank & Kas). */
+const cashBalance = (accounts, bal) => accounts.details().filter((a) => a.isCash).reduce((t, a) => t + (bal[a.code]?.ending ?? 0), 0);
+exports.cashBalance = cashBalance;
 //# sourceMappingURL=ledger.shared.js.map

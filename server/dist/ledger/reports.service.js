@@ -71,10 +71,11 @@ let ReportsService = class ReportsService {
             const pl = (0, domain_1.consolidate)(accounts, perBranch, (m) => (0, domain_1.incomeStatement)(accounts, m));
             const bs = (0, domain_1.consolidate)(accounts, perBranch, (m) => (0, domain_1.balanceSheet)(accounts, m, period.to));
             const combined = (0, domain_1.sumBalances)(perBranch.map((p) => p.balances));
+            const links = await this.refs.links(c, u.companyId);
             const kpis = branches.map((b, i) => {
                 const p = pl.columns[i].report, q = bs.columns[i].report;
-                const g = (rows, code) => rows.find((r) => r.code === code)?.amount ?? 0;
-                return { branch: b.code, name: b.name, short: b.short, type: '', revenue: p.revenue, gross: p.gross, net: p.net, netMargin: p.netMargin, cash: g(q.assets, '1-1100'), ar: g(q.assets, '1-1200'), ap: g(q.liabilities, '2-1100'), totalAssets: q.totalAssets };
+                const m = per[b.code] ?? {};
+                return { branch: b.code, name: b.name, short: b.short, type: '', revenue: p.revenue, gross: p.gross, net: p.net, netMargin: p.netMargin, cash: (0, ledger_shared_js_1.cashBalance)(accounts, m), ar: m[links.ar]?.ending ?? 0, ap: m[links.ap]?.ending ?? 0, totalAssets: q.totalAssets };
             });
             return { period, branches: branches.map((b) => ({ code: b.code, label: b.short, name: b.name })), incomeStatement: pl, balanceSheet: bs, kpis, intercompanyMismatch: (0, domain_1.intercompanyMismatch)(accounts, combined) };
         });
@@ -95,12 +96,13 @@ let ReportsService = class ReportsService {
             const overdue = (await c.query(`SELECT count(*)::int AS n, coalesce(sum(total_gross - paid_amount),0)::bigint AS amount FROM invoices
           WHERE company_id = $1 AND status IN ('belum-dibayar','sebagian') AND total_gross > paid_amount AND due_date < $2 AND ($3::text IS NULL OR branch_code = $3)`, [u.companyId, today, branch])).rows[0];
             const pending = (await c.query(`SELECT count(*)::int AS n FROM journals WHERE company_id = $1 AND status = 'pending' AND ($2::text IS NULL OR branch_code = $2)`, [u.companyId, branch])).rows[0].n;
+            const links = await this.refs.links(c, u.companyId);
             return {
                 period, scope: s.branch,
                 revenue: pl.revenue, gross: pl.gross, net: pl.net, grossMargin: pl.grossMargin, netMargin: pl.netMargin, target,
-                cash: bs.assets.find((a) => a.code === '1-1100')?.amount ?? 0,
-                ar: bs.assets.find((a) => a.code === '1-1200')?.amount ?? 0,
-                ap: bs.liabilities.find((a) => a.code === '2-1100')?.amount ?? 0,
+                cash: (0, ledger_shared_js_1.cashBalance)(accounts, bal),
+                ar: bal[links.ar]?.ending ?? 0,
+                ap: bal[links.ap]?.ending ?? 0,
                 overdueInvoices: overdue.n, overdueAmount: overdue.amount, pendingJournals: pending,
                 monthlyRevenue: Array.from({ length: 12 }, (_, i) => monthly.find((m) => m.month === i + 1)?.amount ?? 0),
                 monthlyTarget: branches.reduce((t, b) => t + b.targetMonthly, 0),
