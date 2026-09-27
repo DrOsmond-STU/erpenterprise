@@ -14,7 +14,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { randomInt } from 'node:crypto';
-import { PERMISSIONS, passwordProblems, sodViolations } from '@erp/domain';
+import { isSuperuserRole, PERMISSIONS, passwordProblems, sodViolations } from '@erp/domain';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import type { RequestUser } from '../common/context.js';
@@ -81,7 +81,8 @@ export class IamService {
       }
       out.push({ roleId: r.id, branch: a.branch, code: r.code, permissions: r.perms });
     }
-    const violations = sodViolations(out.flatMap((x) => x.permissions));
+    /* Pemegang peran Admin Sistem dikecualikan dari konflik tingkat pengguna (per dokumen tetap berlaku). */
+    const violations = out.some((x) => isSuperuserRole(x.code)) ? [] : sodViolations(out.flatMap((x) => x.permissions));
     if (violations.length) throw invalid('SOD_CONFLICT', `Kombinasi peran melanggar pemisahan tugas: ${violations.join(' ')}`, violations);
     return out;
   }
@@ -187,10 +188,10 @@ export class IamService {
          FROM roles r WHERE r.company_id = $1 ORDER BY (r.code = 'admin') DESC, r.name`, [companyId])).rows;
   }
 
-  private checkPermissions(perms: string[]) {
+  private checkPermissions(perms: string[], code?: string) {
     const unknown = perms.filter((p) => !KNOWN.has(p));
     if (unknown.length) throw invalid('PERMISSION_UNKNOWN', `Izin tidak dikenal: ${unknown.join(', ')}.`);
-    const v = sodViolations(perms);
+    const v = isSuperuserRole(code) ? [] : sodViolations(perms);
     if (v.length) throw invalid('SOD_CONFLICT', `Peran melanggar pemisahan tugas: ${v.join(' ')}`, v);
   }
 
@@ -212,7 +213,7 @@ export class IamService {
   }
 
   async patchRole(u: RequestUser, code: string, p: RolePatch, requestId: string) {
-    if (p.permissions) this.checkPermissions(p.permissions);
+    if (p.permissions) this.checkPermissions(p.permissions, code);
     return this.db.run(this.ctx(u, requestId), async (c) => {
       const r = (await c.query('SELECT id, name FROM roles WHERE company_id = $1 AND code = $2', [u.companyId, code])).rows[0];
       if (!r) throw notFound(`Peran ${code}`);
@@ -223,6 +224,8 @@ export class IamService {
         /* Gabungan izin tiap pemegang peran ini tidak boleh melanggar pemisahan tugas. */
         const holders = (await c.query('SELECT DISTINCT ur.user_id, u.display_name FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = $1', [r.id])).rows;
         for (const h of holders) {
+          const superuser = (await c.query('SELECT 1 FROM user_roles ur JOIN roles x ON x.id = ur.role_id WHERE ur.user_id = $1 AND x.code = $2', [h.user_id, 'admin'])).rowCount;
+          if (superuser) continue;
           const all = (await c.query('SELECT DISTINCT rp.permission_code AS p FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id WHERE ur.user_id = $1', [h.user_id])).rows.map((x: any) => x.p);
           const v = sodViolations(all);
           if (v.length) throw invalid('SOD_CONFLICT', `Perubahan membuat ${h.display_name} melanggar pemisahan tugas: ${v.join(' ')}`, v);

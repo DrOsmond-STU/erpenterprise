@@ -408,6 +408,10 @@ await page.click('[data-table=suppliers] tbody tr[data-row] >> nth=0'); await pa
 ok(await page.locator('[data-action=approve-bank]').count() === 0, 'pengusul rekening tidak ditawari tombol setujui (K-25)'); await shot('60-pemasok');
 await page.keyboard.press('Escape');
 await logout(); await login('admin@knm.co.id');
+const navA = await page.locator('.rail-link-text').allInnerTexts();
+ok(['Pesanan Pembelian', 'Tagihan Pemasok', 'Pembayaran', 'Faktur', 'Pesanan Penjualan', 'Jurnal Umum', 'Pengguna', 'Peran & Izin'].every((x) => navA.includes(x)), 'admin melihat semua modul (penjualan, pembelian, keuangan, sistem)', navA);
+await page.goto(base + '/tagihan-pemasok'); await page.waitForSelector('[data-table=ap-invoices] tbody tr[data-row]');
+ok(await page.locator('[data-action=new-ap-invoice]').count() === 1, 'admin dapat menginput tagihan pemasok'); await shot('61-admin-pembelian');
 
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);

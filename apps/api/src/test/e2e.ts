@@ -268,7 +268,8 @@ async function main() {
   const weak = await call('/admin/users', { method: 'POST', token: admin, body: JSON.stringify({ email: `lemah.${Date.now()}@knm.co.id`, name: 'Lemah', password: 'pendek1', roles: [{ role: 'manajer', branch: 'ALL' }] }) });
   ok(weak.status === 422 && weak.body.error.code === 'PASSWORD_WEAK', 'kata sandi lemah ditolak', weak.body);
   const sod = await call('/admin/users', { method: 'POST', token: admin, body: JSON.stringify({ email: `sod.${Date.now()}@knm.co.id`, name: 'SoD', roles: [{ role: 'akuntan_senior', branch: 'ALL' }, { role: 'admin', branch: 'ALL' }] }) });
-  ok(sod.status === 422 && sod.body.error.code === 'SOD_CONFLICT', 'kombinasi peran yang melanggar pemisahan tugas ditolak', sod.body);
+  ok(sod.status === 201, 'pemegang peran Admin Sistem dikecualikan dari konflik izin tingkat pengguna (akuntan senior + admin)', sod.body);
+  if (sod.body?.id) await call(`/admin/users/${sod.body.id}`, { method: 'PATCH', token: admin, body: JSON.stringify({ status: 'nonaktif', reason: 'bersihkan uji' }) });
   const noRole = await call('/admin/users', { method: 'POST', token: admin, body: JSON.stringify({ email: `nr.${Date.now()}@knm.co.id`, name: 'Tanpa peran', roles: [] }) });
   ok(noRole.status === 400 || noRole.status === 422, 'pengguna tanpa peran ditolak', noRole.status);
 
@@ -647,6 +648,19 @@ async function main() {
     const blk = await call('/purchasing/payments', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ invoiceId: apv.id, amount: 1_000_000, bankAccount: ckrBank }) });
     ok(blk.status === 422 && blk.body.error.code === 'SUPPLIER_BLOCKED', 'pemasok diblokir → pembayaran tidak dapat diajukan', blk.body);
     await call(`/purchasing/suppliers/${logam.id}`, { method: 'PATCH', token: osmond, body: JSON.stringify({ status: 'aktif', reason: 'aktif kembali' }) });
+
+    /* Admin Sistem memegang semua izin, tetapi kontrol empat mata per dokumen tetap berlaku. */
+    const admRole = (await call('/admin/roles', { token: admin })).body.find((r: any) => r.code === 'admin');
+    const permCodes: string[] = (await call('/admin/permissions', { token: admin })).body.groups.flatMap((g: any) => g.items.map((i: any) => i.code));
+    ok(permCodes.length > 30 && permCodes.every((p: string) => admRole.permissions.includes(p)), 'Admin Sistem memegang seluruh izin', permCodes.filter((p: string) => !admRole.permissions.includes(p)));
+    ok((await call('/purchasing/invoices', { token: admin, branch: 'ALL' })).status === 200 && (await call('/sales/invoices', { token: admin, branch: 'ALL' })).status === 200, 'admin dapat membuka modul penjualan & pembelian');
+    const poA = await call('/purchasing/orders', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ branch: 'CKR', supplierId: logam.id, orderDate: D, lines: [{ productId: bearing.id, qty: 2500, price: 80_000 }], submit: true }) });
+    const poASelf = await call(`/purchasing/orders/${poA.body.id}/approve`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+    ok(poA.status === 201 && poA.body.status === 'menunggu' && poASelf.status === 403 && poASelf.body.error.code === 'SOD_PURCHASE_ORDER', 'admin dapat membuat PO, tetapi tidak menyetujui PO-nya sendiri', poASelf.body);
+    const poO = await call('/purchasing/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', supplierId: logam.id, orderDate: D, lines: [{ productId: bearing.id, qty: 2500, price: 80_000 }], submit: true }) });
+    const poOAp = await call(`/purchasing/orders/${poO.body.id}/approve`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+    ok(poOAp.status === 200 && poOAp.body.status === 'disetujui', 'admin dapat menyetujui PO buatan orang lain', poOAp.body?.status);
+    for (const id of [poA.body.id, poO.body.id]) await call(`/purchasing/orders/${id}/cancel`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'bersihkan uji' }) });
 
     /* SoD per dokumen: pemegang buat & setujui tetap tidak boleh memutus dokumennya sendiri. */
     const rcode = `uji_beli_${tag}`.slice(0, 40);

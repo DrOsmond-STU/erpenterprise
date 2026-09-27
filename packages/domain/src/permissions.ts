@@ -38,7 +38,9 @@ export const SOD_CONFLICTS: [Permission, Permission, string][] = [
 export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permission[] }> = {
   admin: {
     name: 'Admin Sistem',
-    permissions: ['org.branch.read', 'org.branch.manage', 'org.period.read', 'ledger.period.reopen', 'ledger.account.read', 'ledger.account.manage', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'admin.user.manage', 'admin.role.manage', 'admin.settings.manage', 'admin.audit.read'],
+    /* Admin memegang seluruh izin (kontrol penuh atas data & proses). Pemisahan tugas
+       per dokumen tetap berlaku: dokumen yang dibuat admin disetujui orang lain. */
+    permissions: [...PERMISSIONS],
   },
   akuntan_senior: {
     name: 'Akuntan Senior',
@@ -96,6 +98,10 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
  * peran seorang pengguna). Pasangan buat↔posting jurnal ditegakkan per jurnal,
  * bukan per pengguna, sehingga tidak dihitung di sini.
  */
+/** Peran super: memegang semua izin dan dikecualikan dari konflik izin tingkat peran/pengguna. */
+export const SUPERUSER_ROLE = 'admin';
+export const isSuperuserRole = (code: string | null | undefined) => code === SUPERUSER_ROLE;
+
 export function sodViolations(perms: Iterable<string>): string[] {
   const set = new Set(perms);
   return SOD_CONFLICTS

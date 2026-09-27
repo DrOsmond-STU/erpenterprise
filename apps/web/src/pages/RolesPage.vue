@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { PERMISSION_CATALOG, sodViolations } from '@erp/domain';
+import { isSuperuserRole, PERMISSION_CATALOG, sodViolations } from '@erp/domain';
 import { del, get, patch, post } from '@/lib/api';
 import { errorList } from '@/lib/errors';
 import { useLoader } from '@/lib/useLoader';
@@ -31,7 +31,7 @@ function toggle(r: any, p: string) {
 }
 const changedRoles = computed(() => (roles.value ?? []).filter((r) => draft.value[r.code]));
 const changeCount = computed(() => changedRoles.value.reduce((n, r) => n + [...new Set([...r.permissions, ...draft.value[r.code]])].filter((p) => changedCell(r, p)).length, 0));
-const sodOf = (r: any) => sodViolations(permsOf(r));
+const sodOf = (r: any) => (isSuperuserRole(r.code) ? [] : sodViolations(permsOf(r)));
 const adminLosesProtected = (r: any) => r.code === 'admin' && PROTECTED.some((p) => !permsOf(r).has(p));
 const blocked = computed(() => changedRoles.value.some((r) => sodOf(r).length || adminLosesProtected(r)));
 

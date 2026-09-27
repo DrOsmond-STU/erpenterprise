@@ -51,7 +51,7 @@ Pengguna seed (kata sandi = `SEED_PASSWORD`):
 
 | Surel | Peran | Cabang |
 | --- | --- | --- |
-| `admin@knm.co.id` | Admin sistem (cabang, akun, pengguna, log audit) | semua |
+| `admin@knm.co.id` | Admin sistem — memegang **seluruh izin** (semua modul & input data) | semua |
 | `andi@knm.co.id` | Akuntan senior (posting & balik jurnal, tutup periode, konsolidasi, audit) | semua |
 | `sari@knm.co.id` | Staf keuangan (buat jurnal, laporan — tanpa posting) | semua |
 | `osmond@knm.co.id` | Manajer operasional (laporan & konsolidasi, baca saja) | semua |
@@ -157,6 +157,14 @@ menolak perubahan yang melanggar pemisahan tugas (per peran maupun gabungan
 peran seorang pengguna), menghapus peran yang masih dipakai, atau menyisakan
 sistem tanpa admin aktif. Menonaktifkan pengguna atau mengubah perannya
 mengeluarkan semua sesinya.
+
+**Admin Sistem memegang seluruh izin** (migrasi `0008`), termasuk izin modul yang
+ditambahkan kemudian (pemicu basis data memberikannya otomatis), sehingga admin dapat
+membuka dan menginput di semua modul. Pemegang peran admin dikecualikan dari aturan
+pasangan izin tingkat peran/pengguna, tetapi **kontrol empat mata per dokumen tetap
+berlaku**: jurnal, pesanan, faktur, PO, tagihan pemasok, pembayaran, dan rekening
+pemasok yang dibuat admin harus disetujui/diposting orang lain; admin dapat
+menyetujui dokumen buatan orang lain.
 
 ## Penjualan & piutang
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { passwordProblems, sodViolations } from '@erp/domain';
+import { isSuperuserRole, passwordProblems, sodViolations } from '@erp/domain';
 import { get, patch, post } from '@/lib/api';
 import { errorList } from '@/lib/errors';
 import * as F from '@/lib/format';
@@ -63,7 +63,7 @@ function openEdit(u: any) {
   showForm.value = true;
 }
 const formPerms = computed(() => form.value.roles.flatMap((a) => roleMap.value.get(a.role)?.permissions ?? []));
-const formSod = computed(() => sodViolations(formPerms.value));
+const formSod = computed(() => (form.value.roles.some((a) => isSuperuserRole(a.role)) ? [] : sodViolations(formPerms.value)));
 const pwHints = computed(() => (form.value.pwMode === 'manual' && form.value.password ? passwordProblems(form.value.password, form.value.email) : []));
 const editReason = ref('');
 const shown = ref<{ title: string; email: string; password: string } | null>(null);
