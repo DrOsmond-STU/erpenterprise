@@ -44,3 +44,25 @@ describe('penjualan', () => {
     expect(addDays('2026-08-14', 30)).toBe('2026-09-13');
   });
 });
+
+describe('pembelian', async () => {
+  const p = await import('../src/purchasing.js');
+  it('harga pokok rata-rata bergerak', () => {
+    expect(p.movingAverage(100, 1000, 100, 2000)).toBe(1500);
+    expect(p.movingAverage(0, 0, 10, 700)).toBe(700);
+  });
+  it('dua penyetuju di atas ambang', () => {
+    expect(p.paymentApprovalsRequired(100_000_000, 100_000_000)).toBe(1);
+    expect(p.paymentApprovalsRequired(100_000_001, 100_000_000)).toBe(2);
+  });
+  it('masa tunggu rekening pemasok', () => {
+    const now = new Date('2026-09-27T12:00:00Z');
+    expect(p.bankCoolingProblem(null, now)).toMatch(/belum terverifikasi/);
+    expect(p.bankCoolingProblem('2026-09-27T01:00:00Z', now)).toMatch(/masa tunggu/);
+    expect(p.bankCoolingProblem('2026-09-25T01:00:00Z', now)).toBeNull();
+  });
+  it('kecocokan tiga arah', () => {
+    expect(p.threeWayProblems([{ sku: 'A', qty: 5, price: 10, received: 5, invoiced: 0, poPrice: 10 }])).toEqual([]);
+    expect(p.threeWayProblems([{ sku: 'A', qty: 6, price: 11, received: 5, invoiced: 0, poPrice: 10 }])).toHaveLength(2);
+  });
+});

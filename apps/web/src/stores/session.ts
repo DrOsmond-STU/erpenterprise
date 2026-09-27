@@ -16,7 +16,8 @@ export const useSession = defineStore('session', () => {
   const ready = ref(false);
 
   const isAuthenticated = computed(() => Boolean(token.value && user.value));
-  const can = (perm: string) => Boolean(user.value?.permissions.includes(perm));
+  /** 'a|b' = salah satu izin cukup (sama dengan penjaga API). */
+  const can = (perm: string) => perm.split('|').some((p) => Boolean(user.value?.permissions.includes(p)));
 
   async function loadMe() {
     const me = await get('/me', { scoped: false });

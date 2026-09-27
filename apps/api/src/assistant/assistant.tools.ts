@@ -11,9 +11,10 @@ import { forbidden } from '../common/errors.js';
 import type { JournalsService } from '../ledger/journals.service.js';
 import type { ReconciliationService } from '../ledger/reconciliation.service.js';
 import type { ReportsService } from '../ledger/reports.service.js';
+import type { SupplierPaymentsService } from '../purchasing/payments.service.js';
 import type { InvoicesService } from '../sales/invoices.service.js';
 
-export interface ToolDeps { reports: ReportsService; journals: JournalsService; recon: ReconciliationService; invoices: InvoicesService }
+export interface ToolDeps { reports: ReportsService; journals: JournalsService; recon: ReconciliationService; invoices: InvoicesService; payables: SupplierPaymentsService }
 export interface ToolCall { user: RequestUser; scope: ScopeContext; requestId: string }
 
 const cabang = { type: 'string', description: 'Kode cabang tiga huruf (mis. JKT, SBY), atau "ALL" untuk seluruh cabang. Kosongkan untuk memakai konteks cabang yang sedang dipilih pengguna.' } as const;
@@ -219,6 +220,22 @@ export const TOOLS: ToolDef[] = [
         per_tanggal: r.asOf, periode: periodOf(r.period), cakupan: r.scope, kpi: r.kpi, umur: r.aging,
         pelanggan: r.customers.slice(0, 30),
         faktur_terbuka: r.invoices.slice(0, 40).map((i: any) => ({ nomor: i.docNo, cabang: i.branch, pelanggan: i.customerName, tanggal: i.date, jatuh_tempo: i.dueDate, total: i.total, sisa: i.open, hari_terlambat: i.overdueDays })),
+      };
+    },
+  },
+  {
+    permission: 'purchasing.invoice.read',
+    spec: {
+      name: 'hutang_usaha',
+      description: 'Hutang usaha per akhir periode (paling lambat hari ini): total, jatuh tempo, jatuh tempo 7 hari ke depan, DPO, pembayaran yang menunggu persetujuan, umur hutang per ember, hutang per pemasok, dan daftar tagihan pemasok terbuka. Pakai untuk rencana pembayaran, pemasok yang harus dibayar, atau umur hutang.',
+      input_schema: { type: 'object', properties: scopeProps, additionalProperties: false },
+    },
+    run: async ({ payables }, c, input) => {
+      const r: any = await payables.payables(c.user, scopeFor(c.user, c.scope, scopeInput.parse(input)), c.requestId);
+      return {
+        per_tanggal: r.asOf, periode: periodOf(r.period), cakupan: r.scope, kpi: r.kpi, umur: r.aging,
+        pemasok: r.suppliers.slice(0, 30),
+        tagihan_terbuka: r.invoices.slice(0, 40).map((i: any) => ({ nomor: i.docNo, cabang: i.branch, pemasok: i.supplierName, tanggal: i.date, jatuh_tempo: i.dueDate, total: i.total, sisa: i.open, hari_terlambat: i.overdueDays, pembayaran_diproses: i.pendingPayments })),
       };
     },
   },

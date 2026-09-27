@@ -12,6 +12,7 @@ import { resolve } from 'node:path';
 import pg from 'pg';
 import { LEGACY_ACCOUNT_MAP, LEGACY_CASH_ACCOUNT, ROLE_TEMPLATES, STANDARD_COA } from '@erp/domain';
 import { AuthService } from '../auth/auth.service.js';
+import { seedPurchasing } from './purchasing-seed.js';
 import { seedSales } from './sales-seed.js';
 import { loadConfig } from '../config.js';
 
@@ -38,8 +39,13 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
       const id = exists.rows[0].id;
       await c.query(`SELECT set_config('app.company_id', $1, true), set_config('app.branch_codes', '*', true)`, [id]);
       const sales = await seedSales(c, id, DATA);
+      const purchasing = await seedPurchasing(c, id, DATA);
       await c.query('COMMIT');
-      return { skipped: true, companyId: id, upgraded: sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`] };
+      const upgraded = [
+        ...(sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`]),
+        ...(purchasing.skipped ? [] : [`pembelian: ${purchasing.suppliers} pemasok, ${purchasing.orders} PO`]),
+      ];
+      return { skipped: true, companyId: id, upgraded };
     }
 
     const company = (await c.query(`INSERT INTO companies (code, name, npwp) VALUES ('KNM', $1, '01.234.567.8-901.000') RETURNING id`, [DATA.org.company])).rows[0].id;
@@ -128,7 +134,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
     }
     for (const a of DATA.payables) {
       await c.query(`INSERT INTO ap_invoices (company_id, branch_code, doc_no, supplier_name, po_ref, kind, expense_account_code, invoice_date, due_date, total_gross, paid_amount, paid_date, bank_account_code, three_way_matched, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-        [company, a.branch, a.id, a.supplier, a.poRef, a.kind === 'jasa' ? 'service' : 'goods', a.account ? LEGACY_ACCOUNT_MAP[a.account] ?? a.account : null, a.date, a.dueDate, a.amount, a.paid, a.paidDate ?? null, a.bank ?? null, a.matched, a.status]);
+        [company, a.branch, a.id, a.supplier, a.poRef, a.kind === 'jasa' ? 'service' : 'goods', a.account ? LEGACY_ACCOUNT_MAP[a.account] ?? a.account : null, a.date, a.dueDate, a.amount, a.paid, a.paidDate ?? null, a.bank ?? null, a.matched, a.paid <= 0 ? 'belum-dibayar' : a.paid >= a.amount ? 'lunas' : 'sebagian']);
     }
     for (const s of DATA.stockItems) {
       await c.query(`INSERT INTO stock_items (company_id, branch_code, warehouse_code, sku, name, category, uom, on_hand, min_qty, max_qty, avg_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
@@ -143,6 +149,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
         [company, p.branch, p.id, p.employeeId, p.name, p.dept, p.basic, p.allowance, p.overtime, p.deduction, p.netPay, p.status]);
     }
     await seedSales(c, company, DATA);   // setelah faktur & kartu stok
+    await seedPurchasing(c, company, DATA);   // setelah produk (dibuat seed penjualan)
     await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);
     await c.query('COMMIT');
     return { skipped: false, companyId: company, journals: n };

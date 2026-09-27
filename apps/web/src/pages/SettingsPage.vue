@@ -19,7 +19,7 @@ const { data, loading, reload } = useLoader<any>(() => get('/settings', { scoped
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 const blank = () => ({ name: '', npwp: '', address: '', phone: '', email: '', website: '', fiscalYearStartMonth: 1,
-  policies: { salesApprovalThreshold: 0, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true },
+  policies: { salesApprovalThreshold: 0, purchaseApprovalThreshold: 0, paymentDualApprovalThreshold: 0, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true } as Record<string, any>,
   accountLinks: {} as Record<string, string> });
 /* Pemetaan akun: pilihan hanya akun detail yang lolos aturan tautan (bukan header). */
 const { data: coa } = useLoader<any>(() => (session.can('ledger.account.read') ? get('/ledger/accounts') : Promise.resolve({ accounts: [] })));
@@ -46,6 +46,13 @@ const threshold = computed({
   get: () => F.int(form.value.policies.salesApprovalThreshold),
   set: (v: string) => { form.value.policies.salesApprovalThreshold = Number(String(v).replace(/\D/g, '').slice(0, 13)) || 0; },
 });
+/* Ambang pembelian (K-24) & pembayaran dua penyetuju (K-26). */
+const money = (k: 'purchaseApprovalThreshold' | 'paymentDualApprovalThreshold') => computed({
+  get: () => F.int(form.value.policies[k] ?? 0),
+  set: (v: string) => { form.value.policies[k] = Number(String(v).replace(/\D/g, '').slice(0, 13)) || 0; },
+});
+const poThreshold = money('purchaseApprovalThreshold');
+const payThreshold = money('paymentDualApprovalThreshold');
 const errors = ref<string[]>([]);
 const busy = ref(false);
 async function save() {
@@ -123,10 +130,14 @@ async function save() {
           </fieldset>
         </article>
         <article class="card">
-          <div class="card-head"><div class="card-head-text"><h2 class="card-title">Kebijakan dokumen</h2><span class="card-note">Dipakai modul penjualan dan persediaan.</span></div></div>
+          <div class="card-head"><div class="card-head-text"><h2 class="card-title">Kebijakan dokumen</h2><span class="card-note">Dipakai modul penjualan, pembelian, dan persediaan.</span></div></div>
           <fieldset class="card-body" :disabled="!canManage" style="border:0;margin:0">
             <div class="setting-row"><div class="setting-text"><span class="setting-name">Batas persetujuan pesanan penjualan</span><span class="setting-note">Pesanan di atas nilai ini memerlukan persetujuan manajer.</span></div>
               <div class="setting-control"><input id="set-threshold" v-model="threshold" class="input num" inputmode="numeric" style="width:180px;text-align:right" aria-label="Batas persetujuan (Rp)"></div></div>
+            <div class="setting-row"><div class="setting-text"><span class="setting-name">Batas persetujuan pesanan pembelian</span><span class="setting-note">PO di atas nilai ini (termasuk PPN) memerlukan persetujuan manajer; 0 = semua PO disetujui otomatis kecuali pemasok dipantau.</span></div>
+              <div class="setting-control"><input id="set-po-threshold" v-model="poThreshold" class="input num" inputmode="numeric" style="width:180px;text-align:right" aria-label="Batas persetujuan PO (Rp)"></div></div>
+            <div class="setting-row"><div class="setting-text"><span class="setting-name">Pembayaran pemasok dengan dua penyetuju</span><span class="setting-note">Pembayaran di atas nilai ini wajib disetujui dua orang berbeda (selain pengaju); di bawahnya cukup satu.</span></div>
+              <div class="setting-control"><input id="set-pay-threshold" v-model="payThreshold" class="input num" inputmode="numeric" style="width:180px;text-align:right" aria-label="Ambang dua penyetuju (Rp)"></div></div>
             <div class="setting-row"><div class="setting-text"><span class="setting-name">Blokir pesanan melebihi plafon kredit</span><span class="setting-note">Pesanan pelanggan yang melebihi plafon ditahan.</span></div>
               <div class="setting-control"><label class="switch"><input v-model="form.policies.blockOverCreditLimit" type="checkbox" data-policy="blockOverCreditLimit" aria-label="Blokir melebihi plafon"><span class="switch-track"></span><span class="switch-thumb"></span></label></div></div>
             <div class="setting-row"><div class="setting-text"><span class="setting-name">Izinkan pengiriman sebagian</span><span class="setting-note">Pesanan dapat dikirim bertahap.</span></div>

@@ -27,7 +27,7 @@ const goInvoice = (id: string) => router.push({ path: '/faktur', query: { id } }
 </script>
 
 <template>
-  <ReportHead title="Piutang Usaha" :sub="data ? `Posisi per ${F.date(data.asOf)} — sisa tagihan dari faktur terbit dikurangi penerimaan sampai tanggal tersebut, sama dengan saldo akun 1-1200.` : 'Memuat…'" />
+  <ReportHead title="Piutang Usaha" :sub="data ? `Posisi per ${F.date(data.asOf)} — sisa tagihan dari faktur terbit dikurangi penerimaan sampai tanggal tersebut, sama dengan saldo akun piutang usaha di buku besar.` : 'Memuat…'" />
   <div v-if="loading && !data" class="loading">Memuat…</div>
   <template v-else-if="data">
     <div class="kpi-row" style="margin-bottom:var(--sp-4)">
@@ -49,7 +49,7 @@ const goInvoice = (id: string) => router.push({ path: '/faktur', query: { id } }
           </button>
           <div class="totals" style="margin-top:var(--sp-2)">
             <div class="totals-row"><span>Sub-buku piutang</span><b>{{ F.rp(data.kpi.total) }}</b></div>
-            <div class="totals-row"><span>Buku besar 1-1200</span><b>{{ F.rp(data.kpi.ledger) }}</b></div>
+            <div class="totals-row"><span>Buku besar piutang usaha</span><b>{{ F.rp(data.kpi.ledger) }}</b></div>
             <div class="totals-row"><span>Rekonsiliasi</span><b><Pill :status="data.kpi.reconciled ? 'ok' : 'diff'" /></b></div>
           </div>
         </div>

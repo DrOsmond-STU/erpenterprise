@@ -83,7 +83,10 @@ pemosting, invarian basis data (jurnal seimbang, akun detail, periode
 terkunci, jurnal terposting tak dapat diubah), laporan per cabang dan
 konsolidasi yang seimbang, rekonsiliasi sub-buku dan rantai audit, serta
 pengelolaan pengguna, peran & pengaturan (kata sandi sementara, wajib ganti,
-penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran).
+penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran), siklus
+penjualan (plafon, faktur, HPP, penerimaan, pembatalan), dan siklus pembelian
+(rekening pemasok & masa tunggu, persetujuan PO, penerimaan barang, kecocokan
+tiga arah, pembayaran dua penyetuju, umur hutang, rekonsiliasi hutang & GRNI).
 
 ## Bagan akun bertingkat
 
@@ -163,9 +166,9 @@ Menu **Penjualan**: Pesanan Penjualan, Faktur, Piutang Usaha, Pelanggan, Produk 
 Pesanan (draf) ──ajukan──► cek plafon & batas ──► disetujui ──buat faktur──► Faktur (draf)
                                    │ gagal                                      │ terbitkan (orang lain)
                                    ▼                                            ▼
-                         menunggu → setujui / tolak (manajer)   Jurnal otomatis: Dr 1-1200 │ Cr 4-1000, 4-2000, 2-1400
-                                                                                 Dr 5-1000 │ Cr 1-1500/1-1400 (stok cabang −)
-                                                            Penerimaan ──► Dr 1-1100 (rekening cabang) │ Cr 1-1200
+                         menunggu → setujui / tolak (manajer)   Jurnal otomatis: Dr 1-1301 │ Cr 4-1101, 4-1201, 2-1401
+                                                                                 Dr 5-1101 │ Cr 1-1503/1-1501 (stok cabang −)
+                                                            Penerimaan ──► Dr akun detail rekening cabang (1-11xx/1-12xx) │ Cr 1-1301
 ```
 
 - **Plafon kredit** dihitung lintas cabang: piutang terbuka + faktur draf + pesanan
@@ -181,7 +184,7 @@ Pesanan (draf) ──ajukan──► cek plafon & batas ──► disetujui ─�
 - **Batal**: draf langsung; faktur terbit hanya bila belum ada penerimaan — jurnal
   dibalik, stok dikembalikan, pesanan asal kembali *disetujui*.
 - **Piutang Usaha** = faktur terbit − penerimaan per tanggal, sama dengan sumber
-  pemeriksaan rekonsiliasi 1-1200 (halaman Integrasi) sehingga selalu cocok.
+  pemeriksaan rekonsiliasi piutang usaha (halaman Integrasi) sehingga selalu cocok.
 - Asisten AI mendapat alat baca `piutang_usaha` untuk pemegang `sales.invoice.read`.
 
 | Izin | Staf keuangan | Akuntan senior | Manajer |
@@ -193,6 +196,68 @@ Pesanan (draf) ──ajukan──► cek plafon & batas ──► disetujui ─�
 
 Basis data yang sudah berisi data contoh dilengkapi (pelanggan, produk, pesanan,
 penautan faktur lama) dengan menjalankan seed lagi — jalur *upgrade* idempoten.
+
+## Pembelian & hutang
+
+Menu **Pembelian**: Pesanan Pembelian, Penerimaan Barang, Tagihan Pemasok,
+Pembayaran, Hutang Usaha, Pemasok. Kode akun di bawah adalah pemetaan bawaan
+(Pengaturan → Pemetaan akun).
+
+```
+PO (draf) ──ajukan──► ≤ batas & pemasok aktif ──► disetujui ──terima barang (gudang)──► Penerimaan (GR)
+                │ > batas / pemasok dipantau                     Dr 1-1501/1-1503 persediaan │ Cr 2-1102 barang diterima belum ditagih
+                ▼                                                (stok cabang +, harga pokok rata-rata)
+      menunggu → setujui / tolak (manajer)                                     │
+                                                         buat tagihan dari PO ▼  (cocok tiga arah)
+                         Tagihan (draf) ──posting (orang lain)──► Dr 2-1102 / akun biaya jasa, Dr 1-1701 PPN masukan │ Cr 2-1101
+                                                                               │
+          Pembayaran (menunggu) ──1 atau 2 penyetuju berbeda──► disetujui ──bayar──► Dr 2-1101 │ Cr akun detail rekening cabang
+```
+
+- **Persetujuan PO** (K-24): PO di atas *Batas persetujuan pesanan pembelian*
+  (bawaan Rp 150 jt termasuk PPN) atau ke pemasok berstatus *dipantau* menunggu
+  keputusan manajer; pemasok *diblokir*/*nonaktif* tidak dapat menerima PO.
+- **Penerimaan barang** hanya oleh gudang (`purchasing.receipt.create`), boleh
+  sebagian, tidak melebihi sisa PO. Nilai = neto baris PO × qty diterima; stok
+  cabang bertambah dengan harga pokok rata-rata bergerak. Jurnal persediaan sama
+  persis dengan perubahan nilai kartu stok; selisih pembulatan rata-rata (rupiah)
+  masuk HPP sehingga saldo 2-1102 tetap tepat sebesar nilai PO.
+- **Kecocokan tiga arah**: tagihan dari PO berisi barang diterima yang belum ditagih
+  (nilai = kredit 2-1102 saat penerimaan) dan sisa jasa PO. Bila *nilai tertera di
+  tagihan pemasok* diisi dan berbeda, tagihan ditolak (`THREE_WAY_MISMATCH`).
+  Tagihan tanpa PO hanya untuk jasa/biaya dengan akun detail beban/aset.
+- **Pemisahan tugas per dokumen**: pembuat PO ≠ penyetuju, pembuat tagihan ≠
+  pemosting, pengaju pembayaran ≠ penyetuju — walau satu peran memegang keduanya.
+- **Pembayaran dua penyetuju** (K-26): pembayaran di atas *ambang dua penyetuju*
+  (bawaan Rp 100 jt, dapat diubah di Pengaturan → Kebijakan dokumen) wajib disetujui
+  dua orang berbeda selain pengaju; di bawahnya cukup satu. Penyetuju yang sama tidak
+  dihitung dua kali. Pengajuan tidak boleh melebihi sisa tagihan dikurangi pembayaran
+  lain yang masih berjalan. Jurnal baru diposting saat pembayaran dieksekusi.
+- **Rekening pemasok** (K-25): penetapan/perubahan rekening (hanya 4 digit terakhir
+  disimpan) dicatat sebagai *usulan* yang harus disetujui pengelola pemasok lain.
+  Transfer ke rekening yang baru disetujui ditahan selama masa tunggu 24 jam, dan
+  selama ada usulan perubahan yang belum diputus.
+- **Batal**: PO tanpa penerimaan/tagihan; tagihan terposting tanpa pembayaran —
+  jurnal dibalik, penerimaan dilepas agar dapat ditagih ulang, pembayaran yang belum
+  dieksekusi ikut batal.
+- **Hutang Usaha** = tagihan terposting − pembayaran dibayar per tanggal, sama dengan
+  pemeriksaan rekonsiliasi utang usaha. Halaman Integrasi juga memeriksa *barang
+  diterima belum ditagih* (Σ penerimaan belum ditagih = saldo 2-1102).
+- Asisten AI mendapat alat baca `hutang_usaha` untuk pemegang `purchasing.invoice.read`.
+
+| Izin | Staf keuangan | Akuntan senior | Manajer | Gudang |
+| --- | --- | --- | --- | --- |
+| `purchasing.invoice.read` (tagihan, pembayaran, hutang) | ✓ | ✓ | ✓ | |
+| `purchasing.order.create`, `purchasing.invoice.create`, `purchasing.payment.create` | ✓ | | | |
+| `purchasing.invoice.post`, `purchasing.payment.approve` | | ✓ | | |
+| `purchasing.order.approve`, `purchasing.supplier.manage`, `purchasing.payment.approve` | | | ✓ | |
+| `purchasing.receipt.create` (lihat PO & pemasok, terima barang) | | | | ✓ |
+
+Migrasi `0007_purchasing.sql` menambah tabel pemasok, PO, penerimaan, baris tagihan,
+dan pembayaran (RLS per cabang; pemasok per perusahaan), akun 2-1102, dan pembayaran
+historis dari kolom tagihan lama. Seed (juga jalur *upgrade*) mengisi 10 pemasok
+contoh dengan rekening terverifikasi, 11 PO, serta menautkan tagihan lama ke
+pemasok & PO-nya.
 
 ## Asisten AI
 

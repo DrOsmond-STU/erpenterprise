@@ -59,11 +59,13 @@ export class MasterDataService {
     const refs = (await c.query(
       `SELECT (SELECT count(*) FROM bank_accounts WHERE company_id = $1 AND gl_account_code = $2)::int AS banks,
               (SELECT count(*) FROM ap_invoices WHERE company_id = $1 AND expense_account_code = $2)::int AS ap,
-              (SELECT count(*) FROM assets WHERE company_id = $1 AND gl_account_code = $2)::int AS assets`, [companyId, code])).rows[0];
+              (SELECT count(*) FROM assets WHERE company_id = $1 AND gl_account_code = $2)::int AS assets,
+              ((SELECT count(*) FROM purchase_order_lines WHERE company_id = $1 AND expense_account_code = $2) + (SELECT count(*) FROM ap_invoice_lines WHERE company_id = $1 AND account_code = $2))::int AS purchasing`, [companyId, code])).rows[0];
     const linked: string[] = [];
     if (refs.banks) linked.push('rekening kas/bank');
     if (refs.ap) linked.push(`${refs.ap} tagihan pemasok`);
     if (refs.assets) linked.push(`${refs.assets} aset tetap`);
+    if (refs.purchasing) linked.push(`${refs.purchasing} baris PO/tagihan pemasok`);
     return { lines: r.lines as number, net: Number(r.net), activeChildren: children.active as number, children: children.total as number, linked };
   }
 

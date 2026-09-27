@@ -36,8 +36,9 @@ export class PermissionsGuard implements CanActivate {
     if (!required || !required.length) return true;
     const req = ctx.switchToHttp().getRequest<AppRequest>();
     if (!req.user) return false;
-    const missing = required.filter((p) => !req.user!.permissions.has(p));
-    if (missing.length) throw forbidden(`Memerlukan izin ${missing.join(', ')}.`);
+    /* 'a|b' = salah satu izin cukup (mis. baca PO bagi bagian keuangan maupun gudang). */
+    const missing = required.filter((p) => !p.split('|').some((x) => req.user!.permissions.has(x)));
+    if (missing.length) throw forbidden(`Memerlukan izin ${missing.map((m) => m.replace(/\|/g, ' atau ')).join(', ')}.`);
     return true;
   }
 }

@@ -12,8 +12,13 @@ export interface CompanyPolicies {
   blockOverCreditLimit: boolean;
   allowPartialShipment: boolean;
   autoDocumentNumbering: boolean;
+  /** PO di atas nilai ini memerlukan persetujuan manajer (dok. 07 §6.3). */
+  purchaseApprovalThreshold: number;
+  /** K-26: pembayaran pemasok di atas nilai ini memerlukan dua penyetuju berbeda. */
+  paymentDualApprovalThreshold: number;
 }
-export const DEFAULT_POLICIES: CompanyPolicies = { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true };
+export const DEFAULT_POLICIES: CompanyPolicies = { salesApprovalThreshold: 150_000_000, blockOverCreditLimit: true, allowPartialShipment: false, autoDocumentNumbering: true,
+  purchaseApprovalThreshold: 150_000_000, paymentDualApprovalThreshold: 100_000_000 };
 
 export interface SettingsPatch {
   name?: string; npwp?: string; address?: string; phone?: string; email?: string; website?: string;
