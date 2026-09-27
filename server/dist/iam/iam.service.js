@@ -86,7 +86,8 @@ let IamService = class IamService {
             }
             out.push({ roleId: r.id, branch: a.branch, code: r.code, permissions: r.perms });
         }
-        const violations = (0, domain_1.sodViolations)(out.flatMap((x) => x.permissions));
+        /* Pemegang peran Admin Sistem dikecualikan dari konflik tingkat pengguna (per dokumen tetap berlaku). */
+        const violations = out.some((x) => (0, domain_1.isSuperuserRole)(x.code)) ? [] : (0, domain_1.sodViolations)(out.flatMap((x) => x.permissions));
         if (violations.length)
             throw invalid('SOD_CONFLICT', `Kombinasi peran melanggar pemisahan tugas: ${violations.join(' ')}`, violations);
         return out;
@@ -192,11 +193,11 @@ let IamService = class IamService {
               (SELECT count(DISTINCT ur.user_id)::int FROM user_roles ur JOIN users x ON x.id = ur.user_id WHERE ur.role_id = r.id AND x.status = 'aktif') AS users
          FROM roles r WHERE r.company_id = $1 ORDER BY (r.code = 'admin') DESC, r.name`, [companyId])).rows;
     }
-    checkPermissions(perms) {
+    checkPermissions(perms, code) {
         const unknown = perms.filter((p) => !KNOWN.has(p));
         if (unknown.length)
             throw invalid('PERMISSION_UNKNOWN', `Izin tidak dikenal: ${unknown.join(', ')}.`);
-        const v = (0, domain_1.sodViolations)(perms);
+        const v = (0, domain_1.isSuperuserRole)(code) ? [] : (0, domain_1.sodViolations)(perms);
         if (v.length)
             throw invalid('SOD_CONFLICT', `Peran melanggar pemisahan tugas: ${v.join(' ')}`, v);
     }
@@ -219,7 +220,7 @@ let IamService = class IamService {
     }
     async patchRole(u, code, p, requestId) {
         if (p.permissions)
-            this.checkPermissions(p.permissions);
+            this.checkPermissions(p.permissions, code);
         return this.db.run(this.ctx(u, requestId), async (c) => {
             const r = (await c.query('SELECT id, name FROM roles WHERE company_id = $1 AND code = $2', [u.companyId, code])).rows[0];
             if (!r)
@@ -232,6 +233,9 @@ let IamService = class IamService {
                 /* Gabungan izin tiap pemegang peran ini tidak boleh melanggar pemisahan tugas. */
                 const holders = (await c.query('SELECT DISTINCT ur.user_id, u.display_name FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = $1', [r.id])).rows;
                 for (const h of holders) {
+                    const superuser = (await c.query('SELECT 1 FROM user_roles ur JOIN roles x ON x.id = ur.role_id WHERE ur.user_id = $1 AND x.code = $2', [h.user_id, 'admin'])).rowCount;
+                    if (superuser)
+                        continue;
                     const all = (await c.query('SELECT DISTINCT rp.permission_code AS p FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id WHERE ur.user_id = $1', [h.user_id])).rows.map((x) => x.p);
                     const v = (0, domain_1.sodViolations)(all);
                     if (v.length)
