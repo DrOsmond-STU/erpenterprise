@@ -35,6 +35,8 @@ const linkOf = computed(() => {
 const bankOf = computed(() => new Map<string, any>((banks.value?.accounts ?? []).map((b: any) => [b.glAccountCode, b])));
 const parents = computed(() => new Set((data.value?.accounts ?? []).map((a: any) => a.parentCode).filter(Boolean)));
 /* Header yang masih punya anak tidak dapat dinonaktifkan/dihapus; tombolnya disembunyikan. */
+/* Tipe hanya dapat diubah di level 4, tanpa anak, bukan akun sistem; server memeriksa transaksi & tautan. */
+const typeEditable = computed(() => Boolean(editing.value && editing.value.level === 4 && !parents.value.has(editing.value.code) && !isSystem(editing.value)));
 const isSystem = (a: any) => linkOf.value.has(a.code) || a.isComputed || a.isIntercompany || a.isCash || a.level === 1 || parents.value.has(a.code);
 const LEVEL_NOTE = (l: number) => (l <= 3 ? 'Neraca & laba rugi' : 'Transaksi, neraca saldo, kartu buku besar');
 
@@ -86,7 +88,11 @@ async function save() {
   errors.value = []; busy.value = true;
   try {
     if (editing.value) {
-      await patch(`/ledger/accounts/${editing.value.code}`, { name: form.value.name, reason: 'Ubah nama akun' });
+      const e = editing.value;
+      const body: any = { name: form.value.name, reason: 'Ubah data akun' };
+      if (form.value.type !== e.type) body.type = form.value.type;
+      if (form.value.isContra !== e.isContra) body.isContra = form.value.isContra;
+      await patch(`/ledger/accounts/${e.code}`, body);
       toast.push('Akun diperbarui', `${editing.value.code} · ${form.value.name}`, 'ok');
     } else {
       const a = await post('/ledger/accounts', { code: form.value.code.trim(), name: form.value.name, type: form.value.type, isContra: form.value.isContra });
@@ -157,13 +163,15 @@ const openCard = (a: any) => { if (a.type === 'detail' && !a.isComputed) router.
     </article>
   </template>
 
-  <Modal v-if="showForm" :title="editing ? `Ubah akun ${editing.code}` : 'Akun baru'" :subtitle="editing ? 'Kode, induk, dan kategori tidak dapat diubah agar riwayat buku besar tetap utuh.' : 'Induk ditentukan oleh pola kode; kategori & sisi normal mewarisi induk. Level 1–3 selalu header, level 5 selalu detail.'" width="560px" @close="showForm = false">
+  <Modal v-if="showForm" :title="editing ? `Ubah akun ${editing.code}` : 'Akun baru'" :subtitle="editing ? 'Nomor akun (beserta induk & kategori yang mengikutinya) tidak dapat diubah; nama, status, tipe level 4, dan sifat kontra dapat diubah.' : 'Induk ditentukan oleh pola kode; kategori & sisi normal mewarisi induk. Level 1–3 selalu header, level 5 selalu detail.'" width="560px" @close="showForm = false">
     <div class="form-grid">
-      <div class="field"><label for="acc-code">Kode</label><input id="acc-code" v-model="form.code" class="input code" placeholder="5-3701" maxlength="9" :disabled="!!editing"></div>
-      <div class="field"><label for="acc-type">Tipe</label><select id="acc-type" v-model="form.type" class="select" :disabled="!!editing || (codeInfo.level !== null && codeInfo.level !== 4)"><option value="detail">Detail (menerima transaksi)</option><option value="header">Header (pengelompokan)</option></select></div>
+      <div class="field"><label for="acc-code">Nomor akun</label><input id="acc-code" v-model="form.code" class="input code" placeholder="5-3701" maxlength="9" :disabled="!!editing">
+        <span v-if="editing" class="field-hint">Nomor akun tidak dapat diubah.</span></div>
+      <div class="field"><label for="acc-type">Tipe</label><select id="acc-type" v-model="form.type" class="select" :disabled="editing ? !typeEditable : codeInfo.level !== null && codeInfo.level !== 4"><option value="detail">Detail (menerima transaksi)</option><option value="header">Header (pengelompokan)</option></select></div>
       <div v-if="!editing" class="field form-grid-full"><span class="field-hint" :class="{ neg: codeInfo.bad }" data-code-info>{{ codeInfo.note }}</span></div>
       <div class="field form-grid-full"><label for="acc-name">Nama akun</label><input id="acc-name" v-model="form.name" class="input" maxlength="120" placeholder="Beban Langganan Perangkat Lunak"></div>
-      <label v-if="!editing" class="form-grid-full" style="display:flex;gap:var(--sp-2);align-items:center;font-size:var(--fs-sm)"><input v-model="form.isContra" type="checkbox"> Akun kontra (sisi normal berlawanan dengan induk, mis. akumulasi penyusutan)</label>
+      <span v-if="editing && editing.level === 4 && !typeEditable" class="field-hint form-grid-full">Tipe hanya dapat diubah untuk akun level 4 tanpa akun di bawahnya, tanpa transaksi, dan tidak ditautkan.</span>
+      <label class="form-grid-full" style="display:flex;gap:var(--sp-2);align-items:center;font-size:var(--fs-sm)"><input v-model="form.isContra" type="checkbox" :disabled="!!editing && editing.balance !== 0"> Akun kontra (sisi normal berlawanan dengan induk, mis. akumulasi penyusutan)</label>
       <div v-if="errors.length" class="field form-grid-full"><div class="field-hint neg" role="alert"><div v-for="e in errors" :key="e">• {{ e }}</div></div></div>
     </div>
     <template #foot>
@@ -172,7 +180,7 @@ const openCard = (a: any) => { if (a.type === 'detail' && !a.isComputed) router.
     </template>
   </Modal>
   <ReasonModal v-if="pending" :title="pending.kind === 'delete' ? `Hapus akun ${pending.a.code}?` : `${pending.a.status === 'aktif' ? 'Nonaktifkan' : 'Aktifkan'} akun ${pending.a.code}?`"
-    :message="pending.kind === 'delete' ? 'Hanya akun yang belum pernah dipakai jurnal dan tidak memiliki akun anak yang dapat dihapus.' : pending.a.status === 'aktif' ? 'Akun nonaktif tidak dapat menerima jurnal baru. Saldo harus nol.' : 'Akun akan kembali dapat menerima jurnal.'"
+    :message="pending.kind === 'delete' ? (pending.a.type === 'header' ? 'Header hanya dapat dihapus bila tidak ada lagi akun di bawahnya.' : 'Akun detail hanya dapat dihapus bila belum dipakai transaksi dan tidak terkait fitur lain (rekening, pemetaan akun, tagihan, aset).') : pending.a.status === 'aktif' ? 'Akun nonaktif tidak dapat menerima jurnal baru. Saldo harus nol.' : 'Akun akan kembali dapat menerima jurnal.'"
     :confirm-label="pending.kind === 'delete' ? 'Hapus akun' : pending.a.status === 'aktif' ? 'Nonaktifkan' : 'Aktifkan'" :danger="pending.kind === 'delete'" :busy="busy" :error="pendingError"
     @close="pending = null" @confirm="confirm" />
 </template>

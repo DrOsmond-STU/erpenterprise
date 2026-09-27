@@ -26,7 +26,11 @@ const accountCreate = z.object({
   parentCode: z.string().trim().regex(/^[1-5]-\d{4}(\.\d{2})?$/, 'Kode induk tidak sah').optional(),
   isContra: z.boolean().optional(),
 });
-const accountPatch = z.object({ name: z.string().trim().min(3).max(120).optional(), status: z.enum(['aktif', 'nonaktif']).optional(), reason: z.string().trim().min(3).max(300) });
+const accountPatch = z.object({
+  code: z.string().trim().optional(),   // hanya untuk menolak perubahan nomor akun secara eksplisit
+  name: z.string().trim().min(3).max(120).optional(), status: z.enum(['aktif', 'nonaktif']).optional(),
+  type: z.enum(['header', 'detail']).optional(), isContra: z.boolean().optional(), reason: z.string().trim().min(3).max(300),
+});
 const bankCreate = z.object({
   code: z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z0-9-]{3,30}$/, 'Kode rekening 3–30 karakter huruf besar, angka, atau tanda hubung')),
   branch: z.string().trim().toUpperCase().pipe(z.string().regex(/^[A-Z]{3}$/, 'Kode cabang 3 huruf')),

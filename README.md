@@ -107,6 +107,12 @@ penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran).
   (piutang, pendapatan barang/jasa, PPN, HPP, persediaan, utang, RK antar
   kantor, laba berjalan/ditahan). Header ditolak; perubahan wajib beralasan.
   Akun yang ditautkan tidak dapat dinonaktifkan atau dihapus.
+- **Nomor akun tidak dapat diubah**; yang dapat diubah hanya nama, status, sifat
+  kontra (bila belum bertransaksi), dan tipe header/detail untuk level 4 (bila
+  tidak punya anak, transaksi, maupun tautan).
+- **Hapus**: header hanya bila tidak ada lagi akun di bawahnya; detail hanya bila
+  belum dipakai jurnal dan tidak terkait fitur lain (rekening kas/bank, pemetaan
+  akun, tagihan pemasok, aset). Aturan ini juga dijaga trigger basis data (0006).
 - Migrasi `0005_coa_levels.sql` memindahkan data lama (struktur level 0–2) ke
   struktur ini: tiap akun detail lama menjadi header level 3 + detail `…01`,
   dan baris "Kas & Setara Kas" dipecah ke akun tiap rekening. Saldo tidak berubah.
