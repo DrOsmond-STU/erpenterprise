@@ -158,13 +158,14 @@ export const ACCOUNT_LINK_DEFS: AccountLinkDef[] = [
   { key: 'ap', group: 'Pembelian', label: 'Utang usaha', category: 'Liabilitas', default: '2-1101', note: 'Tagihan pemasok & pembayarannya.' },
   { key: 'grni', group: 'Pembelian', label: 'Utang barang diterima belum ditagih', category: 'Liabilitas', default: '2-1102', note: 'Dikredit saat penerimaan barang, didebit saat tagihan pemasok diposting (3-way match).' },
   { key: 'ppnIn', group: 'Pembelian', label: 'PPN masukan', category: 'Aset', default: '1-1701', note: 'PPN atas pembelian.' },
+  { key: 'taxPayable', group: 'Pajak', label: 'Utang pajak (PPN kurang bayar)', category: 'Liabilitas', default: '2-1301', note: 'Dikredit saat setoran PPN masa diposting, didebit saat pajak dibayar.' },
   { key: 'salaryPayable', group: 'Penggajian', label: 'Utang gaji', category: 'Liabilitas', default: '2-1201', note: 'Gaji bersih yang belum dibayar.' },
   { key: 'rkBranch', group: 'Antar kantor', label: 'RK Cabang (buku kantor pusat)', category: 'Aset', default: '1-3101', note: 'Dieliminasi pada konsolidasi.' },
   { key: 'rkHeadOffice', group: 'Antar kantor', label: 'RK Kantor Pusat (buku cabang)', category: 'Ekuitas', default: '3-1501', note: 'Dieliminasi pada konsolidasi.' },
   { key: 'currentEarnings', group: 'Tutup buku', label: 'Laba periode berjalan', category: 'Ekuitas', default: '3-2201', note: 'Akun dihitung; tidak menerima jurnal.' },
   { key: 'retainedEarnings', group: 'Tutup buku', label: 'Laba ditahan', category: 'Ekuitas', default: '3-2101', note: 'Tujuan penutupan laba akhir tahun buku.' },
 ];
-export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'ap' | 'grni' | 'ppnIn' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
+export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'ap' | 'grni' | 'ppnIn' | 'taxPayable' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
 export type AccountLinks = Record<AccountLinkKey, string>;
 export const DEFAULT_ACCOUNT_LINKS = Object.fromEntries(ACCOUNT_LINK_DEFS.map((d) => [d.key, d.default])) as AccountLinks;
 

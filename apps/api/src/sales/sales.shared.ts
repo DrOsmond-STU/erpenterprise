@@ -62,7 +62,7 @@ export async function companyPolicies(c: PoolClient, companyId: string): Promise
   return { ...DEFAULT_POLICIES, ...(r?.settings?.policies ?? {}) };
 }
 
-export interface AutoLine { account: string; debit: number; credit: number; bank?: string | null; party?: string | null; memo?: string | null }
+export interface AutoLine { account: string; debit: number; credit: number; bank?: string | null; party?: string | null; memo?: string | null; counterBranch?: string | null }
 
 /**
  * Jurnal otomatis dari dokumen (K-22): langsung terposting, idempoten per
@@ -85,9 +85,9 @@ export async function postAutoJournal(c: PoolClient, u: RequestUser, j: { branch
   for (const l of lines) {
     n += 1;
     await c.query(
-      `INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, memo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [ins.id, u.companyId, j.branch, j.date, n, l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.memo ?? null]);
+      `INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, memo, counter_branch)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [ins.id, u.companyId, j.branch, j.date, n, l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.memo ?? null, l.counterBranch ?? null]);
   }
   return { id: ins.id as string, journalNo: ins.journal_no as string };
 }
@@ -101,7 +101,7 @@ export async function reverseAutoJournals(c: PoolClient, u: RequestUser, source:
     const rev = await postAutoJournal(c, u, {
       branch: trimBranch(j.branch_code), date, source: 'reversal', sourceId: j.id, rule: 'REVERSAL', ref: j.ref ?? j.journal_no,
       description: `Pembalikan ${j.journal_no}: ${reason}`,
-      lines: lines.map((l: any) => ({ account: l.account_code, debit: l.credit, credit: l.debit, bank: l.bank_account_code, party: l.party, memo: l.memo })),
+      lines: lines.map((l: any) => ({ account: l.account_code, debit: l.credit, credit: l.debit, bank: l.bank_account_code, party: l.party, memo: l.memo, counterBranch: l.counter_branch ? trimBranch(l.counter_branch) : null })),
     });
     await c.query(`UPDATE journals SET reverses_journal_id = $2 WHERE id = $1`, [rev.id, j.id]);
     await c.query(`UPDATE journals SET status = 'reversed', reversed_by_journal_id = $2 WHERE id = $1`, [j.id, rev.id]);

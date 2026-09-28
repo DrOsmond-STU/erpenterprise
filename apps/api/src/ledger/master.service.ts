@@ -222,6 +222,12 @@ export class MasterDataService {
       if (main.rowCount) throw invalid('BANK_IS_BRANCH_MAIN', `Rekening ${code} adalah rekening utama/kas kecil cabang dan tidak dapat dihapus.`);
       const used = (await c.query('SELECT count(*)::int AS n FROM journal_lines WHERE company_id = $1 AND bank_account_code = $2', [u.companyId, code])).rows[0].n;
       if (used > 0) throw invalid('BANK_IN_USE', `Rekening ${code} sudah dipakai ${used} baris jurnal; nonaktifkan saja.`);
+      const docs = (await c.query(
+        `SELECT (SELECT count(*) FROM cash_transfers WHERE company_id = $1 AND (from_bank_code = $2 OR to_bank_code = $2))
+              + (SELECT count(*) FROM bank_statements WHERE company_id = $1 AND bank_account_code = $2)
+              + (SELECT count(*) FROM tax_settlements WHERE company_id = $1 AND bank_account_code = $2)
+              + (SELECT count(*) FROM supplier_payments WHERE company_id = $1 AND bank_account_code = $2) AS n`, [u.companyId, code])).rows[0].n;
+      if (Number(docs) > 0) throw invalid('BANK_IN_USE', `Rekening ${code} sudah dipakai ${docs} dokumen kas/bank; nonaktifkan saja.`);
       await c.query('DELETE FROM bank_accounts WHERE company_id = $1 AND code = $2', [u.companyId, code]);
       await this.audit.record(c, { companyId: u.companyId, branchCode: String(cur.branch_code).trim(), userId: u.id, sessionId: u.sessionId, action: 'bank_account.deleted', entityType: 'bank_account', entityId: code, before: this.mapBank(cur), after: { reason }, requestId });
       return { code, deleted: true };

@@ -20,6 +20,8 @@ export async function createApp(): Promise<NestExpressApplication> {
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     hsts: cfg.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
+  /* Impor mutasi rekening koran dikirim sebagai teks dalam JSON; batasi 2 MB. */
+  app.useBodyParser('json', { limit: '2mb' });
   app.use(cookieParser());
   app.use((req: any, res: any, next: () => void) => {
     req.requestId = String(req.headers['x-request-id'] ?? '').slice(0, 64) || randomUUID();

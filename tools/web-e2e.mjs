@@ -413,6 +413,69 @@ ok(['Pesanan Pembelian', 'Tagihan Pemasok', 'Pembayaran', 'Faktur', 'Pesanan Pen
 await page.goto(base + '/tagihan-pemasok'); await page.waitForSelector('[data-table=ap-invoices] tbody tr[data-row]');
 ok(await page.locator('[data-action=new-ap-invoice]').count() === 1, 'admin dapat menginput tagihan pemasok'); await shot('61-admin-pembelian');
 
+console.log('Kas & bank: transfer, rekonsiliasi, setoran pajak');
+const API = 'http://localhost:3000/api/v1';
+const apiToken = async (email) => (await (await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.77.${Date.now() % 200}.${(ipSeq += 1) % 250 + 1}` }, body: JSON.stringify({ email, password: PW }) })).json()).access_token;
+const apiGet = async (tok, path, branch = 'ALL', period = '2026-09') => (await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${tok}`, 'x-branch-id': branch, 'x-period-id': period } })).json();
+await logout(); await login('sari@knm.co.id'); await salesCtx('CKR');
+await page.goto(base + '/transfer-kas'); await page.waitForSelector('[data-action=new-transfer]');
+await page.click('[data-action=new-transfer]'); await page.waitForSelector('#tr-from option:nth-child(2)', { state: 'attached' });
+const banksAll = (await apiGet(await apiToken('andi@knm.co.id'), '/ledger/bank-accounts')).accounts;
+const kasCkr = banksAll.find((b) => b.branchCode === 'CKR' && b.bankName === 'Kas' && b.status === 'aktif');
+const bankCkr = banksAll.find((b) => b.branchCode === 'CKR' && b.bankName !== 'Kas' && b.status === 'aktif');
+await page.selectOption('#tr-from', bankCkr.code); await page.selectOption('#tr-to', kasCkr.code);
+await page.fill('#tr-amount', '1000000'); await page.fill('#tr-date', '2026-09-27'); await page.fill('#tr-ref', 'Isi kas kecil uji web');
+ok((await page.locator('[data-transfer-hint]').innerText()).includes('Satu cabang'), 'formulir transfer menjelaskan jenis jurnal');
+await shot('70-transfer-baru'); await page.click('[data-action=save-transfer]');
+await page.waitForSelector('.drawer [data-decision]'); await page.waitForTimeout(300);
+const trNo = (await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim();
+ok(/^TRF-2026-\d{4}$/.test(trNo) && await page.locator('[data-action=approve-transfer]').count() === 0, 'transfer diajukan; pengaju tidak ditawari tombol setujui', trNo);
+await page.keyboard.press('Escape'); await logout(); await login('andi@knm.co.id');
+await page.goto(base + '/transfer-kas'); await page.waitForSelector(`[data-transfer="${trNo}"]`); await page.click(`[data-transfer="${trNo}"]`);
+await page.waitForSelector('[data-action=approve-transfer]'); await page.click('[data-action=approve-transfer]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow .pill')?.textContent?.includes('Diposting'), null, { timeout: 15000 });
+ok(await page.locator('[data-table=transfer-journals] tbody tr').count() === 1, 'akuntan menyetujui: jurnal transfer tampil'); await shot('71-transfer-diposting');
+await page.keyboard.press('Escape');
+
+/* Rekonsiliasi: CSV kas kecil CKR tanggal 27/09 */
+const andiTok = await apiToken('andi@knm.co.id');
+const kasNow = (await apiGet(andiTok, '/ledger/bank-accounts')).accounts.find((b) => b.code === kasCkr.code);
+const card = await apiGet(andiTok, `/ledger/accounts/${kasNow.glAccountCode}/card?bank=${kasCkr.code}`, 'CKR');
+const kasBefore = card.opening + card.lines.filter((l) => l.date < '2026-09-27').reduce((t, l) => t + l.debit - l.credit, 0);
+const dayLines = card.lines.filter((l) => l.date === '2026-09-27');
+const f = (n) => n.toLocaleString('id-ID') + ',00';
+let runBal = kasBefore;
+const csv = ['Tanggal;Keterangan;Referensi;Debit;Kredit;Saldo', `27/09/2026;SALDO AWAL;;;;"${f(runBal)}"`];
+for (const l of dayLines) { runBal += l.debit - l.credit; csv.push(`27/09/2026;${l.description.replace(/;/g, ',')};${l.ref ?? ''};${l.credit ? `"${f(l.credit)}"` : ''};${l.debit ? `"${f(l.debit)}"` : ''};"${f(runBal)}"`); }
+runBal -= 2500; csv.push(`27/09/2026;BIAYA MATERAI;;"2.500,00";;"${f(runBal)}"`);
+await logout(); await login('sari@knm.co.id'); await salesCtx('CKR');
+await page.goto(base + '/rekonsiliasi-bank'); await page.waitForSelector('[data-table=recon-banks]'); await shot('72-rekonsiliasi');
+await page.click('[data-action=import-statement]'); await page.waitForSelector('#st-bank');
+await page.selectOption('#st-bank', kasCkr.code);
+await page.setInputFiles('[data-field=statement-file]', { name: 'kas-kecil-ckr.csv', mimeType: 'text/csv', buffer: Buffer.from(csv.join('\n')) });
+await page.waitForSelector('.modal .field-hint:has-text("kas-kecil-ckr.csv")');
+await page.click('[data-action=save-import]'); await page.waitForURL(/\/rekonsiliasi-bank\/[0-9a-f-]{36}$/); await page.waitForSelector('[data-table=statement-lines]');
+const stUrl = page.url();
+ok(await page.locator('[data-line-status=cocok]').count() === dayLines.length && await page.locator('[data-line-status=belum]').count() === 1, 'mutasi CSV diimpor; transfer cocok otomatis, biaya materai terbuka', [dayLines.length]);
+ok(await page.locator('[data-action=finalize-recon]').count() === 0, 'pengimpor tidak ditawari tombol finalisasi'); await shot('73-rekonsiliasi-detail');
+await page.click('[data-line-status=belum] [data-action=ignore-line]'); await page.fill('#reason-input', 'materai ditanggung bank, dikoreksi bulan depan'); await page.click('[data-action=confirm-reason]');
+await page.waitForSelector('[data-line-status=diabaikan]');
+ok((await page.locator('[data-recon-summary]').innerText()).includes('Saldo buku disesuaikan'), 'ringkasan rekonsiliasi tampil');
+await logout(); await login('andi@knm.co.id');
+await page.goto(stUrl); await page.waitForSelector('[data-action=finalize-recon]');
+ok(!(await page.locator('[data-action=finalize-recon]').isDisabled()), 'rekonsiliasi seimbang: tombol finalisasi aktif bagi akuntan');
+await page.click('[data-action=finalize-recon]'); await page.waitForSelector('[data-finalized]');
+ok(true, 'rekonsiliasi difinalisasi oleh orang lain'); await shot('74-rekonsiliasi-selesai');
+
+/* Setoran pajak */
+await page.goto(base + '/setoran-pajak'); await page.waitForSelector('[data-table=ppn-branches]');
+ok(await page.locator('[data-table=ppn-branches] tbody tr').count() >= 1, 'setoran PPN: saldo per cabang tampil'); await shot('75-setoran-pajak');
+if (await page.locator('[data-action=open-existing-tax]').count()) {
+  await page.click('[data-action=open-existing-tax]'); await page.waitForSelector('[data-table=tax-journals]');
+  ok(await page.locator('[data-table=tax-journals] tbody tr').count() >= 2, 'setoran masa berjalan: jurnal per cabang tampil'); await page.keyboard.press('Escape');
+}
+await logout(); await login('admin@knm.co.id');
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);

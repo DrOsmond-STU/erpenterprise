@@ -1,0 +1,23 @@
+/** Label linimasa dokumen kas & bank dari aksi jejak audit. */
+export const CASH_TIMELINE: Record<string, { label: string; tone: string }> = {
+  'cash_transfer.requested': { label: 'mengajukan transfer', tone: 'accent' },
+  'cash_transfer.posted': { label: 'menyetujui — jurnal diposting', tone: 'ok' },
+  'cash_transfer.rejected': { label: 'menolak transfer', tone: 'warn' },
+  'cash_transfer.cancelled': { label: 'membatalkan transfer', tone: '' },
+  'cash_transfer.reversed': { label: 'membalik transfer', tone: 'warn' },
+  'bank_statement.imported': { label: 'mengimpor mutasi rekening koran', tone: 'accent' },
+  'bank_statement.auto_matched': { label: 'menjalankan pencocokan otomatis', tone: '' },
+  'bank_statement.matched': { label: 'mencocokkan manual', tone: '' },
+  'bank_statement.unmatched': { label: 'melepas pencocokan', tone: '' },
+  'bank_statement.ignored': { label: 'mengabaikan baris mutasi', tone: 'warn' },
+  'bank_statement.journal_created': { label: 'membuat jurnal dari baris mutasi', tone: 'accent' },
+  'bank_statement.finalized': { label: 'memfinalisasi rekonsiliasi', tone: 'ok' },
+  'bank_statement.cancelled': { label: 'membatalkan rekonsiliasi', tone: '' },
+  'tax_settlement.created': { label: 'membuat draf setoran', tone: 'accent' },
+  'tax_settlement.posted': { label: 'memposting setoran — jurnal per cabang', tone: 'ok' },
+  'tax_settlement.paid': { label: 'mencatat pembayaran (NTPN)', tone: 'ok' },
+  'tax_settlement.cancelled': { label: 'membatalkan setoran', tone: 'warn' },
+};
+export const TRANSFER_CHIPS: [string, string][] = [['', 'Semua'], ['menunggu', 'Menunggu'], ['diposting', 'Diposting'], ['ditolak', 'Ditolak'], ['dibalik', 'Dibalik'], ['batal', 'Batal']];
+/** Contoh berkas CSV mutasi (kolom yang dikenali importir). */
+export const CSV_TEMPLATE = 'Tanggal;Keterangan;Referensi;Debit;Kredit;Saldo\n01/09/2026;SALDO AWAL;;;;"100.000.000,00"\n02/09/2026;TRF MASUK INV-2026-0101;INV-2026-0101;;"5.000.000,00";"105.000.000,00"\n03/09/2026;BIAYA ADM;;"15.000,00";;"104.985.000,00"\n';

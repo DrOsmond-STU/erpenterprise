@@ -86,7 +86,9 @@ pengelolaan pengguna, peran & pengaturan (kata sandi sementara, wajib ganti,
 penguncian & buka kunci, admin terakhir, pemisahan tugas pada peran), siklus
 penjualan (plafon, faktur, HPP, penerimaan, pembatalan), dan siklus pembelian
 (rekening pemasok & masa tunggu, persetujuan PO, penerimaan barang, kecocokan
-tiga arah, pembayaran dua penyetuju, umur hutang, rekonsiliasi hutang & GRNI).
+tiga arah, pembayaran dua penyetuju, umur hutang, rekonsiliasi hutang & GRNI),
+serta kas & bank (transfer antar cabang lewat RK, impor CSV/MT940, pencocokan,
+finalisasi rekonsiliasi, setoran PPN terpusat dengan NTPN).
 
 ## Bagan akun bertingkat
 
@@ -266,6 +268,47 @@ dan pembayaran (RLS per cabang; pemasok per perusahaan), akun 2-1102, dan pembay
 historis dari kolom tagihan lama. Seed (juga jalur *upgrade*) mengisi 10 pemasok
 contoh dengan rekening terverifikasi, 11 PO, serta menautkan tagihan lama ke
 pemasok & PO-nya.
+
+## Kas & bank, rekonsiliasi, setoran pajak
+
+Menu **Keuangan**: Kas & Bank, **Transfer Kas & Bank**, **Rekonsiliasi Bank**,
+**Setoran Pajak**.
+
+- **Transfer kas & bank** (setoran kas cabang ↔ pusat, pemindahbukuan): diajukan
+  (`cash.transfer.create`), disetujui & diposting orang lain (`cash.transfer.approve`).
+  Saldo buku rekening sumber harus cukup. Satu cabang → satu jurnal; antar cabang →
+  satu jurnal per cabang yang diseimbangkan dengan RK (kantor pusat: 1-3101 RK
+  Cabang, cabang: 3-1501 RK Kantor Pusat, keduanya dengan cabang lawan) sehingga
+  pemeriksaan RK antar kantor dan eliminasi konsolidasi tetap cocok. Koreksi lewat
+  pembalikan (ditolak bila sudah direkonsiliasi dengan rekening koran).
+- **Rekonsiliasi bank**: impor mutasi rekening koran **CSV** internet banking (kolom
+  Tanggal, Keterangan, Referensi, Debit/Kredit atau Jumlah bertanda, Saldo; pemisah
+  `;` `,` atau tab; angka format Indonesia/internasional) atau **MT940**. Saldo awal +
+  mutasi harus = saldo akhir; periode tidak boleh bertumpang tindih. Pencocokan
+  otomatis satu-satu dengan mutasi buku rekening yang sama (jumlah persis, tanggal ±3
+  hari, nomor referensi diutamakan); sisanya dicocokkan manual, dibuatkan **jurnal
+  memorial** (biaya/bunga bank — tetap diposting orang lain), atau diabaikan dengan
+  alasan. Finalisasi (`cash.reconcile.approve`, bukan pengimpor) hanya bila semua
+  baris tertangani, saldo awal sama dengan buku, dan *saldo buku disesuaikan*
+  (buku − setoran dalam perjalanan + pembayaran belum dicairkan + mutasi bank
+  diabaikan) = saldo rekening koran.
+- **Setoran PPN masa** (pemusatan di kantor pusat): pratinjau saldo PPN keluaran
+  (2-1401) & masukan (1-1701) per cabang per akhir masa → draf (`tax.settlement.create`)
+  → posting oleh orang lain (`tax.settlement.post`): tiap cabang menutup saldonya ke
+  RK, kantor pusat mencatat kurang bayar di utang pajak (pemetaan *Utang pajak*,
+  bawaan 2-1301) atau mengompensasikan lebih bayar → pembayaran dari rekening kantor
+  pusat dengan **NTPN**. Satu setoran per masa; posting ditolak bila saldo berubah
+  sejak draf dibuat.
+
+| Izin | Staf keuangan | Akuntan senior |
+| --- | --- | --- |
+| `cash.transfer.create`, `tax.settlement.create` | ✓ | |
+| `cash.reconcile` (impor, cocokkan, jurnal selisih) | ✓ | ✓ |
+| `cash.transfer.approve`, `cash.reconcile.approve`, `tax.settlement.post` | | ✓ |
+
+Semua pasangan buat ↔ setujui ditegakkan per dokumen (juga untuk admin). Migrasi
+`0009_cash_bank.sql` menambah tabel `cash_transfers`, `bank_statements`,
+`bank_statement_lines`, dan `tax_settlements` dengan RLS per cabang.
 
 ## Asisten AI
 

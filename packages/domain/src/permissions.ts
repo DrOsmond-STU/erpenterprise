@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   'sales.invoice.create', 'sales.invoice.issue', 'sales.invoice.cancel', 'sales.receipt.create',
   'purchasing.invoice.read', 'purchasing.supplier.manage', 'purchasing.order.create', 'purchasing.order.approve', 'purchasing.receipt.create',
   'purchasing.invoice.create', 'purchasing.invoice.post', 'purchasing.payment.create', 'purchasing.payment.approve',
+  'cash.transfer.create', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.create', 'tax.settlement.post',
   'inventory.read', 'inventory.adjust', 'inventory.transfer',
   'admin.user.manage', 'admin.role.manage', 'admin.settings.manage', 'admin.audit.read',
 ] as const;
@@ -20,7 +21,8 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 /** Pasangan yang ditegakkan per dokumen (pembuat ≠ penyetuju), bukan per pengguna. */
 export const PER_DOCUMENT_SOD = new Set(['ledger.journal.create|ledger.journal.post', 'sales.order.create|sales.order.approve', 'sales.invoice.create|sales.invoice.issue',
-  'purchasing.order.create|purchasing.order.approve', 'purchasing.invoice.create|purchasing.invoice.post', 'purchasing.payment.create|purchasing.payment.approve']);
+  'purchasing.order.create|purchasing.order.approve', 'purchasing.invoice.create|purchasing.invoice.post', 'purchasing.payment.create|purchasing.payment.approve',
+  'cash.transfer.create|cash.transfer.approve', 'cash.reconcile|cash.reconcile.approve', 'tax.settlement.create|tax.settlement.post']);
 
 /** Pasangan izin yang tidak boleh dipegang satu pengguna (pemisahan tugas, dok. 11 §3). */
 export const SOD_CONFLICTS: [Permission, Permission, string][] = [
@@ -30,6 +32,9 @@ export const SOD_CONFLICTS: [Permission, Permission, string][] = [
   ['purchasing.order.create', 'purchasing.order.approve', 'Pembuat PO tidak boleh menyetujui PO-nya sendiri; ditegakkan per PO.'],
   ['purchasing.invoice.create', 'purchasing.invoice.post', 'Pembuat tagihan pemasok tidak boleh memostingnya sendiri; ditegakkan per tagihan.'],
   ['purchasing.payment.create', 'purchasing.payment.approve', 'Pembuat pembayaran tidak boleh menyetujui pembayarannya sendiri; ditegakkan per pembayaran.'],
+  ['cash.transfer.create', 'cash.transfer.approve', 'Pengaju transfer kas tidak boleh menyetujuinya sendiri; ditegakkan per transfer.'],
+  ['cash.reconcile', 'cash.reconcile.approve', 'Pengimpor mutasi bank tidak boleh memfinalisasi rekonsiliasinya sendiri; ditegakkan per rekening koran.'],
+  ['tax.settlement.create', 'tax.settlement.post', 'Pembuat setoran pajak tidak boleh memostingnya sendiri; ditegakkan per setoran.'],
   ['admin.role.manage', 'ledger.journal.post', 'Admin peran tidak boleh memposting jurnal.'],
   ['ledger.period.close', 'ledger.period.reopen', 'Penutup periode tidak boleh membuka kembali periode.'],
   ['purchasing.payment.create', 'admin.user.manage', 'Pembuat pembayaran tidak boleh mengelola pengguna.'],
@@ -44,11 +49,11 @@ export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permiss
   },
   akuntan_senior: {
     name: 'Akuntan Senior',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'inventory.read', 'admin.audit.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.post', 'inventory.read', 'admin.audit.read'],
   },
   staf_keuangan: {
     name: 'Staf Keuangan',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'inventory.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'cash.transfer.create', 'cash.reconcile', 'tax.settlement.create', 'inventory.read'],
   },
   manajer: {
     name: 'Manajer Operasional',
@@ -86,6 +91,11 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
     { code: 'purchasing.invoice.post', label: 'Posting / batalkan tagihan' }, { code: 'purchasing.payment.create', label: 'Ajukan & bayar pembayaran' },
     { code: 'purchasing.payment.approve', label: 'Setujui pembayaran' },
   ] },
+  { group: 'Kas & bank', items: [
+    { code: 'cash.transfer.create', label: 'Ajukan transfer kas/bank' }, { code: 'cash.transfer.approve', label: 'Setujui & posting transfer kas/bank' },
+    { code: 'cash.reconcile', label: 'Impor mutasi & cocokkan rekonsiliasi bank' }, { code: 'cash.reconcile.approve', label: 'Finalisasi rekonsiliasi bank' },
+  ] },
+  { group: 'Pajak', items: [{ code: 'tax.settlement.create', label: 'Buat & bayar setoran pajak' }, { code: 'tax.settlement.post', label: 'Posting / batalkan setoran pajak' }] },
   { group: 'Inventaris', items: [{ code: 'inventory.read', label: 'Lihat stok' }, { code: 'inventory.adjust', label: 'Penyesuaian stok' }, { code: 'inventory.transfer', label: 'Transfer antar gudang' }] },
   { group: 'Sistem', items: [
     { code: 'admin.user.manage', label: 'Kelola pengguna' }, { code: 'admin.role.manage', label: 'Kelola peran & izin' },
