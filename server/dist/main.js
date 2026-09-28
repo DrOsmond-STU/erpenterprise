@@ -24,6 +24,8 @@ async function createApp() {
         referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
         hsts: cfg.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
     }));
+    /* Impor mutasi rekening koran dikirim sebagai teks dalam JSON; batasi 2 MB. */
+    app.useBodyParser('json', { limit: '2mb' });
     app.use((0, cookie_parser_1.default)());
     app.use((req, res, next) => {
         req.requestId = String(req.headers['x-request-id'] ?? '').slice(0, 64) || (0, node_crypto_1.randomUUID)();

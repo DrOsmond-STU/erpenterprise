@@ -681,6 +681,129 @@ async function main() {
         ok(aud.status === 200 && ['supplier_payment.requested', 'supplier_payment.approval_recorded', 'supplier_payment.approved', 'supplier_payment.paid'].every((x) => aud.body.data.some((a) => a.action === x)), 'dua persetujuan & eksekusi pembayaran tercatat di jejak audit', aud.body?.data?.map((a) => a.action));
         await call(`/admin/users/${bu.body.id}`, { method: 'PATCH', token: admin, body: JSON.stringify({ status: 'nonaktif', reason: 'bersihkan uji' }) });
     }
+    console.log('Kas & bank: transfer, rekonsiliasi, setoran PPN');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+        const bk = (code) => banks.find((b) => b.code === code);
+        const ckrBank = banks.find((b) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas');
+        const ckrKas = banks.find((b) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName === 'Kas');
+        const jktBank = bk('BNK-001');
+        const bal = async (code) => (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL', period: '2026-09' })).body.accounts.find((b) => b.code === code).balance;
+        /* Transfer satu cabang & antar cabang (RK) */
+        const t1 = await call('/cash/transfers', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ fromBank: ckrBank.code, toBank: ckrKas.code, amount: 5_000_000, date: '2026-09-22', reference: 'Isi kas kecil' }) });
+        ok(t1.status === 201 && t1.body.status === 'menunggu' && /^TRF-2026-\d{4}$/.test(t1.body.docNo) && !t1.body.interBranch, 'staf mengajukan transfer bank → kas kecil (menunggu)', t1.body);
+        ok((await call(`/cash/transfers/${t1.body.id}/approve`, { method: 'POST', token: sari, branch: 'CKR', body: '{}' })).status === 403, 'staf tidak dapat menyetujui transfer');
+        const k0 = await bal(ckrKas.code);
+        const a1 = await call(`/cash/transfers/${t1.body.id}/approve`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ note: 'sesuai permintaan' }) });
+        ok(a1.status === 200 && a1.body.status === 'diposting' && a1.body.journals.length === 1 && a1.body.journals[0].rule === 'CASH_TRANSFER', 'akuntan menyetujui: satu jurnal kas/bank diposting', a1.body?.journals);
+        ok(await bal(ckrKas.code) === k0 + 5_000_000, 'saldo kas kecil bertambah');
+        const t2 = await call('/cash/transfers', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ fromBank: ckrBank.code, toBank: jktBank.code, amount: 20_000_000, date: '2026-09-22', reference: 'Setoran ke pusat' }) });
+        const a2 = await call(`/cash/transfers/${t2.body.id}/approve`, { method: 'POST', token: andi, branch: 'ALL', body: '{}' });
+        ok(a2.status === 200 && t2.body.interBranch && a2.body.journals.map((j) => `${j.branch}:${j.rule}`).sort().join(',') === 'CKR:CASH_TRANSFER_OUT,JKT:CASH_TRANSFER_IN', 'setoran cabang → pusat: dua jurnal (cabang & pusat) lewat RK', a2.body?.journals);
+        const jOut = await call(`/ledger/journals/${a2.body.journals.find((j) => j.branch === 'CKR').id}`, { token: andi, branch: 'ALL' });
+        ok(jOut.body.lines.some((l) => l.account === '3-1501' && l.debit === 20_000_000 && l.counterBranch === 'JKT'), 'jurnal cabang mendebit RK Kantor Pusat dengan cabang lawan', jOut.body?.lines);
+        const over = await call('/cash/transfers', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ fromBank: ckrKas.code, toBank: ckrBank.code, amount: 9_000_000_000, date: '2026-09-22' }) });
+        ok(over.status === 422 && over.body.error.code === 'TRANSFER_INSUFFICIENT', 'transfer melebihi saldo buku rekening ditolak', over.body);
+        const t3 = await call('/cash/transfers', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ fromBank: jktBank.code, toBank: ckrBank.code, amount: 1_000_000, date: '2026-09-22' }) });
+        const selfA = await call(`/cash/transfers/${t3.body.id}/approve`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+        ok(t3.status === 201 && selfA.status === 403 && selfA.body.error.code === 'SOD_CASH_TRANSFER', 'pengaju (termasuk admin) tidak dapat menyetujui transfernya sendiri', selfA.body);
+        const rj = await call(`/cash/transfers/${t3.body.id}/reject`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ note: 'tidak dianggarkan' }) });
+        ok(rj.status === 200 && rj.body.status === 'ditolak', 'penyetuju menolak transfer dengan alasan', rj.body?.status);
+        const rv = await call(`/cash/transfers/${t1.body.id}/reverse`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ reason: 'salah rekening tujuan', date: '2026-09-23' }) });
+        ok(rv.status === 200 && rv.body.status === 'dibalik' && rv.body.journals.some((j) => j.rule === 'REVERSAL') && await bal(ckrKas.code) === k0, 'transfer diposting dibalik dengan jurnal balik; saldo kembali', rv.body?.journals);
+        ok((await call('/cash/transfers', { token: taufik, branch: 'ALL' })).body.every((t) => t.branch === 'MDN' || t.toBranch === 'MDN'), 'manajer Medan hanya melihat transfer yang melibatkan Medan (RLS)');
+        const recT = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(recT.body.checks.every((c) => c.ok), 'rekonsiliasi (termasuk RK antar kantor & kas-bank) tetap cocok setelah transfer', recT.body.checks.filter((c) => !c.ok));
+        /* Rekonsiliasi bank: CSV internet banking */
+        const card = (await call(`/ledger/accounts/${ckrBank.glAccountCode}/card?bank=${ckrBank.code}`, { token: andi, branch: 'CKR', period: '2026-09' })).body;
+        const lines = card.lines.filter((l) => l.date <= '2026-09-26');
+        const deposit = [...lines].reverse().find((l) => l.debit > 0);
+        const inStmt = lines.filter((l) => l !== deposit);
+        const fmt = (n) => n.toLocaleString('id-ID') + ',00';
+        const iso2dmy = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+        let run = card.opening;
+        const rows = ['Tanggal;Keterangan;Referensi;Debit;Kredit;Saldo', `01/09/2026;SALDO AWAL;;;;"${fmt(run)}"`];
+        for (const l of inStmt) {
+            run += l.debit - l.credit;
+            rows.push(`${iso2dmy(l.date)};"${l.description.replace(/"/g, '')}";${l.ref ?? ''};${l.credit ? `"${fmt(l.credit)}"` : ''};${l.debit ? `"${fmt(l.debit)}"` : ''};"${fmt(run)}"`);
+        }
+        run -= 15_000;
+        rows.push(`26/09/2026;BIAYA ADM BULANAN;;"15.000,00";;"${fmt(run)}"`);
+        run += 1_000;
+        rows.push(`26/09/2026;KOREKSI BANK;;;"1.000,00";"${fmt(run)}"`);
+        const imp = await call('/cash/statements', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ bankAccount: ckrBank.code, fileName: 'mutasi-ckr-sep.csv', content: rows.join('\n') }) });
+        ok(imp.status === 201 && imp.body.status === 'proses' && imp.body.source === 'csv' && imp.body.lines.length === inStmt.length + 2, 'mutasi CSV diimpor (saldo awal + mutasi = saldo akhir)', imp.body?.error ?? imp.body?.lines?.length);
+        ok(imp.body.reconciliation.counts.matched === inStmt.length && imp.body.reconciliation.counts.open === 2 && imp.body.bookOnly.length === 1 && imp.body.bookOnly[0].amount === deposit.debit, 'pencocokan otomatis: semua mutasi buku cocok; biaya & koreksi bank terbuka; satu setoran dalam perjalanan', imp.body?.reconciliation);
+        const stId = imp.body.id;
+        const dupImp = await call('/cash/statements', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ bankAccount: ckrBank.code, content: rows.join('\n') }) });
+        ok(dupImp.status === 409 && dupImp.body.error.code === 'STATEMENT_OVERLAP', 'rekening koran bertumpang tindih ditolak', dupImp.body);
+        const badImp = await call('/cash/statements', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ bankAccount: ckrKas.code, content: 'Tanggal;Keterangan;Jumlah;Saldo\n27/09/2026;X;1000;5000\n28/09/2026;Y;1000;9999' }) });
+        ok(badImp.status === 422 && badImp.body.error.code === 'STATEMENT_UNBALANCED', 'saldo awal + mutasi ≠ saldo akhir ditolak', badImp.body);
+        const early = await call(`/cash/statements/${stId}/finalize`, { method: 'POST', token: andi, branch: 'ALL' });
+        ok(early.status === 422 && early.body.error.code === 'RECON_NOT_BALANCED', 'finalisasi ditolak selama masih ada mutasi bank terbuka', early.body);
+        const feeLine = imp.body.lines.find((l) => l.description === 'BIAYA ADM BULANAN');
+        const corrLine = imp.body.lines.find((l) => l.description === 'KOREKSI BANK');
+        const fj = await call(`/cash/statements/${stId}/lines/${feeLine.id}/journal`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ account: '5-4101', description: 'Biaya administrasi bank September' }) });
+        const feeJ = fj.body.lines?.find((l) => l.id === feeLine.id)?.createdJournal;
+        ok(fj.status === 200 && feeJ?.status === 'pending', 'jurnal biaya bank dibuat dari baris mutasi (menunggu posting)', fj.body);
+        const pj = await call(`/ledger/journals/${feeJ.id}/post`, { method: 'POST', token: andi, branch: 'ALL' });
+        ok(pj.status === 200 || pj.status === 201, 'akuntan memposting jurnal biaya bank', pj.body);
+        const am = await call(`/cash/statements/${stId}/auto-match`, { method: 'POST', token: sari, branch: 'CKR' });
+        ok(am.status === 200 && am.body.newlyMatched === 1 && am.body.lines.find((l) => l.id === feeLine.id).status === 'cocok', 'cocokkan ulang: biaya bank kini cocok dengan jurnalnya', am.body?.newlyMatched);
+        const ig = await call(`/cash/statements/${stId}/lines/${corrLine.id}/ignore`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ note: 'kesalahan bank, dikoreksi bulan depan' }) });
+        ok(ig.status === 200 && ig.body.reconciliation.counts.open === 0, 'koreksi bank diabaikan dengan alasan', ig.body?.reconciliation?.counts);
+        const someLine = ig.body.lines.find((l) => l.status === 'cocok' && l.matchKind === 'otomatis');
+        const um = await call(`/cash/statements/${stId}/lines/${someLine.id}/unmatch`, { method: 'POST', token: sari, branch: 'CKR' });
+        const wrong = um.body.candidates.find((b) => b.amount !== someLine.amount);
+        const badM = await call(`/cash/statements/${stId}/lines/${someLine.id}/match`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ journalLineId: wrong.id }) });
+        ok(badM.status === 422 && badM.body.error.code === 'MATCH_AMOUNT', 'pencocokan manual dengan jumlah berbeda ditolak', badM.body);
+        const mm = await call(`/cash/statements/${stId}/lines/${someLine.id}/match`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ journalLineId: someLine.book.lineId }) });
+        ok(mm.status === 200 && mm.body.lines.find((l) => l.id === someLine.id).matchKind === 'manual', 'lepas lalu cocokkan manual', mm.body?.error);
+        ok((await call(`/cash/statements/${stId}/finalize`, { method: 'POST', token: sari, branch: 'CKR' })).status === 403, 'staf tanpa izin finalisasi tidak dapat menutup rekonsiliasi');
+        const fin = await call(`/cash/statements/${stId}/finalize`, { method: 'POST', token: andi, branch: 'ALL' });
+        ok(fin.status === 200 && fin.body.status === 'selesai' && fin.body.reconciliation.balanced && fin.body.reconciliation.inTransit === deposit.debit && fin.body.reconciliation.ignored === 1_000, 'finalisasi oleh orang lain: saldo buku disesuaikan = saldo rekening koran', fin.body?.error ?? fin.body?.reconciliation);
+        /* MT940 rekening pusat: transfer masuk dari cabang */
+        const cardJ = (await call(`/ledger/accounts/${jktBank.glAccountCode}/card?bank=${jktBank.code}`, { token: andi, branch: 'JKT', period: '2026-09' })).body;
+        const day = cardJ.lines.filter((l) => l.date === '2026-09-22');
+        const openJ = cardJ.opening + cardJ.lines.filter((l) => l.date < '2026-09-22').reduce((t, l) => t + l.debit - l.credit, 0);
+        const mtAmt = (n) => `${Math.abs(n)},00`;
+        const closeJ = openJ + day.reduce((t, l) => t + l.debit - l.credit, 0);
+        const mt = [':20:STMT0922', ':25:0123456789', ':28C:1/1', `:60F:C260922IDR${mtAmt(openJ)}`,
+            ...day.flatMap((l) => [`:61:2609220922${l.debit ? 'C' : 'D'}${mtAmt(l.debit || l.credit)}NTRF${(l.ref ?? 'NONREF').slice(0, 16)}`, `:86:${l.description}`]),
+            `:62F:C260922IDR${mtAmt(closeJ)}`, '-'].join('\n');
+        const impM = await call('/cash/statements', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: jktBank.code, fileName: 'bca-0922.sta', content: mt }) });
+        ok(impM.status === 201 && impM.body.source === 'mt940' && impM.body.reconciliation.counts.open === 0, 'MT940 diimpor & seluruh mutasi cocok otomatis', impM.body?.error ?? impM.body?.reconciliation);
+        const finM = await call(`/cash/statements/${impM.body.id}/finalize`, { method: 'POST', token: andi, branch: 'ALL' });
+        ok(finM.status === 200 && finM.body.status === 'selesai', 'rekonsiliasi rekening pusat difinalisasi', finM.body?.error);
+        const rvT2 = await call(`/cash/transfers/${t2.body.id}/reverse`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ reason: 'uji' }) });
+        ok(rvT2.status === 409 && rvT2.body.error.code === 'TRANSFER_RECONCILED', 'transfer yang sudah direkonsiliasi tidak dapat dibalik', rvT2.body);
+        ok((await call('/cash/statements', { token: taufik, branch: 'ALL' })).body.every((st) => st.branch === 'MDN'), 'rekening koran cabang lain tidak terlihat (RLS)');
+        /* Setoran PPN masa September (terpusat) */
+        const pv = await call('/cash/tax/ppn?period=2026-09', { token: andi, branch: 'ALL' });
+        ok(pv.status === 200 && pv.body.branches.length > 0 && pv.body.net === pv.body.output - pv.body.input && pv.body.existing === null, 'pratinjau PPN masa: saldo keluaran & masukan per cabang', pv.body);
+        ok((await call('/cash/tax/ppn?period=2026-09', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tidak melihat PPN terpusat');
+        const ts = await call('/cash/tax/settlements', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ period: '2026-09' }) });
+        ok(ts.status === 201 && ts.body.status === 'draf' && ts.body.net === pv.body.net && /^SPP-2026-\d{4}$/.test(ts.body.docNo), 'staf membuat draf setoran PPN', ts.body);
+        ok((await call('/cash/tax/settlements', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ period: '2026-09' }) })).status === 409, 'satu setoran per masa');
+        ok((await call(`/cash/tax/settlements/${ts.body.id}/post`, { method: 'POST', token: sari, branch: 'ALL' })).status === 403, 'staf tidak dapat memposting setoran');
+        const tp = await call(`/cash/tax/settlements/${ts.body.id}/post`, { method: 'POST', token: andi, branch: 'ALL' });
+        ok(tp.status === 200 && tp.body.status === 'diposting' && tp.body.journals.length === pv.body.branches.length, 'akuntan memposting: satu jurnal per cabang', tp.body?.error ?? tp.body?.journals);
+        const pv2 = await call('/cash/tax/ppn?period=2026-09', { token: andi, branch: 'ALL' });
+        ok(pv2.body.output === 0 && pv2.body.input === 0, 'saldo PPN keluaran & masukan seluruh cabang nol per akhir masa', pv2.body);
+        const net = ts.body.net;
+        if (net > 0) {
+            const wrongBank = await call(`/cash/tax/settlements/${ts.body.id}/pay`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: ckrBank.code, date: '2026-09-30', ntpn: '0123456789ABCDEF' }) });
+            ok(wrongBank.status === 422 && wrongBank.body.error.code === 'BANK_BRANCH', 'PPN disetor dari rekening kantor pusat', wrongBank.body);
+            const pay = await call(`/cash/tax/settlements/${ts.body.id}/pay`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: jktBank.code, date: '2026-09-30', ntpn: '0123456789ABCDEF' }) });
+            ok(pay.status === 200 && pay.body.status === 'dibayar' && pay.body.ntpn === '0123456789ABCDEF', 'pembayaran PPN dengan NTPN diposting (utang pajak lunas)', pay.body?.error);
+        }
+        const recX = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(recX.body.checks.every((c) => c.ok), 'rekonsiliasi tetap cocok setelah setoran PPN (RK antar kantor seimbang)', recX.body.checks.filter((c) => !c.ok));
+        const bsh = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(bsh.status === 200 && bsh.body.totalAssets === bsh.body.totalLiabEquity, 'neraca konsolidasi seimbang', [bsh.body.totalAssets, bsh.body.totalLiabEquity]);
+        void osmond;
+    }
     console.log('Asisten AI');
     const assistant = app.get(assistant_service_js_1.AssistantService);
     assistant.useClientForTest(null);
