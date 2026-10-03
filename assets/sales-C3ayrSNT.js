@@ -1,0 +1,1 @@
+const a=s=>Math.round(s);function P(s,d=.11){let o=0,e=0,c=0;const p=s.map(n=>{const u=a(n.qty*n.price),r=a(u*(1-(n.discPct??0)/100));return o+=u,n.kind==="jasa"?c+=r:e+=r,r}),t=e+c,i=a(t*d);return{lines:p,subtotal:o,discount:o-t,net:t,netGoods:e,netService:c,ppn:i,total:t+i}}export{P as s};

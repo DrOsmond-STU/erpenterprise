@@ -10,3 +10,6 @@ export * from './purchasing.js';
 export * from './cash.js';
 export * from './inventory.js';
 export * from './production.js';
+export * from './pos.js';
+export * from './payroll.js';
+export * from './fixed-assets.js';

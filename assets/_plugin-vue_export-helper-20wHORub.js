@@ -1,1 +1,0 @@
-const i=t=>Math.round(t);function d(t,r=.11){let s=0,n=0,o=0;const _=t.map(c=>{const p=i(c.qty*c.price),a=i(p*(1-(c.discPct??0)/100));return s+=p,c.kind==="jasa"?o+=a:n+=a,a}),e=n+o,u=i(e*r);return{lines:_,subtotal:s,discount:s-e,net:e,netGoods:n,netService:o,ppn:u,total:e+u}}const l=(t,r)=>{const s=t.__vccOpts||t;for(const[n,o]of r)s[n]=o;return s};export{l as _,d as s};
