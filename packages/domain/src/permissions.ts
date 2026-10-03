@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'hr.read', 'hr.manage', 'hr.restricted.read', 'payroll.process', 'payroll.approve', 'payroll.pay',
   'doc.read', 'doc.manage', 'compliance.read',
   'budget.read', 'budget.manage', 'budget.approve', 'project.read', 'project.manage',
+  'crm.read', 'crm.manage', 'sales.quote.create',
   'admin.user.manage', 'admin.role.manage', 'admin.settings.manage', 'admin.audit.read',
 ] as const;
 
@@ -64,15 +65,15 @@ export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permiss
   },
   akuntan_senior: {
     name: 'Akuntan Senior',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.post', 'inventory.read', 'inventory.adjust.approve', 'production.read', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.depreciate', 'hr.read', 'payroll.approve', 'doc.read', 'doc.manage', 'compliance.read', 'budget.read', 'budget.approve', 'project.read', 'admin.audit.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.post', 'inventory.read', 'inventory.adjust.approve', 'production.read', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.depreciate', 'hr.read', 'payroll.approve', 'doc.read', 'doc.manage', 'compliance.read', 'budget.read', 'budget.approve', 'project.read', 'crm.read', 'admin.audit.read'],
   },
   staf_keuangan: {
     name: 'Staf Keuangan',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'purchasing.requisition.create', 'purchasing.rfq.manage', 'cash.transfer.create', 'cash.reconcile', 'tax.settlement.create', 'inventory.read', 'asset.read', 'asset.manage', 'payroll.pay', 'doc.read', 'doc.manage', 'budget.read', 'budget.manage', 'project.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'purchasing.requisition.create', 'purchasing.rfq.manage', 'crm.read', 'crm.manage', 'sales.quote.create', 'cash.transfer.create', 'cash.reconcile', 'tax.settlement.create', 'inventory.read', 'asset.read', 'asset.manage', 'payroll.pay', 'doc.read', 'doc.manage', 'budget.read', 'budget.manage', 'project.read'],
   },
   manajer: {
     name: 'Manajer Operasional',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'sales.customer.manage', 'sales.order.approve', 'purchasing.invoice.read', 'purchasing.supplier.manage', 'purchasing.order.approve', 'purchasing.payment.approve', 'purchasing.requisition.create', 'purchasing.requisition.approve', 'purchasing.rfq.manage', 'inventory.read', 'inventory.adjust.approve', 'inventory.warehouse.manage', 'production.read', 'production.complete', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.manage', 'hr.read', 'doc.read', 'doc.manage', 'compliance.read', 'budget.read', 'budget.approve', 'project.read', 'project.manage'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'sales.customer.manage', 'sales.order.approve', 'purchasing.invoice.read', 'purchasing.supplier.manage', 'purchasing.order.approve', 'purchasing.payment.approve', 'purchasing.requisition.create', 'purchasing.requisition.approve', 'purchasing.rfq.manage', 'inventory.read', 'inventory.adjust.approve', 'inventory.warehouse.manage', 'production.read', 'production.complete', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.manage', 'hr.read', 'doc.read', 'doc.manage', 'compliance.read', 'budget.read', 'budget.approve', 'project.read', 'project.manage', 'crm.read', 'crm.manage', 'sales.quote.create'],
   },
   gudang: {
     name: 'Staf Gudang',
@@ -110,6 +111,7 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
     { code: 'sales.order.create', label: 'Buat pesanan penjualan' }, { code: 'sales.order.approve', label: 'Setujui / tolak pesanan' },
     { code: 'sales.invoice.create', label: 'Buat faktur' }, { code: 'sales.invoice.issue', label: 'Terbitkan faktur (posting)' },
     { code: 'sales.invoice.cancel', label: 'Batalkan faktur' }, { code: 'sales.receipt.create', label: 'Catat penerimaan pelanggan' },
+    { code: 'crm.read', label: 'Lihat lead, peluang & penawaran' }, { code: 'crm.manage', label: 'Kelola peluang & aktivitas' }, { code: 'sales.quote.create', label: 'Buat, kirim & catat keputusan penawaran' },
   ] },
   { group: 'Pembelian', items: [
     { code: 'purchasing.invoice.read', label: 'Lihat pembelian & hutang' }, { code: 'purchasing.supplier.manage', label: 'Kelola pemasok & setujui rekening' },

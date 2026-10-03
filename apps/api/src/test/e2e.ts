@@ -886,6 +886,76 @@ async function main() {
     ok(recP.body.checks.every((k: any) => k.ok), 'rekonsiliasi tetap cocok setelah alur anggaran & proyek', recP.body.checks.filter((k: any) => !k.ok));
   }
 
+  console.log('CRM: peluang, penawaran → pesanan penjualan → faktur → buku besar');
+  {
+    const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token as string;
+    const D = '2026-09-25';
+    const ol = await call('/crm/opportunities', { token: sari, branch: 'ALL' });
+    ok(ol.status === 200 && ol.body.rows.length >= 5 && ol.body.summary.pipeline > 0 && ol.body.rows.some((o: any) => o.stage === 'menang') && ol.body.rows.some((o: any) => o.stage === 'kalah'), 'peluang contoh di seluruh tahap; pipeline tertimbang', ol.body?.summary);
+    const openRows = ol.body.rows.filter((o: any) => !['menang', 'kalah'].includes(o.stage));
+    ok(ol.body.summary.pipeline === Math.round(openRows.reduce((t: number, o: any) => t + (o.value * o.probability) / 100, 0)), 'pipeline = Σ nilai × probabilitas peluang terbuka');
+    ok((await call('/crm/opportunities', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin CRM → 403');
+    const qs = await call('/crm/quotations', { token: sari, branch: 'ALL' });
+    ok(qs.status === 200 && qs.body.some((q: any) => q.status === 'terkirim' && q.opportunityCode), 'penawaran contoh terkirim tertaut peluang', qs.body?.length);
+    const custs = (await call('/sales/customers', { token: sari, branch: 'ALL' })).body;
+    const cust = custs.find((c: any) => c.status === 'aktif' && c.available > 100_000_000) ?? custs.find((c: any) => c.status === 'aktif');
+
+    const op = await call('/crm/opportunities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', name: 'Instalasi panel uji CRM', companyName: 'PT Prospek Uji', value: 40_000_000, source: 'Pameran', nextAction: 'Kunjungan', nextActionDate: '2026-09-28' }) });
+    ok(op.status === 201 && /^OPP-2026-\d{4}$/.test(op.body.code) && op.body.stage === 'prospek' && op.body.probability === 10 && op.body.weighted === 4_000_000 && !op.body.customerId, 'prospek baru: probabilitas 10%, nilai tertimbang', op.body);
+    const win = await call(`/crm/opportunities/${op.body.id}/stage`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ stage: 'menang' }) });
+    ok(win.status === 422 && /pesanan/.test(win.body.error.message), 'menang tidak dapat ditandai manual (harus lewat pesanan)', win.body);
+    const kual = await call(`/crm/opportunities/${op.body.id}/stage`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ stage: 'kualifikasi' }) });
+    ok(kual.body.stage === 'kualifikasi' && kual.body.probability === 30 && kual.body.activities.some((a: any) => a.kind === 'tahap'), 'pindah tahap → probabilitas bawaan & aktivitas tercatat', kual.body?.probability);
+    const actv = await call(`/crm/opportunities/${op.body.id}/activities`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ kind: 'telepon', note: 'Konfirmasi kebutuhan panel', nextAction: 'Kirim penawaran', nextActionDate: '2026-09-26' }) });
+    ok(actv.status === 200 && actv.body.nextAction === 'Kirim penawaran', 'aktivitas & tindak lanjut tercatat');
+
+    /* Penawaran → pesanan → faktur */
+    const qBody = { opportunityId: op.body.id, customerId: cust.id, quoteDate: D, validUntil: '2026-10-25', lines: [{ description: 'Jasa instalasi panel', kind: 'jasa', unit: 'paket', qty: 1, price: 30_000_000 }] };
+    const qt = await call('/crm/quotations', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(qBody) });
+    ok(qt.status === 201 && /^QT-2026-\d{4}$/.test(qt.body.docNo) && qt.body.status === 'draf' && qt.body.total === 33_300_000, 'penawaran dari peluang: PPN 11% dengan aturan faktur', qt.body);
+    const op2 = await call(`/crm/opportunities/${op.body.id}`, { token: sari, branch: 'CKR' });
+    ok(op2.body.stage === 'penawaran' && op2.body.probability === 50 && op2.body.customerId === cust.id, 'peluang naik ke tahap penawaran & prospek menjadi pelanggan', op2.body);
+    ok((await call(`/crm/quotations/${qt.body.id}/accept`, { method: 'POST', token: sari, branch: 'CKR', body: '{}' })).status === 409, 'draf belum terkirim tidak dapat diterima');
+    const sent = await call(`/crm/quotations/${qt.body.id}/send`, { method: 'POST', token: sari, branch: 'CKR' });
+    ok(sent.status === 200 && sent.body.status === 'terkirim' && sent.body.sentByName === 'Sari Melati', 'penawaran terkirim');
+    const lock = await call(`/crm/quotations/${qt.body.id}`, { method: 'PATCH', token: sari, branch: 'CKR', body: JSON.stringify({ lines: qBody.lines }) });
+    ok(lock.status === 409 && lock.body.error.code === 'QUOTE_SENT', 'isi penawaran terkirim terkunci (hanya perpanjang)', lock.body);
+    const ext = await call(`/crm/quotations/${qt.body.id}`, { method: 'PATCH', token: sari, branch: 'CKR', body: JSON.stringify({ validUntil: '2026-11-10' }) });
+    ok(ext.status === 200 && ext.body.validUntil === '2026-11-10', 'masa berlaku penawaran terkirim dapat diperpanjang');
+    const acc = await call(`/crm/quotations/${qt.body.id}/accept`, { method: 'POST', token: sari, branch: 'CKR', body: '{}' });
+    ok(acc.status === 200 && acc.body.status === 'diterima', 'penawaran dicatat diterima');
+    ok((await call(`/crm/quotations/${qt.body.id}/order`, { method: 'POST', token: fitri, branch: 'SBY', body: '{}' })).status === 403, 'tanpa izin pesanan tidak dapat mengonversi penawaran');
+    const so = await call(`/crm/quotations/${qt.body.id}/order`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ orderDate: D }) });
+    ok(so.status === 200 && /^SO-2026-\d{4}$/.test(so.body.docNo) && so.body.total === 33_300_000 && ['disetujui', 'menunggu'].includes(so.body.status), 'penawaran diterima → pesanan penjualan (plafon kredit diperiksa)', so.body);
+    const op3 = await call(`/crm/opportunities/${op.body.id}`, { token: sari, branch: 'CKR' });
+    ok(op3.body.stage === 'menang' && op3.body.probability === 100 && op3.body.value === 30_000_000, 'peluang otomatis menang; nilai = DPP penawaran', op3.body);
+    ok((await call(`/crm/quotations/${qt.body.id}/order`, { method: 'POST', token: sari, branch: 'CKR', body: '{}' })).status === 409, 'penawaran tidak dapat dikonversi dua kali');
+    await call(`/sales/orders/${so.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'revisi tanggal kirim' }) });
+    const qBack = await call(`/crm/quotations/${qt.body.id}`, { token: sari, branch: 'CKR' });
+    const opBack = await call(`/crm/opportunities/${op.body.id}`, { token: sari, branch: 'CKR' });
+    ok(!qBack.body.salesOrderId && qBack.body.status === 'diterima' && opBack.body.stage === 'negosiasi', 'pesanan batal → penawaran dapat dikonversi lagi, peluang kembali negosiasi', [qBack.body?.salesOrderId, opBack.body?.stage]);
+    const so2 = await call(`/crm/quotations/${qt.body.id}/order`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ orderDate: D }) });
+    if (so2.body.status === 'menunggu') await call(`/sales/orders/${so2.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+    const ti = await call(`/sales/orders/${so2.body.id}/invoice`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ invoiceDate: D }) });
+    const iss = await call(`/sales/invoices/${ti.body.invoiceId}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+    const js = await call(`/ledger/journals/${iss.body.journals?.find((j: any) => j.rule === 'SALES_INVOICE')?.id}`, { token: andi, branch: 'ALL' });
+    const amt = (a: string, side: 'debit' | 'credit') => (js.body.lines ?? []).filter((l: any) => l.account === a).reduce((t: number, l: any) => t + l[side], 0);
+    ok(iss.status === 200 && iss.body.total === 33_300_000 && amt('4-1201', 'credit') === 30_000_000 && amt('2-1401', 'credit') === 3_300_000, 'faktur dari penawaran: jurnal pendapatan jasa & PPN keluaran ke buku besar', js.body?.lines);
+
+    /* Kalah beralasan & penawaran kedaluwarsa */
+    const op4 = await call('/crm/opportunities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', name: 'Peluang kalah uji', customerId: cust.id, value: 5_000_000, stage: 'negosiasi' }) });
+    ok(op4.body.probability === 75, 'peluang tahap negosiasi: probabilitas 75%');
+    const noWhy = await call(`/crm/opportunities/${op4.body.id}/stage`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ stage: 'kalah' }) });
+    ok(noWhy.status === 422, 'kalah tanpa alasan ditolak', noWhy.body);
+    const lost = await call(`/crm/opportunities/${op4.body.id}/stage`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ stage: 'kalah', lostReason: 'Harga pesaing lebih rendah 12%' }) });
+    ok(lost.body.stage === 'kalah' && lost.body.probability === 0 && lost.body.weighted === 0, 'peluang kalah: probabilitas 0, keluar dari pipeline');
+    const old = await call('/crm/quotations', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ customerId: cust.id, quoteDate: '2026-08-01', validUntil: '2026-08-31', lines: qBody.lines }) });
+    const exp = await call(`/crm/quotations/${old.body.id}/send`, { method: 'POST', token: sari, branch: 'CKR' });
+    ok(old.body.expired && exp.status === 422 && exp.body.error.code === 'QUOTE_EXPIRED', 'penawaran kedaluwarsa ditandai & tidak dapat dikirim', exp.body);
+    const recC = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+    ok(recC.body.checks.every((k: any) => k.ok), 'rekonsiliasi tetap cocok setelah alur CRM → faktur', recC.body.checks.filter((k: any) => !k.ok));
+  }
+
   console.log('Kas & bank: transfer, rekonsiliasi, setoran PPN');
   {
     const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token as string;

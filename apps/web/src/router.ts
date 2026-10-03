@@ -35,6 +35,8 @@ export const NAV: NavGroup[] = [
   {
     label: 'Penjualan',
     items: [
+      { path: '/lead', label: 'Lead & Peluang', icon: 'trending', permission: 'crm.read' },
+      { path: '/penawaran', label: 'Penawaran', icon: 'invoice', permission: 'crm.read|sales.quote.create' },
       { path: '/pesanan-penjualan', label: 'Pesanan Penjualan', icon: 'cart', permission: 'sales.invoice.read' },
       { path: '/faktur', label: 'Faktur', icon: 'invoice', permission: 'sales.invoice.read' },
       { path: '/piutang', label: 'Piutang Usaha', icon: 'wallet', permission: 'sales.invoice.read' },
@@ -122,6 +124,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/rekonsiliasi-bank', component: () => import('@/pages/BankStatementsPage.vue'), meta: { title: 'Rekonsiliasi Bank', permission: 'ledger.report.read' } },
   { path: '/rekonsiliasi-bank/:id', component: () => import('@/pages/BankStatementPage.vue'), meta: { title: 'Rekonsiliasi Bank', permission: 'ledger.report.read' } },
   { path: '/setoran-pajak', component: () => import('@/pages/TaxSettlementsPage.vue'), meta: { title: 'Setoran Pajak', permission: 'ledger.report.read' } },
+  { path: '/lead', component: () => import('@/pages/LeadsPage.vue'), meta: { title: 'Lead & Peluang', permission: 'crm.read' } },
+  { path: '/penawaran', component: () => import('@/pages/QuotationsPage.vue'), meta: { title: 'Penawaran', permission: 'crm.read|sales.quote.create' } },
   { path: '/pesanan-penjualan', component: () => import('@/pages/SalesOrdersPage.vue'), meta: { title: 'Pesanan Penjualan', permission: 'sales.invoice.read' } },
   { path: '/faktur', component: () => import('@/pages/InvoicesPage.vue'), meta: { title: 'Faktur', permission: 'sales.invoice.read' } },
   { path: '/piutang', component: () => import('@/pages/ReceivablesPage.vue'), meta: { title: 'Piutang Usaha', permission: 'sales.invoice.read' } },

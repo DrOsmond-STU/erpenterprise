@@ -21,6 +21,7 @@ rugi, dan neraca** — per cabang maupun konsolidasi — dan diperiksa oleh hala
 | Modul | Dokumen → jurnal | Pemeriksaan rekonsiliasi |
 | --- | --- | --- |
 | Penjualan & piutang | faktur (pendapatan, PPN keluaran, HPP), penerimaan | piutang |
+| CRM & penawaran | pra-akuntansi → pesanan penjualan; jurnal saat faktur pesanan terbit | piutang |
 | Pengadaan (PR, RFQ) | komitmen pra-akuntansi → PO; jurnal saat barang PO diterima & ditagih | hutang, GRNI, persediaan |
 | Pembelian & hutang | penerimaan barang (persediaan/GRNI), tagihan, pembayaran | hutang, GRNI |
 | Kas & bank | transfer (RK antar cabang), jurnal dari mutasi bank, setoran PPN | kas-bank, RK |
@@ -314,6 +315,26 @@ pemasok & PO-nya.
   `purchasing.requisition.approve` (manajer), `purchasing.rfq.manage` (staf keuangan,
   manajer). Migrasi `0017_procurement.sql` (RLS per cabang) mengisi tiga PR contoh dan
   satu RFQ terbuka.
+
+## Lead & peluang, penawaran (`/lead`, `/penawaran`)
+
+- **Peluang** di papan kanban prospek → kualifikasi → penawaran → negosiasi → menang/kalah,
+  dengan probabilitas bawaan per tahap (10/30/50/75/100/0, tahap terbuka dapat disesuaikan),
+  sumber, PIC, kontak, tindak lanjut (terlambat ditandai), dan log aktivitas (telepon, rapat,
+  email, kunjungan, catatan; perpindahan tahap tercatat otomatis). Pipeline = Σ nilai ×
+  probabilitas peluang terbuka; KPI rata-rata deal, menang/kalah & rasio menang.
+- Kalah wajib beralasan; **menang hanya lewat penawaran diterima yang dikonversi menjadi
+  pesanan penjualan** — nilai peluang menjadi DPP penawaran.
+- **Penawaran** berbaris (barang/jasa, diskon, PPN 11% dengan aturan faktur), masa berlaku
+  (kedaluwarsa ditandai; tidak dapat dikirim/diterima sebelum diperpanjang): draf → terkirim
+  (isi terkunci, hanya perpanjang) → diterima/ditolak (beralasan). Penawaran dari peluang
+  menaikkan peluang ke tahap penawaran dan menjadikan prospek pelanggan.
+- Diterima → **pesanan penjualan** (plafon kredit & persetujuan seperti biasa) → faktur →
+  jurnal pendapatan, PPN keluaran, HPP. Pesanan dibatalkan mengembalikan penawaran agar dapat
+  dikonversi lagi dan peluang ke negosiasi.
+- Izin: `crm.read`, `crm.manage`, `sales.quote.create` (konversi ke pesanan memerlukan
+  `sales.order.create`). Migrasi `0019_crm.sql` mengisi peluang contoh di semua tahap dan
+  penawaran terkirim.
 
 ## Anggaran & proyek (`/anggaran`, `/proyek`)
 

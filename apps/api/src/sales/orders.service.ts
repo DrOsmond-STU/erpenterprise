@@ -13,7 +13,7 @@ import { mapCustomer } from './customers.service.js';
 import { insertLines, mapLine, resolveLines, type LineInput } from './lines.js';
 import { assertBranch, auditTrail, companyPolicies, exposures, invalid, nextDocNo, todayWib, trimBranch, UUID } from './sales.shared.js';
 
-export interface OrderInput { branch?: string; customerId?: string; orderDate?: string; deliveryDate?: string | null; channel?: string; notes?: string; lines?: LineInput[]; submit?: boolean }
+export interface OrderInput { branch?: string; customerId?: string; orderDate?: string; deliveryDate?: string | null; channel?: string; notes?: string; lines?: LineInput[]; submit?: boolean; quotationId?: string }
 
 const STATUS_LABEL: Record<string, string> = { draf: 'Draf', menunggu: 'Menunggu persetujuan', disetujui: 'Disetujui', ditolak: 'Ditolak', dikirim: 'Dikirim', selesai: 'Selesai (difakturkan)', batal: 'Batal' };
 
@@ -76,24 +76,29 @@ export class OrdersService {
     const branch = String(b.branch ?? (s.branch === 'ALL' ? '' : s.branch)).toUpperCase();
     if (!/^[A-Z]{3}$/.test(branch)) throw invalid('BRANCH_REQUIRED', 'Pilih cabang pesanan.');
     assertBranch(u, s, branch);
-    return this.db.run(contextOf(u, s, requestId), async (c) => {
-      const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
-      if (!br || br.status !== 'aktif') throw invalid('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
-      const cust = await this.customer(c, u.companyId, b.customerId);
-      const { lines, totals } = await resolveLines(c, u.companyId, b.lines ?? []);
-      const date = b.orderDate ?? todayWib();
-      const docNo = await nextDocNo(c, u.companyId, 'SO', Number(date.slice(0, 4)));
-      const o = (await c.query(
-        `INSERT INTO sales_orders (company_id, branch_code, doc_no, customer_id, order_date, delivery_date, channel, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
-        [u.companyId, branch, docNo, cust.id, date, b.deliveryDate ?? addDays(date, 14), b.channel ?? cust.segment, b.notes ?? null,
-          totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name])).rows[0];
-      await insertLines(c, 'sales_order_lines', 'order_id', o.id, u.companyId, branch, lines);
-      await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'sales_order.created', entityType: 'sales_order', entityId: docNo, after: { customer: cust.name, total: totals.total, lines: lines.length }, requestId });
-      if (b.submit) await this.doSubmit(c, u, o.id, requestId);
-      return this.load(c, u.companyId, o.id);
-    });
+    return this.db.run(contextOf(u, s, requestId), async (c) => this.load(c, u.companyId, await this.createIn(c, u, branch, b, requestId)));
   }
+
+  /** Buat pesanan di transaksi berjalan (dipakai juga konversi penawaran). Mengembalikan id pesanan. */
+  async createIn(c: PoolClient, u: RequestUser, branch: string, b: OrderInput, requestId: string): Promise<string> {
+    const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
+    if (!br || br.status !== 'aktif') throw invalid('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
+    const cust = await this.customer(c, u.companyId, b.customerId);
+    const { lines, totals } = await resolveLines(c, u.companyId, b.lines ?? []);
+    const date = b.orderDate ?? todayWib();
+    const docNo = await nextDocNo(c, u.companyId, 'SO', Number(date.slice(0, 4)));
+    const o = (await c.query(
+      `INSERT INTO sales_orders (company_id, branch_code, doc_no, customer_id, order_date, delivery_date, channel, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, quotation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+      [u.companyId, branch, docNo, cust.id, date, b.deliveryDate ?? addDays(date, 14), b.channel ?? cust.segment, b.notes ?? null,
+        totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.quotationId ?? null])).rows[0];
+    await insertLines(c, 'sales_order_lines', 'order_id', o.id, u.companyId, branch, lines);
+    await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'sales_order.created', entityType: 'sales_order', entityId: docNo, after: { customer: cust.name, total: totals.total, lines: lines.length }, requestId });
+    if (b.submit) await this.doSubmit(c, u, o.id, requestId);
+    return o.id;
+  }
+
+  loadIn(c: PoolClient, companyId: string, id: string) { return this.load(c, companyId, id); }
 
   async update(u: RequestUser, s: ScopeContext, id: string, b: OrderInput, requestId: string) {
     return this.db.run(contextOf(u, s, requestId), async (c) => {
@@ -163,6 +168,11 @@ export class OrdersService {
       const mayCancel = o.created_by === u.id || u.permissions.has('sales.order.approve');
       if (!mayCancel) throw forbidden('Hanya pembuat pesanan atau penyetuju yang dapat membatalkan pesanan.');
       await c.query(`UPDATE sales_orders SET status = 'batal', decision_note = $2, updated_at = now() WHERE id = $1`, [id, reason]);
+      /* Pesanan dari penawaran batal: penawaran tetap diterima & dapat dikonversi lagi; peluang kembali negosiasi. */
+      if (o.quotation_id) {
+        const q = (await c.query('UPDATE quotations SET sales_order_id = NULL, updated_at = now() WHERE id = $1 RETURNING opportunity_id', [o.quotation_id])).rows[0];
+        if (q?.opportunity_id) await c.query(`UPDATE opportunities SET stage = 'negosiasi', probability = 75, closed_at = NULL, updated_at = now() WHERE id = $1 AND stage = 'menang'`, [q.opportunity_id]);
+      }
       await this.audit.record(c, { companyId: u.companyId, branchCode: trimBranch(o.branch_code), userId: u.id, sessionId: u.sessionId, action: 'sales_order.cancelled', entityType: 'sales_order', entityId: o.doc_no, after: { reason }, requestId });
       return this.load(c, u.companyId, id);
     });
