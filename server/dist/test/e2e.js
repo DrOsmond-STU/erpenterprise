@@ -681,6 +681,94 @@ async function main() {
         ok(aud.status === 200 && ['supplier_payment.requested', 'supplier_payment.approval_recorded', 'supplier_payment.approved', 'supplier_payment.paid'].every((x) => aud.body.data.some((a) => a.action === x)), 'dua persetujuan & eksekusi pembayaran tercatat di jejak audit', aud.body?.data?.map((a) => a.action));
         await call(`/admin/users/${bu.body.id}`, { method: 'PATCH', token: admin, body: JSON.stringify({ status: 'nonaktif', reason: 'bersihkan uji' }) });
     }
+    console.log('Pengadaan: permintaan pembelian, RFQ, konversi ke PO');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const D = '2026-09-23';
+        const demo = await call('/purchasing/requisitions', { token: sari, branch: 'ALL' });
+        ok(demo.status === 200 && demo.body.length >= 3 && demo.body.some((p) => p.priority === 'tinggi' && p.status === 'menunggu') && demo.body.some((p) => p.rfqNo), 'PR contoh: prioritas tinggi menunggu & PR dalam RFQ', demo.body?.length);
+        ok((await call('/purchasing/requisitions', { token: andi, branch: 'ALL' })).status === 403, 'akuntan tanpa izin pengadaan tidak dapat membaca PR');
+        const cat = await call('/purchasing/procurement/catalog', { token: fitri, branch: 'SBY' });
+        ok(cat.status === 200 && cat.body.products.some((p) => p.sku === 'BRG-3390') && cat.body.accounts.some((a) => a.code === '5-2401') && !cat.body.accounts.some((a) => a.code === '1-1101'), 'katalog PR: barang berstok & akun biaya detail (tanpa akun kas)', cat.body?.accounts?.length);
+        const kabel = cat.body.products.find((p) => p.sku === 'BRG-3390');
+        const sups = (await call('/purchasing/suppliers', { token: sari, branch: 'ALL' })).body;
+        const kabelSup = sups.find((s) => s.name === 'PT Kabel Cipta Sarana');
+        const logam = sups.find((s) => s.name === 'CV Logam Jaya Abadi');
+        const third = sups.find((s) => s.status === 'aktif' && ![kabelSup.id, logam.id].includes(s.id));
+        /* Permintaan & persetujuan (pemohon ≠ penyetuju, SLA prioritas) */
+        const prBody = { branch: 'SBY', requestDate: D, neededDate: '2026-09-30', department: 'Gudang', description: 'Kabel NYY untuk stok pengaman', priority: 'tinggi', lines: [{ productId: kabel.id, qty: 100, price: 35_000 }], submit: true };
+        ok((await call('/purchasing/requisitions', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ ...prBody, branch: 'CKR' }) })).status === 403, 'staf gudang SBY tidak dapat membuat PR cabang CKR');
+        const bad = await call('/purchasing/requisitions', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ ...prBody, lines: [{ description: 'Jasa tanpa akun', qty: 1, price: 100 }] }) });
+        ok(bad.status === 422 && bad.body.error.code === 'PURCHASE_INVALID_LINES', 'baris jasa PR wajib akun biaya detail', bad.body);
+        const pr = await call('/purchasing/requisitions', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify(prBody) });
+        const slaH = pr.body?.slaDueAt ? (new Date(pr.body.slaDueAt).getTime() - new Date(pr.body.submittedAt).getTime()) / 3_600_000 : 0;
+        ok(pr.status === 201 && pr.body.status === 'menunggu' && pr.body.estimatedTotal === 3_500_000 && Math.round(slaH) === 24 && /^PR-2026-\d{4}$/.test(pr.body.docNo) && pr.body.requesterName === 'Fitri Ramadhani', 'gudang mengajukan PR prioritas tinggi: SLA 24 jam, nilai perkiraan', pr.body);
+        ok((await call(`/purchasing/requisitions/${pr.body.id}/approve`, { method: 'POST', token: fitri, branch: 'SBY', body: '{}' })).status === 403, 'pemohon tanpa izin setuju tidak dapat menyetujui PR');
+        const own = await call('/purchasing/requisitions', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ ...prBody, branch: 'CKR', description: 'PR manajer sendiri', priority: 'rendah' }) });
+        const ownAp = await call(`/purchasing/requisitions/${own.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+        ok(own.status === 201 && ownAp.status === 403 && ownAp.body.error.code === 'SOD_REQUISITION', 'manajer tidak dapat menyetujui PR buatannya sendiri', ownAp.body);
+        const inbox = await call('/inbox', { token: osmond, branch: 'ALL' });
+        ok(inbox.body.items.some((i) => i.kind === 'purchase_requisition' && i.docNo === pr.body.docNo) && !inbox.body.items.some((i) => i.docNo === own.body.docNo), 'PR menunggu masuk kotak persetujuan manajer (kecuali PR miliknya)', inbox.body?.byKind);
+        const rjNo = await call(`/purchasing/requisitions/${pr.body.id}/reject`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+        ok(rjNo.status === 400 || rjNo.status === 422, 'penolakan PR wajib beralasan', rjNo.status);
+        const ap = await call(`/purchasing/requisitions/${pr.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ note: 'stok pengaman' }) });
+        ok(ap.status === 200 && ap.body.status === 'disetujui' && ap.body.decidedByName === 'Osmond Pratama', 'manajer menyetujui PR', ap.body?.status);
+        await call(`/purchasing/requisitions/${own.body.id}/cancel`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ reason: 'bersihkan uji' }) });
+        /* PR → PO langsung; PO batal mengembalikan PR */
+        const toPo = await call(`/purchasing/requisitions/${pr.body.id}/order`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: kabelSup.id, orderDate: D }) });
+        ok(toPo.status === 200 && toPo.body.requisitionNo === pr.body.docNo && toPo.body.status === 'disetujui' && toPo.body.net === 3_500_000 && toPo.body.lines[0].qty === 100, 'PR disetujui → PO langsung (harga perkiraan, alur persetujuan PO)', toPo.body);
+        const prDone = await call(`/purchasing/requisitions/${pr.body.id}`, { token: fitri, branch: 'SBY' });
+        ok(prDone.body.status === 'selesai' && prDone.body.orderNo === toPo.body.docNo, 'PR selesai & tertaut ke PO', prDone.body?.status);
+        const twice = await call(`/purchasing/requisitions/${pr.body.id}/order`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: kabelSup.id }) });
+        ok(twice.status === 409, 'PR yang sudah menjadi PO tidak dapat dikonversi lagi', twice.body);
+        await call(`/purchasing/orders/${toPo.body.id}/cancel`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ reason: 'dialihkan ke RFQ' }) });
+        const prBack = await call(`/purchasing/requisitions/${pr.body.id}`, { token: fitri, branch: 'SBY' });
+        ok(prBack.body.status === 'disetujui' && !prBack.body.orderId, 'PO dibatalkan → PR kembali disetujui', prBack.body?.status);
+        /* RFQ: minimal dua pemasok, penawaran, harga terbaik, pemenang beralasan */
+        const one = await call('/purchasing/rfqs', { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ requisitionId: pr.body.id, deadline: '2026-09-28', supplierIds: [kabelSup.id] }) });
+        ok(one.status === 400 || one.status === 422, 'RFQ dengan satu pemasok ditolak (minimal 2)', one.body);
+        const rfq = await call('/purchasing/rfqs', { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ requisitionId: pr.body.id, date: D, deadline: '2026-09-28', supplierIds: [kabelSup.id, logam.id] }) });
+        ok(rfq.status === 201 && rfq.body.status === 'terbuka' && rfq.body.quotes.length === 2 && /^RFQ-2026-\d{4}$/.test(rfq.body.docNo) && rfq.body.requisition.rfqNo === rfq.body.docNo, 'RFQ dibuat ke dua pemasok', rfq.body);
+        const blocked = await call(`/purchasing/requisitions/${pr.body.id}/order`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: kabelSup.id }) });
+        ok(blocked.status === 409 && blocked.body.error.code === 'PR_HAS_RFQ', 'PR dalam RFQ terbuka tidak dapat langsung dijadikan PO', blocked.body);
+        const notInv = await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: third.id, prices: [{ lineNo: 1, price: 30_000 }] }) });
+        ok(notInv.status === 422 && notInv.body.error.code === 'RFQ_NOT_INVITED', 'penawaran pemasok yang tidak diundang ditolak', notInv.body);
+        const inv = await call(`/purchasing/rfqs/${rfq.body.id}/invite`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ supplierId: third.id }) });
+        ok(inv.status === 200 && inv.body.quotes.length === 3, 'pemasok ketiga diundang', inv.body?.quotes?.length);
+        const miss = await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: kabelSup.id, prices: [] }) });
+        ok(miss.status === 422 && miss.body.error.code === 'QUOTE_INVALID', 'penawaran wajib berharga untuk setiap baris PR', miss.body);
+        await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: kabelSup.id, quoteRef: 'KCS-Q1', quoteDate: '2026-09-24', leadDays: 3, validUntil: '2026-10-31', prices: [{ lineNo: 1, price: 36_000 }] }) });
+        await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: third.id, declined: true, notes: 'stok kosong' }) });
+        const q2 = await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: logam.id, quoteRef: 'LJA-77', quoteDate: '2026-09-25', leadDays: 10, validUntil: '2026-10-31', prices: [{ lineNo: 1, price: 34_000, discPct: 0 }] }) });
+        const best = q2.body.quotes.find((x) => x.best);
+        ok(q2.status === 200 && best?.supplierId === logam.id && best.total === 3_400_000 + 374_000 && q2.body.quotes.find((x) => x.supplierId === third.id).status === 'menolak', 'harga terbaik = total penawaran terendah (PPN ikut aturan PO)', q2.body?.quotes);
+        const kcsQ = q2.body.quotes.find((x) => x.supplierId === kabelSup.id);
+        const noWhy = await call(`/purchasing/rfqs/${rfq.body.id}/award`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ quoteId: kcsQ.id, orderDate: '2026-09-26' }) });
+        ok(noWhy.status === 422 && noWhy.body.error.code === 'AWARD_INVALID' && /terendah/.test(noWhy.body.error.message), 'memilih selain harga terbaik wajib beralasan', noWhy.body);
+        const aw = await call(`/purchasing/rfqs/${rfq.body.id}/award`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ quoteId: kcsQ.id, orderDate: '2026-09-26', reason: 'waktu kirim 3 hari vs 10 hari — stok kritis' }) });
+        ok(aw.status === 200 && aw.body.status === 'dipesan' && aw.body.orderNo && aw.body.awardReason, 'pemenang dipilih beralasan → PO dibuat', aw.body);
+        const po = await call(`/purchasing/orders/${aw.body.orderId}`, { token: sari, branch: 'SBY' });
+        ok(po.body.supplierId === kabelSup.id && po.body.lines[0].price === 36_000 && po.body.rfqNo === rfq.body.docNo && po.body.requisitionNo === pr.body.docNo && po.body.expectedDate === '2026-09-29', 'PO dari RFQ: pemasok, harga & lead time penawaran pemenang', po.body);
+        const late = await call(`/purchasing/rfqs/${rfq.body.id}/quotes`, { method: 'POST', token: sari, branch: 'SBY', body: JSON.stringify({ supplierId: logam.id, prices: [{ lineNo: 1, price: 1 }] }) });
+        ok(late.status === 409 && late.body.error.code === 'RFQ_CLOSED', 'RFQ yang sudah dipesan tertutup untuk penawaran', late.body);
+        /* Integrasi buku besar: penerimaan PO hasil RFQ → persediaan & GRNI, rekonsiliasi cocok */
+        const gl = po.body.lines[0];
+        const rc = await call(`/purchasing/orders/${po.body.id}/receive`, { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ date: '2026-09-29', lines: [{ orderLineId: gl.id, qty: 100 }] }) });
+        ok(rc.status === 200 && rc.body.status === 'selesai' && rc.body.receipts[0].value === 3_600_000 && rc.body.receipts[0].journalNo, 'barang PO hasil RFQ diterima: jurnal persediaan / GRNI sebesar harga pemenang', rc.body?.receipts);
+        const rec = await call('/reports/reconciliation', { token: andi, branch: 'SBY', period: '2026-09' });
+        ok(rec.body.checks.every((c) => c.ok), 'rekonsiliasi SBY tetap cocok setelah alur PR → RFQ → PO → penerimaan', rec.body.checks.filter((c) => !c.ok));
+        /* RFQ batal → PR dapat diproses ulang; PR dibatalkan */
+        const pr2 = await call('/purchasing/requisitions', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', requestDate: D, department: 'Keuangan', description: 'Jasa kalibrasi timbangan gudang', priority: 'sedang', lines: [{ description: 'Kalibrasi timbangan', qty: 2, price: 1_250_000, expenseAccount: '5-2401' }], submit: true }) });
+        await call(`/purchasing/requisitions/${pr2.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+        const r2 = await call('/purchasing/rfqs', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ requisitionId: pr2.body.id, deadline: '2026-09-30', date: D, supplierIds: [logam.id, third.id] }) });
+        const nCancelPr = await call(`/purchasing/requisitions/${pr2.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'tidak jadi' }) });
+        ok(r2.status === 201 && nCancelPr.status === 409 && nCancelPr.body.error.code === 'PR_HAS_RFQ', 'PR dengan RFQ terbuka tidak dapat dibatalkan sebelum RFQ dibatalkan', nCancelPr.body);
+        const rc2 = await call(`/purchasing/rfqs/${r2.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'anggaran ditunda' }) });
+        const pr2b = await call(`/purchasing/requisitions/${pr2.body.id}`, { token: sari, branch: 'CKR' });
+        ok(rc2.body.status === 'batal' && pr2b.body.status === 'disetujui' && !pr2b.body.rfqId && pr2b.body.rfqs.length === 1, 'RFQ batal → PR kembali siap diproses (riwayat RFQ tetap)', pr2b.body);
+        const cpr = await call(`/purchasing/requisitions/${pr2.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'tidak jadi' }) });
+        ok(cpr.status === 200 && cpr.body.status === 'batal' && cpr.body.timeline.some((t) => t.action === 'purchase_requisition.rfq_created'), 'PR dibatalkan; linimasa mencatat RFQ', cpr.body?.timeline?.map((t) => t.action));
+    }
     console.log('Kas & bank: transfer, rekonsiliasi, setoran PPN');
     {
         const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;

@@ -27,6 +27,7 @@ const DOC_CHECKS = [
     { label: 'QC produksi diloloskan pelapornya', sql: `SELECT doc_no AS ref FROM work_orders WHERE company_id = $1 AND status = 'selesai' AND qc_submitted_by IS NOT NULL AND qc_submitted_by = completed_by` },
     { label: 'Shift kasir diposting kasirnya', sql: `SELECT doc_no AS ref FROM pos_shifts WHERE company_id = $1 AND status = 'diposting' AND cashier_id = posted_by` },
     { label: 'Daftar gaji diposting penyusunnya', sql: `SELECT doc_no AS ref FROM payroll_runs WHERE company_id = $1 AND status = 'diposting' AND created_by = posted_by` },
+    { label: 'Permintaan pembelian disetujui pemohonnya', sql: `SELECT doc_no AS ref FROM purchase_requisitions WHERE company_id = $1 AND status IN ('disetujui','selesai') AND created_by = decided_by` },
     { label: 'Pembayaran pemasok disetujui pengajunya', sql: `SELECT doc_no AS ref FROM supplier_payments WHERE company_id = $1 AND created_by IS NOT NULL AND coalesce(approvals, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('userId', created_by::text))` },
 ];
 let ComplianceService = class ComplianceService {

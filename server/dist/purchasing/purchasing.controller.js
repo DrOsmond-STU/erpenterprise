@@ -160,7 +160,7 @@ let PurchasingController = class PurchasingController {
 exports.PurchasingController = PurchasingController;
 __decorate([
     (0, common_1.Get)('suppliers'),
-    (0, context_js_1.RequirePermission)(READ_ORDERS),
+    (0, context_js_1.RequirePermission)(`${READ_ORDERS}|purchasing.rfq.manage|purchasing.order.create`),
     __param(0, (0, context_js_1.CurrentUser)()),
     __param(1, (0, context_js_1.Scope)()),
     __param(2, (0, common_1.Req)()),

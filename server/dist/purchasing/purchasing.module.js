@@ -11,6 +11,8 @@ const common_1 = require("@nestjs/common");
 const ledger_module_js_1 = require("../ledger/ledger.module.js");
 const ap_invoices_service_js_1 = require("./ap-invoices.service.js");
 const orders_service_js_1 = require("./orders.service.js");
+const procurement_controller_js_1 = require("./procurement.controller.js");
+const procurement_service_js_1 = require("./procurement.service.js");
 const payments_service_js_1 = require("./payments.service.js");
 const purchasing_controller_js_1 = require("./purchasing.controller.js");
 const suppliers_service_js_1 = require("./suppliers.service.js");
@@ -18,6 +20,6 @@ let PurchasingModule = class PurchasingModule {
 };
 exports.PurchasingModule = PurchasingModule;
 exports.PurchasingModule = PurchasingModule = __decorate([
-    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [purchasing_controller_js_1.PurchasingController], providers: [suppliers_service_js_1.SuppliersService, orders_service_js_1.PurchaseOrdersService, ap_invoices_service_js_1.ApInvoicesService, payments_service_js_1.SupplierPaymentsService], exports: [payments_service_js_1.SupplierPaymentsService] })
+    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [purchasing_controller_js_1.PurchasingController, procurement_controller_js_1.ProcurementController], providers: [suppliers_service_js_1.SuppliersService, orders_service_js_1.PurchaseOrdersService, procurement_service_js_1.ProcurementService, ap_invoices_service_js_1.ApInvoicesService, payments_service_js_1.SupplierPaymentsService], exports: [payments_service_js_1.SupplierPaymentsService] })
 ], PurchasingModule);
 //# sourceMappingURL=purchasing.module.js.map
