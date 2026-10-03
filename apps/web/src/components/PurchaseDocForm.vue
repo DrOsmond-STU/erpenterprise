@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Formulir PO (buat & ubah draf/ditolak) dan tagihan pemasok langsung (jasa/biaya tanpa PO). */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { salesTotals } from '@erp/domain';
 import { get, patch, post } from '@/lib/api';
 import { errorList } from '@/lib/errors';
@@ -42,7 +42,11 @@ const form = ref({
   supplierInvoiceNo: d?.supplierInvoiceNo ?? '',
   supplierTotal: '' as string | number,
   notes: d?.notes ?? '',
+  projectId: d?.projectId ?? '',
 });
+const projects = ref<any[]>([]);
+const loadProjects = async () => { try { projects.value = await get(`/projects/options?branch=${form.value.branch}`); } catch { projects.value = []; } };
+watch(() => form.value.branch, loadProjects, { immediate: true });
 const lines = ref<PurchaseLine[]>(d?.lines?.length
   ? d.lines.map((l: any) => ({ productId: l.productId ?? null, description: l.description, kind: l.kind, unit: l.unit, qty: l.qty, price: l.price, discPct: l.discPct ?? 0, expenseAccount: l.expenseAccount ?? l.account ?? null }))
   : [{ productId: null, description: '', kind: 'jasa', unit: 'paket', qty: 1, price: 0, discPct: 0, expenseAccount: null }]);
@@ -54,7 +58,7 @@ const busy = ref(false);
 async function save(submit: boolean) {
   errors.value = []; busy.value = true;
   const body: any = {
-    branch: form.value.branch, supplierId: form.value.supplierId || undefined, notes: form.value.notes || undefined,
+    branch: form.value.branch, supplierId: form.value.supplierId || undefined, notes: form.value.notes || undefined, ...(projects.value.length && !(d && props.kind === 'invoice') ? { projectId: form.value.projectId || null } : {}),
     lines: lines.value.map((l) => ({ productId: l.productId, description: l.description || undefined, kind: l.kind, unit: l.unit, qty: Number(l.qty), price: Math.round(Number(l.price) || 0), discPct: Number(l.discPct) || 0, expenseAccount: l.productId ? null : l.expenseAccount })),
   };
   if (props.kind === 'order') { body.orderDate = form.value.date; if (form.value.second) body.expectedDate = form.value.second; body.submit = submit; }
@@ -94,6 +98,9 @@ const title = computed(() => (d ? `Ubah ${props.kind === 'order' ? 'PO' : 'tagih
         <div v-if="!d" class="field"><label for="pd-suptotal">Nilai tertera (Rp)</label><input id="pd-suptotal" v-model="form.supplierTotal" class="input num" type="number" min="0" style="text-align:right" placeholder="Opsional"><span class="field-hint">Dicocokkan dengan total baris</span></div>
       </template>
       <div class="field" :class="kind === 'order' ? 'span-2' : 'form-grid-full'"><label for="pd-notes">Catatan</label><input id="pd-notes" v-model="form.notes" class="input" maxlength="500" placeholder="Opsional"></div>
+      <div v-if="projects.length && !(d && kind === 'invoice')" class="field span-2"><label for="pd-project">Proyek (opsional)</label>
+        <select id="pd-project" v-model="form.projectId" class="select" data-field="project"><option value="">— tanpa proyek —</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select>
+        <span class="field-hint">Baris jasa/biaya ditandai proyek saat tagihan diposting.</span></div>
       <div class="field form-grid-full"><label>Baris</label><PurchaseLinesEditor v-model="lines" :products="products" :accounts="accounts" :branch="form.branch" :services-only="kind === 'invoice'" /></div>
       <div v-if="errors.length" class="field form-grid-full"><div class="field-hint neg" role="alert"><div v-for="e in errors" :key="e">• {{ e }}</div></div></div>
     </div>

@@ -113,8 +113,23 @@ async function saveRfq() {
           <dt>Tanggal</dt><dd class="num">{{ F.date(r.date) }}<template v-if="r.neededDate"> · dibutuhkan {{ F.date(r.neededDate) }}</template></dd>
           <dt v-if="r.decidedByName">Diputus</dt><dd v-if="r.decidedByName">{{ r.decidedByName }} · {{ F.datetime(r.decidedAt) }}<template v-if="r.decisionNote && r.status !== 'ditolak'"> — “{{ r.decisionNote }}”</template></dd>
           <dt v-if="r.orderNo">Pesanan pembelian</dt><dd v-if="r.orderNo"><a href="#" class="code" data-link="po" @click.prevent="emit('openOrder', r.orderId)">{{ r.orderNo }}</a> <Pill :status="r.orderStatus" /></dd>
+          <dt v-if="r.projectCode">Proyek</dt><dd v-if="r.projectCode"><RouterLink class="code" :to="{ path: '/proyek', query: { id: r.projectId } }">{{ r.projectCode }}</RouterLink></dd>
           <dt v-if="r.notes">Catatan</dt><dd v-if="r.notes">{{ r.notes }}</dd>
         </dl>
+      </div>
+      <div v-if="r.budgetCheck?.length" class="section" data-budget-check>
+        <span class="section-title">Cek anggaran {{ r.branch }} {{ String(r.date).slice(0, 4) }}</span>
+        <div class="table-scroll"><table class="table"><tbody>
+          <tr v-for="x in r.budgetCheck" :key="x.account" class="is-static" :data-budget-over="x.over ? '' : undefined">
+            <td class="code">{{ x.account }}</td>
+            <td v-if="!x.budgeted" colspan="3"><span class="muted">Tidak ada anggaran disetujui untuk akun ini.</span></td>
+            <template v-else>
+              <td>anggaran {{ F.rp(x.budget) }}<span class="cell-sub">realisasi {{ F.rp(x.actual) }} · komitmen {{ F.rp(x.commitment) }}</span></td>
+              <td class="ta-r num">permintaan {{ F.rp(x.request) }}</td>
+              <td class="ta-r num" :class="x.over ? 'neg' : 'pos'">sisa {{ F.rp(x.afterRequest) }}<span v-if="x.over" class="cell-sub neg">melampaui anggaran</span></td>
+            </template>
+          </tr>
+        </tbody></table></div>
       </div>
       <div class="section">
         <span class="section-title">Baris ({{ r.lines.length }})</span>

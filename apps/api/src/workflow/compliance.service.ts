@@ -18,6 +18,7 @@ const DOC_CHECKS: { label: string; sql: string }[] = [
   { label: 'Shift kasir diposting kasirnya', sql: `SELECT doc_no AS ref FROM pos_shifts WHERE company_id = $1 AND status = 'diposting' AND cashier_id = posted_by` },
   { label: 'Daftar gaji diposting penyusunnya', sql: `SELECT doc_no AS ref FROM payroll_runs WHERE company_id = $1 AND status = 'diposting' AND created_by = posted_by` },
   { label: 'Permintaan pembelian disetujui pemohonnya', sql: `SELECT doc_no AS ref FROM purchase_requisitions WHERE company_id = $1 AND status IN ('disetujui','selesai') AND created_by = decided_by` },
+  { label: 'Anggaran disetujui penyusunnya', sql: `SELECT trim(branch_code) || '-' || fiscal_year AS ref FROM budgets WHERE company_id = $1 AND status = 'disetujui' AND (approved_by = created_by OR approved_by = submitted_by)` },
   { label: 'Pembayaran pemasok disetujui pengajunya', sql: `SELECT doc_no AS ref FROM supplier_payments WHERE company_id = $1 AND created_by IS NOT NULL AND coalesce(approvals, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('userId', created_by::text))` },
 ];
 

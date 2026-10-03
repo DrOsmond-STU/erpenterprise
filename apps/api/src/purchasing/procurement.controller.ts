@@ -18,7 +18,7 @@ const line = z.object({
 const prBase = {
   branch: opt(branch), requestDate: opt(date), neededDate: opt(date.nullable()), department: opt(z.string().trim().min(2, 'Departemen minimal 2 karakter').max(80)),
   requesterName: opt(text(120)), description: opt(z.string().trim().min(5, 'Deskripsi minimal 5 karakter').max(300)), priority: opt(z.enum(['rendah', 'sedang', 'tinggi'])),
-  notes: opt(text(500)), submit: opt(z.boolean()),
+  notes: opt(text(500)), submit: opt(z.boolean()), projectId: opt(z.string().uuid('Proyek tidak sah').nullable()),
 };
 const prCreate = z.object({ ...prBase, department: prBase.department.unwrap(), description: prBase.description.unwrap(), lines: z.array(line).min(1, 'Minimal satu baris').max(100) });
 const prPatch = z.object({ ...prBase, lines: opt(z.array(line).min(1, 'Minimal satu baris').max(100)) });

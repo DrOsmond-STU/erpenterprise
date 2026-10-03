@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { get, post } from '@/lib/api';
 import * as F from '@/lib/format';
 import { useContext } from '@/stores/context';
@@ -27,8 +27,12 @@ const date = ref(defaultDate());
 const branch = ref(ctx.branch === 'ALL' ? (session.branches[0]?.code ?? '') : ctx.branch);
 const description = ref('');
 const refNo = ref('');
-interface Line { account: string; debit: number | null; credit: number | null }
-const lines = ref<Line[]>(Array.from({ length: 4 }, () => ({ account: '', debit: null, credit: null })));
+interface Line { account: string; debit: number | null; credit: number | null; projectId?: string }
+const lines = ref<Line[]>(Array.from({ length: 4 }, () => ({ account: '', debit: null, credit: null, projectId: '' })));
+/* Dimensi proyek (opsional): proyek aktif cabang jurnal. */
+const projects = ref<any[]>([]);
+const loadProjects = async () => { try { projects.value = await get(`/projects/options?branch=${branch.value}`); } catch { projects.value = []; } };
+watch(branch, () => { loadProjects(); lines.value.forEach((l) => { l.projectId = ''; }); });
 const errors = ref<string[]>([]);
 const busy = ref(false);
 
@@ -37,6 +41,7 @@ onMounted(async () => {
   allAccounts.value = a.accounts;
   accounts.value = a.accounts.filter((x: any) => x.type === 'detail' && !x.isComputed && x.status === 'aktif');
   banks.value = b.accounts;
+  await loadProjects();
 });
 /* Hanya akun detail (level 4–5). Akun kas/bank = rekening; hanya rekening cabang terpilih yang ditawarkan. */
 const bankOfGl = computed(() => new Map(banks.value.map((b) => [b.glAccountCode, b])));
@@ -57,7 +62,7 @@ async function submit() {
   try {
     const body = {
       date: date.value, branch: branch.value, description: description.value, ref: refNo.value || null,
-      lines: lines.value.filter((l) => l.account || l.debit || l.credit).map((l) => ({ account: l.account, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0 })),
+      lines: lines.value.filter((l) => l.account || l.debit || l.credit).map((l) => ({ account: l.account, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, projectId: l.projectId || null })),
     };
     const j = await post('/ledger/journals', body);
     emit('created', j);
@@ -85,13 +90,17 @@ async function submit() {
                   <option value="">— pilih akun —</option>
                   <optgroup v-for="g in groups" :key="g.label" :label="g.label"><option v-for="a in g.items" :key="a.code" :value="a.code">{{ a.code }} · {{ a.name }}</option></optgroup>
                 </select>
+                <select v-if="projects.length" v-model="l.projectId" class="select" style="margin-top:4px" data-jv-project :aria-label="`Proyek baris ${i + 1}`">
+                  <option value="">— tanpa proyek —</option>
+                  <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option>
+                </select>
               </td>
               <td><input v-model.number="l.debit" class="input input-num" data-jv-debit type="number" min="0" step="1000" placeholder="0" :aria-label="`Debit baris ${i + 1}`"></td>
               <td><input v-model.number="l.credit" class="input input-num" data-jv-credit type="number" min="0" step="1000" placeholder="0" :aria-label="`Kredit baris ${i + 1}`"></td>
             </tr>
           </tbody>
         </table></div>
-        <button class="btn btn-sm" style="align-self:flex-start" @click="lines.push({ account: '', debit: null, credit: null })"><Icon name="plus" /> Tambah baris</button>
+        <button class="btn btn-sm" style="align-self:flex-start" @click="lines.push({ account: '', debit: null, credit: null, projectId: '' })"><Icon name="plus" /> Tambah baris</button>
       </div>
       <div class="field form-grid-full">
         <div class="totals">

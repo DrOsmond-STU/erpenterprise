@@ -29,7 +29,9 @@ rugi, dan neraca** — per cabang maupun konsolidasi — dan diperiksa oleh hala
 | POS / kasir | posting shift: kas/penampung, penjualan, PPN, HPP, selisih kas | persediaan, kas-bank |
 | Aset tetap | perolehan, penyusutan bulanan, pelepasan, pemeliharaan | aset tetap, nilai buku |
 | SDM & penggajian | posting gaji (beban, PPh 21, BPJS), pembayaran lintas cabang | utang gaji, RK |
-| Jurnal memorial | dibuat & diposting orang berbeda | keseimbangan jurnal |
+| Anggaran | realisasi dari buku besar (tanda alami akun) + komitmen PO/PR/draf tagihan jasa | — (laporan) |
+| Proyek | dimensi `project_id` pada baris jurnal (memorial, tagihan jasa atas PO/PR proyek) | — (laporan) |
+| Jurnal memorial | dibuat & diposting orang berbeda (baris dapat bertanda proyek) | keseimbangan jurnal |
 
 Kontrol: RLS per perusahaan/cabang di PostgreSQL, izin granular per aksi, empat mata per
 dokumen (juga untuk admin), kotak persetujuan lintas modul, jejak audit berantai hash
@@ -312,6 +314,29 @@ pemasok & PO-nya.
   `purchasing.requisition.approve` (manajer), `purchasing.rfq.manage` (staf keuangan,
   manajer). Migrasi `0017_procurement.sql` (RLS per cabang) mengisi tiga PR contoh dan
   satu RFQ terbuka.
+
+## Anggaran & proyek (`/anggaran`, `/proyek`)
+
+- **Anggaran** satu per cabang & tahun: baris per akun detail (beban, pendapatan, atau aset
+  untuk belanja modal) dengan 12 nilai bulanan — isi tahunan dibagi rata (sisa pembulatan di
+  Desember) atau per bulan; dapat diisi awal dari realisasi tahun acuan × (1 + pertumbuhan).
+  Draf → diajukan → disetujui oleh orang selain penyusun/pengaju (`SOD_BUDGET`, juga untuk
+  admin); revisi mengembalikan ke draf dan memerlukan persetujuan ulang.
+- **Realisasi** langsung dari buku besar (jurnal terposting cabang itu, tanda alami akun).
+  **Komitmen** = PO jasa disetujui yang belum ditagih + draf tagihan jasa + PR jasa disetujui
+  yang belum menjadi PO. Serapan = (realisasi + komitmen) ÷ anggaran; prakiraan =
+  realisasi + komitmen + anggaran bulan yang belum berjalan; selisih = prakiraan − anggaran.
+  Tampilan per akun (dengan rincian 12 bulan) dan per kelompok akun.
+- **Cek anggaran PR**: laci permintaan pembelian menampilkan sisa anggaran disetujui per akun
+  biaya baris jasa, termasuk permintaan itu sendiri, dan menandai bila melampaui.
+- **Proyek**: register dengan pelanggan, PM, anggaran biaya, nilai kontrak, tugas berbobot
+  (Gantt di laci). Biaya & pendapatan aktual = baris jurnal bertanda proyek — jurnal memorial
+  (pilih proyek per baris), PR/PO/tagihan jasa bertanda proyek (baris jasa ditandai saat
+  tagihan diposting); jurnal balik ikut bertanda. Kesehatan: biaya > anggaran → merah;
+  serapan > 85% saat kemajuan < 80% → kuning.
+- Izin: `budget.read|manage|approve`, `project.read|manage`. Migrasi `0018_budget_projects.sql`
+  (dimensi `journal_lines.project_id`, RLS per cabang) mengisi anggaran CKR tahun berjalan
+  dan dua proyek contoh.
 
 ## Kas & bank, rekonsiliasi, setoran pajak
 

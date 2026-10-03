@@ -18,6 +18,7 @@ export const NAV: NavGroup[] = [
       { path: '/setoran-pajak', label: 'Setoran Pajak', icon: 'percent', permission: 'ledger.report.read' },
       { path: '/jurnal', label: 'Jurnal Umum', icon: 'ledger', permission: 'ledger.journal.read' },
       { path: '/periode', label: 'Periode Fiskal', icon: 'calendar', permission: 'org.period.read' },
+      { path: '/anggaran', label: 'Anggaran', icon: 'wallet', permission: 'budget.read' },
     ],
   },
   {
@@ -63,6 +64,7 @@ export const NAV: NavGroup[] = [
     ],
   },
   { label: 'POS', items: [{ path: '/kasir', label: 'Kasir', icon: 'cart', permission: 'pos.read' }] },
+  { label: 'Proyek', items: [{ path: '/proyek', label: 'Daftar Proyek', icon: 'map-pin', permission: 'project.read' }] },
   {
     label: 'Produksi',
     items: [
@@ -147,6 +149,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/kasir', component: () => import('@/pages/PosPage.vue'), meta: { title: 'Kasir', permission: 'pos.read' } },
   { path: '/perintah-kerja', component: () => import('@/pages/WorkOrdersPage.vue'), meta: { title: 'Perintah Kerja', permission: 'production.read' } },
   { path: '/bom', component: () => import('@/pages/BomsPage.vue'), meta: { title: 'Bill of Materials', permission: 'production.read' } },
+  { path: '/anggaran', component: () => import('@/pages/BudgetsPage.vue'), meta: { title: 'Anggaran', permission: 'budget.read' } },
+  { path: '/proyek', component: () => import('@/pages/ProjectsPage.vue'), meta: { title: 'Daftar Proyek', permission: 'project.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },
   { path: '/buku-besar', component: () => import('@/pages/LedgerCardPage.vue'), meta: { title: 'Kartu Buku Besar', permission: 'ledger.report.read' } },
   { path: '/neraca-saldo', component: () => import('@/pages/TrialBalancePage.vue'), meta: { title: 'Neraca Saldo', permission: 'ledger.report.read' } },

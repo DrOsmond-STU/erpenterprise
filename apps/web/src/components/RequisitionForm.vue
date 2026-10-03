@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Formulir permintaan pembelian (buat & ubah draf/ditolak). Nilai perkiraan sebelum PPN. */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { get, patch, post } from '@/lib/api';
 import { errorList } from '@/lib/errors';
 import { todayWib } from '@/lib/sales';
@@ -26,8 +26,11 @@ const d = props.doc;
 const form = ref({
   branch: d?.branch ?? (ctx.branch !== 'ALL' ? ctx.branch : branches.value[0]?.code ?? ''),
   requestDate: d?.date ?? todayWib(), neededDate: d?.neededDate ?? '', department: d?.department ?? '', requesterName: d?.requesterName ?? session.user?.name ?? '',
-  description: d?.description ?? '', priority: d?.priority ?? 'sedang', notes: d?.notes ?? '',
+  description: d?.description ?? '', priority: d?.priority ?? 'sedang', notes: d?.notes ?? '', projectId: d?.projectId ?? '',
 });
+const projects = ref<any[]>([]);
+const loadProjects = async () => { try { projects.value = await get(`/projects/options?branch=${form.value.branch}`); } catch { projects.value = []; } };
+watch(() => form.value.branch, loadProjects, { immediate: true });
 const lines = ref<PurchaseLine[]>(d?.lines?.length
   ? d.lines.map((l: any) => ({ productId: l.productId ?? null, description: l.description, kind: l.kind, unit: l.unit, qty: l.qty, price: l.estPrice, discPct: 0, expenseAccount: l.expenseAccount ?? null }))
   : [{ productId: null, description: '', kind: 'jasa', unit: 'paket', qty: 1, price: 0, discPct: 0, expenseAccount: null }]);
@@ -37,7 +40,7 @@ async function save(submit: boolean) {
   errors.value = []; busy.value = true;
   const body: any = {
     branch: form.value.branch, requestDate: form.value.requestDate, neededDate: form.value.neededDate || null, department: form.value.department, requesterName: form.value.requesterName || undefined,
-    description: form.value.description, priority: form.value.priority, notes: form.value.notes || undefined, submit,
+    description: form.value.description, priority: form.value.priority, notes: form.value.notes || undefined, submit, projectId: form.value.projectId || null,
     lines: lines.value.map((l) => ({ productId: l.productId, description: l.description || undefined, kind: l.kind, unit: l.unit, qty: Number(l.qty), price: Math.round(Number(l.price) || 0), expenseAccount: l.productId ? null : l.expenseAccount })),
   };
   try {
@@ -60,6 +63,9 @@ async function save(submit: boolean) {
       <div class="field span-2"><label for="pr-desc">Keperluan</label><input id="pr-desc" v-model="form.description" class="input" maxlength="300" placeholder="mis. Pelat baja SPHC 3mm — stok kritis" data-field="description"></div>
       <div class="field"><label for="pr-date">Tanggal permintaan</label><input id="pr-date" v-model="form.requestDate" class="input" type="date"></div>
       <div class="field"><label for="pr-need">Dibutuhkan tanggal</label><input id="pr-need" v-model="form.neededDate" class="input" type="date" :min="form.requestDate"></div>
+      <div v-if="projects.length" class="field span-2"><label for="pr-project">Proyek (opsional)</label>
+        <select id="pr-project" v-model="form.projectId" class="select" data-field="project"><option value="">— tanpa proyek —</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select>
+        <span class="field-hint">Biaya jasa dari PO/tagihan permintaan ini tercatat sebagai biaya proyek.</span></div>
       <div class="field form-grid-full"><label for="pr-notes">Catatan</label><input id="pr-notes" v-model="form.notes" class="input" maxlength="500" placeholder="Opsional — spesifikasi, merek, pemasok yang disarankan"></div>
       <div class="field form-grid-full"><label>Barang / jasa yang diminta</label><PurchaseLinesEditor v-model="lines" :products="products" :accounts="accounts" :branch="form.branch" estimate /></div>
       <div v-if="errors.length" class="field form-grid-full"><div class="field-hint neg" role="alert"><div v-for="e in errors" :key="e">• {{ e }}</div></div></div>

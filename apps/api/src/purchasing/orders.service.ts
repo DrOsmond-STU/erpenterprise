@@ -13,10 +13,11 @@ import { conflict, DomainError, forbidden, notFound } from '../common/errors.js'
 import { contextOf, DbService } from '../db/db.service.js';
 import { LedgerRefs } from '../ledger/ledger.shared.js';
 import { assertBranch, auditTrail, companyPolicies, invalid, nextDocNo, postAutoJournal, todayWib, trimBranch, UUID } from '../sales/sales.shared.js';
+import { assertProject } from '../planning/project.shared.js';
 import { insertPoLines, mapPoLine, resolvePoLines, type PoLineInput } from './lines.js';
 import { mapSupplier } from './suppliers.service.js';
 
-export interface PoInput { branch?: string; supplierId?: string; orderDate?: string; expectedDate?: string | null; notes?: string; lines?: PoLineInput[]; submit?: boolean }
+export interface PoInput { branch?: string; supplierId?: string; orderDate?: string; expectedDate?: string | null; notes?: string; lines?: PoLineInput[]; submit?: boolean; projectId?: string | null }
 export interface ReceiptInput { date?: string; warehouse?: string; deliveryNote?: string; lines: { orderLineId: number; qty: number }[] }
 
 const STATUS_LABEL: Record<string, string> = { draf: 'Draf', menunggu: 'Menunggu persetujuan', disetujui: 'Disetujui — menunggu barang', ditolak: 'Ditolak', 'diterima-sebagian': 'Diterima sebagian', selesai: 'Selesai', batal: 'Batal' };
@@ -26,12 +27,14 @@ export const mapPo = (o: any) => ({
   date: o.order_date, expectedDate: o.expected_date, status: o.status, statusLabel: STATUS_LABEL[o.status] ?? o.status,
   subtotal: o.subtotal, discount: o.discount, net: o.net_amount, ppn: o.ppn_amount, total: o.total, notes: o.notes, approvalReasons: o.approval_reasons ?? [],
   createdBy: o.created_by, createdByName: o.created_by_name, submittedAt: o.submitted_at, decidedByName: o.decided_by_name, decidedAt: o.decided_at, decisionNote: o.decision_note,
+  projectId: o.project_id ?? null, projectCode: o.project_code ?? null, projectName: o.project_name ?? null,
   requisitionId: o.requisition_id ?? null, requisitionNo: o.requisition_no ?? null, rfqId: o.rfq_id ?? null, rfqNo: o.rfq_no ?? null,
   createdAt: o.created_at, lineCount: o.line_count ?? undefined, receivedPct: o.received_pct === null || o.received_pct === undefined ? undefined : Number(o.received_pct),
 });
 
 const SELECT = `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code,
   (SELECT pr.doc_no FROM purchase_requisitions pr WHERE pr.id = o.requisition_id) AS requisition_no, (SELECT q.doc_no FROM rfqs q WHERE q.id = o.rfq_id) AS rfq_no,
+  (SELECT pj.code FROM projects pj WHERE pj.id = o.project_id) AS project_code, (SELECT pj.name FROM projects pj WHERE pj.id = o.project_id) AS project_name,
   (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = o.id) AS line_count,
   (SELECT CASE WHEN sum(l.qty) FILTER (WHERE l.kind = 'barang') > 0 THEN round(100 * sum(l.qty_received) FILTER (WHERE l.kind = 'barang') / sum(l.qty) FILTER (WHERE l.kind = 'barang')) END
      FROM purchase_order_lines l WHERE l.order_id = o.id) AS received_pct
@@ -93,13 +96,14 @@ export class PurchaseOrdersService {
     const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
     if (!br || br.status !== 'aktif') throw invalid('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
     const sup = await this.supplier(c, u.companyId, b.supplierId);
+    const projectId = await assertProject(c, u.companyId, b.projectId, branch);
     const { lines, totals } = await resolvePoLines(c, u.companyId, branch, b.lines ?? []);
     const date = b.orderDate ?? todayWib();
     const docNo = await nextDocNo(c, u.companyId, 'PO', Number(date.slice(0, 4)));
     const o = (await c.query(
-      `INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, requisition_id, rfq_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
-      [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? addDays(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.requisitionId ?? null, b.rfqId ?? null])).rows[0];
+      `INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, requisition_id, rfq_id, project_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+      [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? addDays(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.requisitionId ?? null, b.rfqId ?? null, projectId])).rows[0];
     await insertPoLines(c, o.id, u.companyId, branch, lines);
     await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'purchase_order.created', entityType: 'purchase_order', entityId: docNo, after: { supplier: sup.name, total: totals.total }, requestId });
     if (b.submit) await this.doSubmit(c, u, o.id, requestId);
@@ -112,6 +116,7 @@ export class PurchaseOrdersService {
       if (!['draf', 'ditolak'].includes(o.status)) throw conflict('PO_LOCKED', `PO ${o.doc_no} berstatus ${STATUS_LABEL[o.status]}; hanya draf atau PO ditolak yang dapat diubah.`);
       const sup = await this.supplier(c, u.companyId, b.supplierId ?? o.supplier_id);
       const res = b.lines ? await resolvePoLines(c, u.companyId, trimBranch(o.branch_code), b.lines) : null;
+      if (b.projectId !== undefined) await c.query('UPDATE purchase_orders SET project_id = $2 WHERE id = $1', [id, await assertProject(c, u.companyId, b.projectId, trimBranch(o.branch_code))]);
       await c.query(
         `UPDATE purchase_orders SET supplier_id = $2, order_date = coalesce($3, order_date), expected_date = coalesce($4, expected_date), notes = coalesce($5, notes),
             subtotal = coalesce($6, subtotal), discount = coalesce($7, discount), net_amount = coalesce($8, net_amount), ppn_amount = coalesce($9, ppn_amount), total = coalesce($10, total),

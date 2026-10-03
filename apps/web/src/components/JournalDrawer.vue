@@ -62,7 +62,7 @@ const isOwn = () => j.value?.createdBy === session.user?.id;
           <thead><tr><th>Akun</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th></tr></thead>
           <tbody>
             <tr v-for="l in j.lines" :key="l.lineNo" class="is-static">
-              <td :style="l.credit ? 'padding-left:var(--sp-6)' : ''"><button class="link-btn" :data-gl="l.account" @click="openCard(l.account)"><span class="code">{{ l.account }}</span> {{ l.accountName }}</button><span v-if="l.bankName" class="cell-sub">{{ l.bankName }}</span><span v-if="l.party" class="cell-sub">{{ l.party }}</span></td>
+              <td :style="l.credit ? 'padding-left:var(--sp-6)' : ''"><button class="link-btn" :data-gl="l.account" @click="openCard(l.account)"><span class="code">{{ l.account }}</span> {{ l.accountName }}</button><span v-if="l.bankName" class="cell-sub">{{ l.bankName }}</span><span v-if="l.party" class="cell-sub">{{ l.party }}</span><span v-if="l.projectCode" class="cell-sub" data-jl-project>Proyek {{ l.projectCode }} · {{ l.projectName }}</span></td>
               <td class="ta-r num">{{ l.debit ? F.int(l.debit) : '—' }}</td><td class="ta-r num">{{ l.credit ? F.int(l.credit) : '—' }}</td>
             </tr>
           </tbody>

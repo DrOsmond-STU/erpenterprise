@@ -69,6 +69,7 @@ export interface JournalLineInput {
   party?: string | null;
   counterBranch?: string | null;
   memo?: string | null;
+  projectId?: string | null;
 }
 
 export interface JournalInput {
