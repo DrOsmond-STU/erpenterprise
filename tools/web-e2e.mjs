@@ -313,7 +313,9 @@ ok((await page.locator('[data-table=receipts] tbody tr').count()) === 1, 'peneri
 await page.keyboard.press('Escape');
 await page.goto(base + '/piutang'); await page.waitForSelector('[data-aging]');
 ok((await page.locator('[data-aging]').innerText()).includes('Cocok'), 'piutang usaha cocok dengan buku besar'); await shot('45-piutang');
-await page.click('[data-bucket=current]'); await page.waitForTimeout(200);
+/* Ember pertama yang berisi faktur (isi ember bergantung pada tanggal hari ini). */
+const filledBucket = page.locator('[data-bucket]').filter({ hasNotText: /(^|\D)0 faktur/ }).first();
+await filledBucket.click(); await page.waitForTimeout(200);
 ok(await page.locator('[data-table=ar-invoices] tbody tr[data-row]').count() >= 1, 'ember umur piutang menyaring faktur');
 await page.goto(base + '/pelanggan'); await page.waitForSelector('[data-table=customers] tbody tr[data-row]');
 ok(await page.locator('[data-action=new-customer]').count() === 0, 'staf tidak dapat menambah pelanggan (tombol tersembunyi)'); await shot('46-pelanggan');
@@ -474,6 +476,53 @@ if (await page.locator('[data-action=open-existing-tax]').count()) {
   await page.click('[data-action=open-existing-tax]'); await page.waitForSelector('[data-table=tax-journals]');
   ok(await page.locator('[data-table=tax-journals] tbody tr').count() >= 2, 'setoran masa berjalan: jurnal per cabang tampil'); await page.keyboard.press('Escape');
 }
+await logout(); await login('admin@knm.co.id');
+
+console.log('Persediaan: opname, transfer stok, kartu stok');
+const stockNow = async () => (await apiGet(await apiToken('andi@knm.co.id'), '/inventory/stock')).items;
+const peti = (await stockNow()).find((i) => i.sku === 'BRG-6110' && i.warehouse === 'Surabaya');
+await logout(); await login('fitri@knm.co.id');
+await page.goto(base + '/penyesuaian-stok'); await page.waitForSelector('[data-action=new-adjustment]'); await shot('80-penyesuaian-stok');
+await page.click('[data-action=new-adjustment]'); await page.waitForSelector('#adj-wh option[value="Surabaya"]', { state: 'attached' });
+await page.selectOption('#adj-wh', 'Surabaya'); await page.fill('#adj-date', '2026-09-28'); await page.fill('#adj-notes', 'Opname uji web');
+await page.selectOption('.modal [data-line] [data-field=sku]', 'BRG-6110'); await page.fill('.modal [data-line] [data-field=counted]', String(peti.onHand - 1));
+ok((await page.locator('[data-estimate]').innerText()).includes(peti.avgCost.toLocaleString('id-ID')), 'formulir opname menampilkan estimasi nilai selisih', await page.locator('[data-estimate]').innerText());
+await shot('81-opname-baru'); await page.click('[data-action=save-adjustment]');
+await page.waitForSelector('.drawer [data-decision]'); await page.waitForTimeout(300);
+const adjNo = (await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim();
+ok(/^ADJ-2026-\d{4}$/.test(adjNo) && await page.locator('[data-action=approve-adjustment]').count() === 0, 'staf gudang mencatat opname; tidak dapat menyetujui', adjNo);
+await page.keyboard.press('Escape'); await logout(); await login('andi@knm.co.id');
+await page.goto(base + '/penyesuaian-stok'); await page.waitForSelector(`[data-adjustment="${adjNo}"]`); await page.click(`[data-adjustment="${adjNo}"]`);
+await page.waitForSelector('[data-action=approve-adjustment]'); await page.click('[data-action=approve-adjustment]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow .pill')?.textContent?.includes('Diposting'), null, { timeout: 15000 });
+ok(await page.locator('[data-table=adjustment-journals] tbody tr').count() === 1 && (await page.locator('[data-adj-total]').innerText()).includes(peti.avgCost.toLocaleString('id-ID')), 'akuntan memposting opname: jurnal selisih persediaan tampil');
+await shot('82-opname-diposting'); await page.keyboard.press('Escape');
+
+await logout(); await login('admin@knm.co.id'); await salesCtx('ALL');
+await page.goto(base + '/transfer-stok'); await page.waitForSelector('[data-action=new-stock-transfer]');
+await page.click('[data-action=new-stock-transfer]'); await page.waitForSelector('#st-from option[value="Cikarang"]', { state: 'attached' });
+await page.selectOption('#st-from', 'Cikarang'); await page.selectOption('#st-to', 'Surabaya'); await page.fill('#st-date', '2026-09-28');
+await page.selectOption('.modal [data-line] [data-field=sku]', 'BRG-1042'); await page.fill('.modal [data-line] [data-field=qty]', '2');
+ok((await page.locator('[data-stock-transfer-hint]').innerText()).includes('dalam perjalanan'), 'formulir menjelaskan transfer antar cabang');
+await shot('83-transfer-stok-baru'); await page.click('[data-action=save-stock-transfer]');
+await page.waitForSelector('[data-action=ship-transfer]');
+const trsNo = (await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim();
+await page.click('[data-action=ship-transfer]'); await page.waitForSelector('.drawer [data-transit]');
+ok(await page.locator('[data-table=stock-transfer-journals] tbody tr').count() === 2, 'kirim antar cabang: jurnal di cabang asal & tujuan', trsNo); await shot('84-transfer-dalam-perjalanan');
+await page.keyboard.press('Escape'); await logout(); await login('fitri@knm.co.id');
+await page.goto(base + '/transfer-stok'); await page.waitForSelector(`[data-stock-transfer="${trsNo}"]`); await page.click(`[data-stock-transfer="${trsNo}"]`);
+await page.waitForSelector('[data-action=receive-transfer]'); await page.fill('#rcv-date', '2026-09-29'); await page.click('[data-action=receive-transfer]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow .pill')?.textContent?.includes('Diterima'), null, { timeout: 15000 });
+ok(await page.locator('[data-table=stock-transfer-journals] tbody tr').count() === 3, 'gudang Surabaya menerima: jurnal penerimaan ditambahkan'); await shot('85-transfer-diterima');
+await page.keyboard.press('Escape');
+await page.goto(base + '/stok'); await page.waitForSelector('[data-sku="BRG-1042"][data-warehouse="Surabaya"]');
+await page.click('[data-sku="BRG-1042"][data-warehouse="Surabaya"]'); await page.waitForSelector('[data-table=stock-card] [data-move=transfer_in]');
+ok((await page.locator('[data-closing]').innerText()).trim() === '2', 'kartu stok Surabaya: transfer masuk dengan saldo berjalan'); await shot('86-kartu-stok');
+await page.keyboard.press('Escape');
+await logout(); await login('andi@knm.co.id');
+await page.goto(base + '/integrasi'); await page.waitForSelector('.pill');
+ok(await page.locator('.pill[data-tone=danger]').count() === 0, 'rekonsiliasi (termasuk persediaan & barang dalam perjalanan) tetap cocok');
+await page.goto(base + '/stok'); await page.waitForSelector('[data-table=warehouses] tbody tr'); await shot('87-stok');
 await logout(); await login('admin@knm.co.id');
 
 console.log('Pembatasan hak: staf gudang Surabaya');

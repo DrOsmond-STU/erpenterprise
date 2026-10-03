@@ -52,6 +52,14 @@ export const NAV: NavGroup[] = [
       { path: '/pemasok', label: 'Pemasok', icon: 'building', permission: 'purchasing.invoice.read|purchasing.receipt.create' },
     ],
   },
+  {
+    label: 'Persediaan',
+    items: [
+      { path: '/stok', label: 'Stok & Kartu Stok', icon: 'boxes', permission: 'inventory.read' },
+      { path: '/penyesuaian-stok', label: 'Penyesuaian & Opname', icon: 'clipboard', permission: 'inventory.read' },
+      { path: '/transfer-stok', label: 'Transfer Stok', icon: 'truck', permission: 'inventory.read' },
+    ],
+  },
   { label: 'Cabang', items: [{ path: '/cabang', label: 'Manajemen Cabang', icon: 'map-pin', permission: 'org.branch.read' }] },
   {
     label: 'Sistem',
@@ -94,6 +102,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/pembayaran', component: () => import('@/pages/SupplierPaymentsPage.vue'), meta: { title: 'Pembayaran Pemasok', permission: 'purchasing.invoice.read' } },
   { path: '/hutang', component: () => import('@/pages/PayablesPage.vue'), meta: { title: 'Hutang Usaha', permission: 'purchasing.invoice.read' } },
   { path: '/pemasok', component: () => import('@/pages/SuppliersPage.vue'), meta: { title: 'Pemasok', permission: 'purchasing.invoice.read|purchasing.receipt.create' } },
+  { path: '/stok', component: () => import('@/pages/StockPage.vue'), meta: { title: 'Stok & Kartu Stok', permission: 'inventory.read' } },
+  { path: '/penyesuaian-stok', component: () => import('@/pages/StockAdjustmentsPage.vue'), meta: { title: 'Penyesuaian & Opname', permission: 'inventory.read' } },
+  { path: '/transfer-stok', component: () => import('@/pages/StockTransfersPage.vue'), meta: { title: 'Transfer Stok', permission: 'inventory.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },
   { path: '/buku-besar', component: () => import('@/pages/LedgerCardPage.vue'), meta: { title: 'Kartu Buku Besar', permission: 'ledger.report.read' } },
   { path: '/neraca-saldo', component: () => import('@/pages/TrialBalancePage.vue'), meta: { title: 'Neraca Saldo', permission: 'ledger.report.read' } },

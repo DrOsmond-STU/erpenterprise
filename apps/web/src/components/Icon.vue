@@ -29,6 +29,8 @@ const ICONS: Record<string, string> = {
   link: '<path d="M7.2 8.8a3.2 3.2 0 0 0 4.5.5l1.8-1.8a3.2 3.2 0 0 0-4.5-4.5L7.8 4.2"/><path d="M8.8 7.2a3.2 3.2 0 0 0-4.5-.5L2.5 8.5a3.2 3.2 0 0 0 4.5 4.5l1.2-1.2"/>',
   'map-pin': '<path d="M8 14.4s-4.6-4.4-4.6-8a4.6 4.6 0 0 1 9.2 0c0 3.6-4.6 8-4.6 8z"/><circle cx="8" cy="6.4" r="1.7"/>',
   scroll: '<path d="M12 2.4H5.6A1.6 1.6 0 0 0 4 4v8a1.6 1.6 0 0 0 1.6 1.6h8V4a1.6 1.6 0 0 0-1.6-1.6z"/><path d="M4 12a1.6 1.6 0 0 1-1.6-1.6V4.8"/><path d="M7 6h3.6M7 8.4h3.6M7 10.8h2"/>',
+  clipboard: '<rect x="3" y="2.6" width="10" height="11.8" rx="1.4"/><path d="M6 2.6V1.8h4v.8"/><path d="M5.6 6.6h4.8M5.6 9h4.8M5.6 11.4h2.8"/>',
+  warehouse: '<path d="M1.8 6 8 2.4 14.2 6v8H1.8z"/><path d="M4.4 14V8.4h7.2V14"/><path d="M4.4 10.4h7.2M4.4 12.2h7.2"/>',
   boxes: '<path d="M8 1.6 14 4.6 8 7.6 2 4.6z"/><path d="M2 4.6v6.8L8 14.4l6-3V4.6"/><path d="M8 7.6v6.8"/>',
   search: '<circle cx="7" cy="7" r="4.6"/><path d="m10.4 10.4 3.6 3.6"/>',
   'chevron-down': '<path d="m4 6.2 4 4 4-4"/>', 'chevron-up': '<path d="m4 9.8 4-4 4 4"/>', 'chevron-right': '<path d="m6.2 4 4 4-4 4"/>', 'chevron-left': '<path d="m9.8 4-4 4 4 4"/>',

@@ -78,7 +78,7 @@ const HEADERS: Row[] = [
 /** Detail standar selain rekening kas/bank (yang dibuat per rekening, lihat `bankGlCodes`). */
 const DETAILS: Row[] = [
   ['1-1301', 'Piutang Usaha'], ['1-1401', 'Piutang Lain-lain'],
-  ['1-1501', 'Persediaan Bahan Baku & Penolong'], ['1-1502', 'Persediaan Barang Dalam Proses'], ['1-1503', 'Persediaan Barang Jadi'],
+  ['1-1501', 'Persediaan Bahan Baku & Penolong'], ['1-1502', 'Persediaan Barang Dalam Proses'], ['1-1503', 'Persediaan Barang Jadi'], ['1-1504', 'Persediaan dalam Perjalanan'],
   ['1-1601', 'Biaya Dibayar di Muka'], ['1-1701', 'PPN Masukan'],
   ['1-2101', 'Tanah'], ['1-2201', 'Bangunan'], ['1-2301', 'Mesin & Peralatan'], ['1-2401', 'Kendaraan'], ['1-2501', 'Peralatan Kantor'],
   ['1-2901', 'Akumulasi Penyusutan', { contra: true }],
@@ -155,6 +155,8 @@ export const ACCOUNT_LINK_DEFS: AccountLinkDef[] = [
   { key: 'invRaw', group: 'Persediaan', label: 'Persediaan bahan baku & penolong', category: 'Aset', default: '1-1501', note: 'Kartu stok selain kategori barang jadi.' },
   { key: 'invWip', group: 'Persediaan', label: 'Persediaan barang dalam proses', category: 'Aset', default: '1-1502', note: 'Produksi (WIP).' },
   { key: 'invFinished', group: 'Persediaan', label: 'Persediaan barang jadi', category: 'Aset', default: '1-1503', note: 'Kartu stok kategori barang jadi.' },
+  { key: 'invTransit', group: 'Persediaan', label: 'Persediaan dalam perjalanan', category: 'Aset', default: '1-1504', note: 'Transfer stok antar cabang yang sudah dikirim tetapi belum diterima.' },
+  { key: 'invVariance', group: 'Persediaan', label: 'Selisih persediaan', category: 'Beban', default: '5-1901', note: 'Selisih opname, barang rusak/hilang, dan pembulatan harga pokok.' },
   { key: 'ap', group: 'Pembelian', label: 'Utang usaha', category: 'Liabilitas', default: '2-1101', note: 'Tagihan pemasok & pembayarannya.' },
   { key: 'grni', group: 'Pembelian', label: 'Utang barang diterima belum ditagih', category: 'Liabilitas', default: '2-1102', note: 'Dikredit saat penerimaan barang, didebit saat tagihan pemasok diposting (3-way match).' },
   { key: 'ppnIn', group: 'Pembelian', label: 'PPN masukan', category: 'Aset', default: '1-1701', note: 'PPN atas pembelian.' },
@@ -165,7 +167,7 @@ export const ACCOUNT_LINK_DEFS: AccountLinkDef[] = [
   { key: 'currentEarnings', group: 'Tutup buku', label: 'Laba periode berjalan', category: 'Ekuitas', default: '3-2201', note: 'Akun dihitung; tidak menerima jurnal.' },
   { key: 'retainedEarnings', group: 'Tutup buku', label: 'Laba ditahan', category: 'Ekuitas', default: '3-2101', note: 'Tujuan penutupan laba akhir tahun buku.' },
 ];
-export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'ap' | 'grni' | 'ppnIn' | 'taxPayable' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
+export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'invTransit' | 'invVariance' | 'ap' | 'grni' | 'ppnIn' | 'taxPayable' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
 export type AccountLinks = Record<AccountLinkKey, string>;
 export const DEFAULT_ACCOUNT_LINKS = Object.fromEntries(ACCOUNT_LINK_DEFS.map((d) => [d.key, d.default])) as AccountLinks;
 

@@ -216,7 +216,8 @@ export class PurchaseOrdersService {
           b.warehouse ? [u.companyId, branch, l.sku, b.warehouse] : [u.companyId, branch, l.sku])).rows[0];
         if (!st) {
           const any = (await c.query('SELECT name, category, uom FROM stock_items WHERE company_id = $1 AND sku = $2 LIMIT 1', [u.companyId, l.sku])).rows[0];
-          const whCode = b.warehouse || (await c.query('SELECT warehouse_code FROM stock_items WHERE company_id = $1 AND branch_code = $2 LIMIT 1', [u.companyId, branch])).rows[0]?.warehouse_code || brRow?.city || branch;
+          const whCode = b.warehouse || (await c.query('SELECT warehouse_code FROM stock_items WHERE company_id = $1 AND branch_code = $2 LIMIT 1', [u.companyId, branch])).rows[0]?.warehouse_code
+            || (await c.query(`SELECT code FROM warehouses WHERE company_id = $1 AND branch_code = $2 AND status = 'aktif' ORDER BY code LIMIT 1`, [u.companyId, branch])).rows[0]?.code || brRow?.city || branch;
           st = (await c.query(`INSERT INTO stock_items (company_id, branch_code, warehouse_code, sku, name, category, uom, on_hand, avg_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,0,0) RETURNING *`,
             [u.companyId, branch, whCode, l.sku, any?.name ?? l.description, any?.category ?? 'Bahan baku', any?.uom ?? l.unit])).rows[0];
         }

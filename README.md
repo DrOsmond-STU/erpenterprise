@@ -310,6 +310,34 @@ Semua pasangan buat ↔ setujui ditegakkan per dokumen (juga untuk admin). Migra
 `0009_cash_bank.sql` menambah tabel `cash_transfers`, `bank_statements`,
 `bank_statement_lines`, dan `tax_settlements` dengan RLS per cabang.
 
+## Persediaan: stok, opname, transfer
+
+Menu **Persediaan**: **Stok & Kartu Stok**, **Penyesuaian & Opname**, **Transfer Stok**.
+
+- **Stok & kartu stok**: saldo per gudang dengan harga pokok rata-rata bergerak dan
+  status minimum/maksimum; klik barang untuk kartu stok periode (saldo awal, mutasi
+  masuk/keluar bernilai, saldo berjalan). Gudang dikelola di halaman yang sama
+  (`inventory.warehouse.manage`); gudang berisi stok atau dengan transfer terbuka tidak
+  dapat dinonaktifkan.
+- **Penyesuaian & opname**: gudang mencatat hasil hitung fisik / barang rusak / hilang /
+  koreksi (`inventory.adjust`), orang lain menyetujui (`inventory.adjust.approve`, per
+  dokumen, juga untuk admin). Saat diposting selisih = hitung fisik − stok sistem saat
+  itu × HPP rata-rata, dijurnal Dr/Cr persediaan (1-1501 / 1-1503) ↔ **selisih
+  persediaan** (pemetaan *Selisih persediaan*, bawaan 5-1901).
+- **Transfer stok** (`inventory.transfer`): draf → **kirim**. Antar gudang satu cabang
+  stok langsung pindah dengan HPP yang sama. Antar cabang: cabang asal Dr RK / Cr
+  persediaan, cabang tujuan Dr **persediaan dalam perjalanan** (1-1504) / Cr RK —
+  RK selalu seimbang dengan cabang lawan; gudang tujuan **menerima** → Dr persediaan /
+  Cr 1-1504. Pemeriksaan rekonsiliasi baru *Persediaan dalam perjalanan* mencocokkan
+  Σ transfer terkirim-belum-diterima dengan saldo 1-1504.
+
+Semua mutasi tercatat di `stock_moves` dan buku besar sekaligus, sehingga pemeriksaan
+*Persediaan* (kartu stok = 1-1501 + 1-1502 + 1-1503) tetap cocok dan nilainya tampil di
+neraca, neraca saldo, dan buku besar; selisih opname di laba rugi. Migrasi
+`0010_inventory.sql` menambah `warehouses`, `stock_adjustments(_lines)`,
+`stock_transfers(_lines)` (transfer terlihat oleh cabang asal & tujuan), akun 1-1504,
+dan izin `inventory.adjust.approve`, `inventory.warehouse.manage`.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

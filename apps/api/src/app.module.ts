@@ -12,13 +12,14 @@ import { DbModule } from './db/db.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { OrgModule } from './org/org.module.js';
 import { CashModule } from './cash/cash.module.js';
+import { InventoryModule } from './inventory/inventory.module.js';
 import { PurchasingModule } from './purchasing/purchasing.module.js';
 import { SalesModule } from './sales/sales.module.js';
 
 @Module({
   imports: [
     ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule, AssistantModule, IamModule, SalesModule, PurchasingModule, CashModule,
+    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule, AssistantModule, IamModule, SalesModule, PurchasingModule, CashModule, InventoryModule,
   ],
   controllers: [AdminController],
   providers: [

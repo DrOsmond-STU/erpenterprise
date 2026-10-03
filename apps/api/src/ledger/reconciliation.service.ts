@@ -56,6 +56,12 @@ export class ReconciliationService {
         WHERE l.company_id = $1 AND g.receipt_date <= $2 AND ($3::text IS NULL OR l.branch_code = $3)
           AND NOT (i.id IS NOT NULL AND i.status NOT IN ('draf','batal') AND i.invoice_date <= $2)`, [companyId, asOf, b]);
     add('grni', 'Barang diterima belum ditagih', 'penerimaan-barang', 'Σ nilai penerimaan barang yang belum ditagih pemasok', grni, gl(links.grni), `Penerimaan barang mengkredit ${links.grni}; tagihan pemasok mendebitnya sebesar nilai yang sama`);
+    /* Transfer stok antar cabang yang sudah dikirim s.d. tanggal tetapi belum diterima (dicatat di cabang tujuan). */
+    const transit = await one(
+      `SELECT coalesce(sum(total_value),0)::bigint AS v FROM stock_transfers
+        WHERE company_id = $1 AND status IN ('dikirim','diterima') AND branch_code <> to_branch_code AND shipped_date <= $2
+          AND (received_date IS NULL OR received_date > $2) AND ($3::text IS NULL OR to_branch_code = $3)`, [companyId, asOf, b]);
+    add('transit', 'Persediaan dalam perjalanan', 'transfer-stok', 'Σ nilai transfer stok antar cabang yang belum diterima', transit, gl(links.invTransit), `Pengiriman mendebit ${links.invTransit} di cabang tujuan; penerimaan mengkreditnya`);
     const bank = await one(
       `SELECT coalesce(sum(jl.debit - jl.credit),0)::bigint AS v FROM journal_lines jl JOIN journals j ON j.id = jl.journal_id JOIN bank_accounts ba ON ba.company_id = jl.company_id AND ba.code = jl.bank_account_code
         WHERE jl.company_id = $1 AND j.status IN ('posted','reversed') AND jl.journal_date <= $2 AND ba.currency = 'IDR' AND ($3::text IS NULL OR ba.branch_code = $3)`, [companyId, asOf, b]);
