@@ -338,6 +338,30 @@ neraca, neraca saldo, dan buku besar; selisih opname di laba rugi. Migrasi
 `stock_transfers(_lines)` (transfer terlihat oleh cabang asal & tujuan), akun 1-1504,
 dan izin `inventory.adjust.approve`, `inventory.warehouse.manage`.
 
+## Produksi: BOM & perintah kerja
+
+Menu **Produksi**: **Perintah Kerja** (papan Antre → Berjalan → Pemeriksaan mutu →
+Selesai, saring per lini) dan **Bill of Materials**.
+
+- **BOM** (`production.manage`): bahan per ukuran batch untuk satu barang hasil, berlaku
+  semua cabang, dengan estimasi biaya bahan dari HPP rata-rata. Barang hasil tidak boleh
+  menjadi bahannya sendiri; jasa tidak dapat menjadi bahan.
+- **Perintah kerja**: kebutuhan bahan = BOM × qty rencana, disalin saat dibuat.
+  **Keluarkan bahan** (sebagian atau sisa kebutuhan) dari gudang perintah kerja →
+  Dr **barang dalam proses** (1-1502) / Cr persediaan bahan. Kemajuan & penanda masalah
+  dicatat di kartu. **Kirim ke QC** dengan qty baik & cacat; **lolos QC**
+  (`production.complete`, harus orang lain dari pelapor — juga untuk admin) → barang jadi
+  masuk gudang senilai seluruh saldo WIP perintah kerja (biaya produk cacat diserap):
+  Dr persediaan barang jadi / Cr 1-1502; atau **kerjakan ulang** dengan catatan. Perintah
+  kerja tanpa pemakaian bahan dapat dibatalkan.
+- Pemeriksaan rekonsiliasi baru *Barang dalam proses*: Σ bahan dikeluarkan − Σ hasil
+  produksi s.d. tanggal = saldo 1-1502; pemeriksaan *Persediaan* kini membandingkan
+  kartu stok dengan 1-1501 + 1-1503.
+
+Peran baru **Staf Produksi** (`production.read`, `production.manage`); Manajer
+Operasional mendapat `production.complete`. Migrasi `0011_production.sql` menambah
+`boms`, `bom_lines`, `work_orders`, `wo_consumptions`, `wo_outputs`.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

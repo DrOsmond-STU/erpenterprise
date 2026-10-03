@@ -80,7 +80,7 @@ async function main() {
   ok(pl.status === 200 && pl.body.net > 0 && pl.body.revenue > 30e9, 'laba rugi TA 2026 dari buku besar', pl.body?.net ?? pl.body);
   const rec = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-08' });
   /* Pemeriksaan potret (stok, aset, gaji) hanya muncul untuk periode termutakhir buku besar → 7 atau 11. */
-  ok(rec.status === 200 && [9, 13].includes(rec.body.checks.length) && rec.body.checks.every((k: any) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k: any) => !k.ok) ?? rec.body);
+  ok(rec.status === 200 && [10, 14].includes(rec.body.checks.length) && rec.body.checks.every((k: any) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k: any) => !k.ok) ?? rec.body);
   const banks0 = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL', period: '2026-08' })).body.accounts;
   const glOf = (code: string) => banks0.find((b: any) => b.code === code)?.glAccountCode as string;
   ok(banks0.every((b: any) => /^1-1[12]\d\d$/.test(b.glAccountCode ?? '')), 'setiap rekening kas/bank punya akun detail sendiri di bawah header Bank/Kas', banks0.map((b: any) => [b.code, b.glAccountCode]));
@@ -171,7 +171,7 @@ async function main() {
   ok(accBadShape.status === 400 || accBadShape.status === 422, 'format kode & nama divalidasi', accBadShape.status);
   const renamed = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ name: 'Beban Uji Otomatis (ubah)', reason: 'uji ubah nama' }) });
   ok(renamed.status === 200 && renamed.body.name === 'Beban Uji Otomatis (ubah)', 'nama akun dapat diubah', renamed.body);
-  const codeEdit = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ code: '5-3799', name: 'Ganti nomor', reason: 'uji' }) });
+  const codeEdit = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ code: newCode === '5-3799' ? '5-3798' : '5-3799', name: 'Ganti nomor', reason: 'uji' }) });
   ok(codeEdit.status === 422 && codeEdit.body.error.code === 'ACCOUNT_CODE_IMMUTABLE', 'nomor akun tidak dapat diubah', codeEdit.body);
   const toHeader = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ type: 'header', isContra: true, reason: 'uji tipe' }) });
   const toDetail = await call(`/ledger/accounts/${newCode}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ type: 'detail', isContra: false, reason: 'uji tipe' }) });
@@ -917,6 +917,86 @@ async function main() {
     ok(tbI.body.rows.some((r: any) => r.code === '5-1901'), 'selisih persediaan muncul di neraca saldo');
     const bsI = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-09' });
     ok(bsI.body.totalAssets === bsI.body.totalLiabEquity, 'neraca seimbang setelah mutasi persediaan', [bsI.body.totalAssets, bsI.body.totalLiabEquity]);
+  }
+
+  console.log('Produksi: BOM, perintah kerja, WIP → barang jadi');
+  {
+    const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token as string;
+    const stockOf = async (sku: string, wh: string) => (await call('/inventory/stock', { token: andi, branch: 'ALL' })).body.items.find((i: any) => i.sku === sku && i.warehouse === wh);
+    const recCheck = async (id: string) => {
+      const r = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+      return { all: r.body.checks.every((c: any) => c.ok), bad: r.body.checks.filter((c: any) => !c.ok), it: r.body.checks.find((c: any) => c.id === id) };
+    };
+    ok((await call('/production/boms', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin produksi → 403');
+    let boms = await call('/production/boms', { token: admin, branch: 'ALL' });
+    /* Basis data hasil pemutakhiran tidak punya BOM contoh dari seed. */
+    if (!boms.body.some((b: any) => b.code === 'BOM-BRK-B')) {
+      await call('/production/boms', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: 'BOM-BRK-B', sku: 'BRG-1108', batchQty: 100, lines: [{ sku: 'BRG-1042', qty: 25 }, { sku: 'BRG-4501', qty: 400 }, { sku: 'BRG-5023', qty: 5 }] }) });
+      boms = await call('/production/boms', { token: admin, branch: 'ALL' });
+    }
+    const brk = boms.body.find((b: any) => b.code === 'BOM-BRK-B');
+    ok(boms.status === 200 && brk && brk.lines.length === 3 && brk.unitCost > 0, 'BOM contoh dengan estimasi HPP per unit', boms.body);
+    const selfB = await call('/production/boms', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: 'BOM-X', sku: 'BRG-7204', batchQty: 1, lines: [{ sku: 'BRG-7204', qty: 1 }] }) });
+    ok(selfB.status === 422 && selfB.body.error.code === 'BOM_SELF', 'barang hasil tidak boleh menjadi bahannya sendiri', selfB.body);
+    const svcB = await call('/production/boms', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: 'BOM-X', sku: 'BRG-7204', batchQty: 1, lines: [{ sku: 'JAS-0010', qty: 1 }] }) });
+    ok(svcB.status === 422 && svcB.body.error.code === 'BOM_COMPONENT', 'jasa tidak dapat menjadi bahan BOM', svcB.body);
+    const nb = await call('/production/boms', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ code: 'BOM-MTR', sku: 'BRG-7204', batchQty: 1, lines: [{ sku: 'BRG-2217', qty: 2 }, { sku: 'BRG-4501', qty: 10 }] }) });
+    ok(nb.status === 201 && nb.body.lines.length === 2 && nb.body.productName.includes('Motor'), 'BOM baru dibuat', nb.body);
+    const off = await call(`/production/boms/${nb.body.id}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif' }) });
+    const woOff = await call('/production/work-orders', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ bomId: nb.body.id, warehouse: 'Cikarang', plannedQty: 1 }) });
+    ok(off.body.status === 'nonaktif' && woOff.status === 422 && woOff.body.error.code === 'BOM_INACTIVE', 'BOM nonaktif tidak dapat dipakai perintah kerja', woOff.body);
+
+    const p0 = await stockOf('BRG-1042', 'Cikarang'), b0 = await stockOf('BRG-4501', 'Cikarang'), c0 = await stockOf('BRG-5023', 'Cikarang'), f0 = await stockOf('BRG-1108', 'Cikarang');
+    const wo = await call('/production/work-orders', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ bomId: brk.id, warehouse: 'Cikarang', plannedQty: 80, date: '2026-09-20', dueDate: '2026-09-30', line: 'Lini 2 — Pres', pic: 'Dedi Kurnia' }) });
+    ok(wo.status === 201 && wo.body.status === 'antre' && /^WO-2026-\d{4}$/.test(wo.body.docNo) && wo.body.materials.map((m: any) => `${m.sku}:${m.standard}`).join(',') === 'BRG-1042:20,BRG-4501:320,BRG-5023:4',
+      'perintah kerja antre; kebutuhan bahan dari BOM × qty rencana', wo.body?.error ?? wo.body?.materials);
+    const id = wo.body.id;
+    ok((await call(`/production/work-orders/${id}`, { token: taufik, branch: 'ALL' })).status === 404, 'perintah kerja Cikarang tidak terlihat dari Medan (RLS)');
+    const i1 = await call(`/production/work-orders/${id}/issue`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ date: '2026-09-21', lines: [{ sku: 'BRG-1042', qty: 10 }] }) });
+    ok(i1.status === 200 && i1.body.status === 'berjalan' && i1.body.issuedValue === 10 * p0.avgCost && i1.body.journals.map((j: any) => j.rule).join() === 'WO_ISSUE_1', 'pemakaian bahan sebagian: berjalan, jurnal WIP', i1.body?.error ?? i1.body);
+    const bad = await call(`/production/work-orders/${id}/issue`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ lines: [{ sku: 'BRG-2217', qty: 1 }] }) });
+    ok(bad.status === 422 && bad.body.error.code === 'ISSUE_NOT_IN_BOM', 'bahan di luar BOM ditolak', bad.body);
+    const i2 = await call(`/production/work-orders/${id}/issue`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ date: '2026-09-22' }) });
+    const wipVal = 20 * p0.avgCost + 320 * b0.avgCost + 4 * c0.avgCost;
+    ok(i2.status === 200 && i2.body.materials.every((m: any) => m.remaining === 0) && i2.body.issuedValue === wipVal && i2.body.journals.length === 2, 'sisa kebutuhan dikeluarkan otomatis', i2.body?.error ?? i2.body?.materials);
+    const jI = await call(`/ledger/journals/${i2.body.journals[1].id}`, { token: andi, branch: 'ALL' });
+    ok(jI.body.lines.some((l: any) => l.account === '1-1502' && l.debit > 0) && jI.body.lines.some((l: any) => l.account === '1-1501' && l.credit > 0), 'jurnal pemakaian: Dr barang dalam proses / Cr persediaan bahan', jI.body?.lines);
+    ok((await call(`/production/work-orders/${id}/issue`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' })).body.error?.code === 'ISSUE_EMPTY', 'tidak ada sisa bahan → ditolak');
+    ok((await stockOf('BRG-1042', 'Cikarang')).onHand === p0.onHand - 20, 'stok bahan berkurang sesuai pemakaian');
+    const r1 = await recCheck('wip');
+    ok(r1.all && r1.it.subledger === wipVal && r1.it.ledger === wipVal, 'rekonsiliasi: saldo WIP perintah kerja = akun 1-1502', r1.bad.length ? r1.bad : r1.it);
+    const pr = await call(`/production/work-orders/${id}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ progress: 60, flag: 'Mesin pres 2 perawatan' }) });
+    ok(pr.status === 200 && pr.body.progress === 60 && pr.body.flag, 'kemajuan & penanda masalah diperbarui');
+    ok((await call(`/production/work-orders/${id}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ progress: 100 }) })).status === 422, 'kemajuan 100% hanya lewat pemeriksaan mutu');
+    ok((await call(`/production/work-orders/${id}/complete`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' })).status === 409, 'belum di pemeriksaan mutu → tidak dapat diselesaikan');
+    const q1 = await call(`/production/work-orders/${id}/qc`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ goodQty: 78, rejectQty: 2 }) });
+    ok(q1.status === 200 && q1.body.status === 'qc' && q1.body.progress === 100, 'hasil dilaporkan ke pemeriksaan mutu');
+    const selfQ = await call(`/production/work-orders/${id}/complete`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+    ok(selfQ.status === 403 && selfQ.body.error.code === 'SOD_WORK_ORDER', 'pelapor (termasuk admin) tidak dapat meloloskan QC sendiri', selfQ.body);
+    ok((await call(`/production/work-orders/${id}/complete`, { method: 'POST', token: sari, branch: 'ALL', body: '{}' })).status === 403, 'staf keuangan tanpa izin QC → 403');
+    const rw = await call(`/production/work-orders/${id}/rework`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ note: 'cat belum rata, ulang 5 unit' }) });
+    ok(rw.status === 200 && rw.body.status === 'berjalan' && rw.body.flag.includes('cat belum rata'), 'QC tidak lolos → kembali berjalan dengan catatan');
+    await call(`/production/work-orders/${id}/qc`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ goodQty: 78, rejectQty: 2, note: 'sudah dicat ulang' }) });
+    const early = await call(`/production/work-orders/${id}/complete`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ date: '2026-09-21' }) });
+    ok(early.status === 422 && early.body.error.code === 'COMPLETE_DATE', 'tanggal selesai sebelum pemakaian terakhir ditolak', early.body);
+    const done = await call(`/production/work-orders/${id}/complete`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ date: '2026-09-24', note: 'lolos QC' }) });
+    ok(done.status === 200 && done.body.status === 'selesai' && done.body.wip === 0 && done.body.outputValue === wipVal && done.body.outputs[0].goodQty === 78 && done.body.journals.some((j: any) => j.rule === 'WO_OUTPUT'),
+      'manajer meloloskan QC: barang jadi masuk senilai seluruh WIP', done.body?.error ?? done.body);
+    const jO = await call(`/ledger/journals/${done.body.journals.find((j: any) => j.rule === 'WO_OUTPUT').id}`, { token: andi, branch: 'ALL' });
+    ok(jO.body.lines.some((l: any) => l.account === '1-1503' && l.debit > 0) && jO.body.lines.some((l: any) => l.account === '1-1502' && l.credit === wipVal), 'jurnal hasil: Dr barang jadi / Cr barang dalam proses', jO.body?.lines);
+    const f1 = await stockOf('BRG-1108', 'Cikarang');
+    ok(f1.onHand === f0.onHand + 78 && f1.avgCost !== f0.avgCost, 'stok barang jadi bertambah; HPP rata-rata diperbarui', [f0, f1]);
+    const r2 = await recCheck('wip');
+    ok(r2.all && r2.it.subledger === 0 && r2.it.ledger === 0, 'rekonsiliasi cocok: WIP nol, persediaan = kartu stok', r2.bad);
+    const kc = await call('/inventory/card?sku=BRG-1108&warehouse=Cikarang', { token: andi, branch: 'CKR', period: '2026-09' });
+    ok(kc.body.lines.some((l: any) => l.refType === 'production_output' && l.qtyIn === 78), 'kartu stok mencatat hasil produksi');
+    const w2 = await call('/production/work-orders', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ bomId: brk.id, warehouse: 'Cikarang', plannedQty: 10 }) });
+    const cx = await call(`/production/work-orders/${w2.body.id}/cancel`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'pesanan dibatalkan' }) });
+    ok(cx.status === 200 && cx.body.status === 'batal', 'perintah kerja tanpa pemakaian dapat dibatalkan');
+    ok((await call(`/production/work-orders/${id}/cancel`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji batal' }) })).status === 409, 'perintah kerja selesai tidak dapat dibatalkan');
+    const pl = await call('/reports/income-statement', { token: andi, branch: 'ALL', period: '2026-09' });
+    const bsP = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-09' });
+    ok(pl.status === 200 && bsP.body.totalAssets === bsP.body.totalLiabEquity, 'neraca seimbang setelah produksi', [bsP.body.totalAssets, bsP.body.totalLiabEquity]);
   }
 
   console.log('Asisten AI');

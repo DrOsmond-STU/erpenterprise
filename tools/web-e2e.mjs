@@ -525,6 +525,35 @@ ok(await page.locator('.pill[data-tone=danger]').count() === 0, 'rekonsiliasi (t
 await page.goto(base + '/stok'); await page.waitForSelector('[data-table=warehouses] tbody tr'); await shot('87-stok');
 await logout(); await login('admin@knm.co.id');
 
+console.log('Produksi: BOM & perintah kerja');
+await salesCtx('ALL');
+await page.goto(base + '/bom'); await page.waitForSelector('[data-bom="BOM-BRK-B"]');
+ok(await page.locator('[data-table=boms] tbody tr[data-bom]').count() >= 2, 'daftar BOM dengan estimasi biaya bahan'); await shot('90-bom');
+await page.goto(base + '/perintah-kerja'); await page.waitForSelector('[data-board]'); await shot('91-papan-produksi');
+await page.click('[data-action=new-wo]'); await page.waitForSelector('#wo-bom option:nth-child(2)', { state: 'attached' });
+const bomId = await page.locator('#wo-bom option', { hasText: 'BOM-BRK-B' }).getAttribute('value');
+await page.selectOption('#wo-bom', bomId); await page.selectOption('#wo-wh', 'Cikarang'); await page.fill('#wo-qty', '40');
+await page.fill('#wo-date', '2026-09-28'); await page.fill('#wo-due', '2026-09-30'); await page.fill('#wo-line', 'Lini 2 — Pres'); await page.fill('#wo-pic', 'Dedi Kurnia');
+await page.waitForSelector('[data-table=wo-preview] tbody tr');
+ok(await page.locator('[data-table=wo-preview] tbody tr').count() === 3, 'pratinjau kebutuhan bahan dari BOM'); await shot('92-wo-baru');
+await page.click('[data-action=save-wo]'); await page.waitForSelector('[data-action=issue-materials]');
+const woNo = (await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim();
+await page.click('[data-action=issue-materials]'); await page.waitForSelector('#iss-date'); await page.fill('#iss-date', '2026-09-28');
+await page.click('[data-action=save-issue]'); await page.waitForFunction(() => document.querySelector('.drawer [data-wip]')?.textContent?.trim() !== 'Rp 0', null, { timeout: 15000 });
+ok(await page.locator('[data-table=wo-journals] tbody tr').count() === 1, 'bahan dikeluarkan: jurnal WIP tampil', woNo);
+await page.click('[data-action=submit-qc]'); await page.waitForSelector('#qc-good'); await page.fill('#qc-reject', '1'); await page.fill('#qc-good', '39'); await page.click('[data-action=save-qc]');
+await page.waitForSelector('.drawer [data-qc]');
+ok(await page.locator('[data-action=complete-wo]').count() === 0, 'pelapor hasil tidak ditawari tombol lolos QC'); await shot('93-wo-qc');
+await page.keyboard.press('Escape'); await logout(); await login('osmond@knm.co.id'); await salesCtx('ALL');
+await page.goto(base + '/perintah-kerja'); await page.waitForSelector(`[data-wo="${woNo}"]`); await page.click(`[data-wo="${woNo}"]`);
+await page.waitForSelector('[data-action=complete-wo]'); await page.fill('#wo-done-date', '2026-09-29'); await page.click('[data-action=complete-wo]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow .pill')?.textContent?.includes('Selesai'), null, { timeout: 15000 });
+ok(await page.locator('[data-table=wo-journals] tbody tr').count() === 2 && (await page.locator('.drawer [data-wip]').innerText()).trim() === 'Rp 0', 'manajer meloloskan QC: barang jadi diposting, WIP nol');
+await shot('94-wo-selesai'); await page.keyboard.press('Escape');
+await page.waitForSelector(`[data-col=selesai] [data-wo="${woNo}"]`);
+ok(true, 'kartu pindah ke kolom Selesai');
+await logout(); await login('admin@knm.co.id');
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);
