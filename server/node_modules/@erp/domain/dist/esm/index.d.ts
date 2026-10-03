@@ -8,3 +8,4 @@ export * from './permissions.js';
 export * from './sales.js';
 export * from './purchasing.js';
 export * from './cash.js';
+export * from './inventory.js';

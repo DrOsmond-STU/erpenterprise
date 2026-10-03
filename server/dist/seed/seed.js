@@ -131,6 +131,12 @@ async function seed(adminUrl, password, protoRoot) {
         for (const s of DATA.stockItems) {
             await c.query(`INSERT INTO stock_items (company_id, branch_code, warehouse_code, sku, name, category, uom, on_hand, min_qty, max_qty, avg_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [company, s.branch, s.wh, s.sku, s.name, s.category, s.unit, s.onHand, s.min, s.max, s.cost]);
         }
+        /* Gudang: dari kartu stok + satu gudang per cabang (nama kota singkat). */
+        await c.query(`INSERT INTO warehouses (company_id, code, branch_code, name)
+      SELECT DISTINCT ON (si.warehouse_code) $1, si.warehouse_code, si.branch_code, 'Gudang ' || si.warehouse_code FROM stock_items si WHERE si.company_id = $1 ORDER BY si.warehouse_code ON CONFLICT DO NOTHING`, [company]);
+        await c.query(`INSERT INTO warehouses (company_id, code, branch_code, name)
+      SELECT $1, coalesce(nullif(split_part(b.short_name, ' ', 1), ''), b.code), b.code, 'Gudang ' || coalesce(nullif(split_part(b.short_name, ' ', 1), ''), b.code)
+        FROM branches b WHERE b.company_id = $1 AND NOT EXISTS (SELECT 1 FROM warehouses w WHERE w.company_id = $1 AND w.branch_code = b.code) ON CONFLICT DO NOTHING`, [company]);
         for (const a of DATA.assets) {
             await c.query(`INSERT INTO assets (company_id, branch_code, code, name, category, gl_account_code, acquisition_date, acquisition_cost, book_value, monthly_depreciation, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [company, a.branch, a.id, a.name, a.category, domain_1.LEGACY_ACCOUNT_MAP[a.account] ?? a.account, a.acquisitionDate, a.acquisitionCost, a.bookValue, a.monthlyDepr, a.status]);
         }

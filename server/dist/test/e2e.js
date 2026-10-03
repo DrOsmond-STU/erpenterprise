@@ -91,7 +91,7 @@ async function main() {
     ok(pl.status === 200 && pl.body.net > 0 && pl.body.revenue > 30e9, 'laba rugi TA 2026 dari buku besar', pl.body?.net ?? pl.body);
     const rec = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-08' });
     /* Pemeriksaan potret (stok, aset, gaji) hanya muncul untuk periode termutakhir buku besar → 7 atau 11. */
-    ok(rec.status === 200 && [8, 12].includes(rec.body.checks.length) && rec.body.checks.every((k) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k) => !k.ok) ?? rec.body);
+    ok(rec.status === 200 && [9, 13].includes(rec.body.checks.length) && rec.body.checks.every((k) => k.ok), 'rekonsiliasi sub-buku cocok', rec.body?.checks?.filter((k) => !k.ok) ?? rec.body);
     const banks0 = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL', period: '2026-08' })).body.accounts;
     const glOf = (code) => banks0.find((b) => b.code === code)?.glAccountCode;
     ok(banks0.every((b) => /^1-1[12]\d\d$/.test(b.glAccountCode ?? '')), 'setiap rekening kas/bank punya akun detail sendiri di bawah header Bank/Kas', banks0.map((b) => [b.code, b.glAccountCode]));
@@ -803,6 +803,92 @@ async function main() {
         const bsh = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-09' });
         ok(bsh.status === 200 && bsh.body.totalAssets === bsh.body.totalLiabEquity, 'neraca konsolidasi seimbang', [bsh.body.totalAssets, bsh.body.totalLiabEquity]);
         void osmond;
+    }
+    console.log('Persediaan: gudang, opname, transfer stok');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const stockOf = async (sku, wh) => (await call('/inventory/stock', { token: andi, branch: 'ALL' })).body.items.find((i) => i.sku === sku && i.warehouse === wh);
+        const recOk = async (label) => {
+            const r = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+            ok(r.status === 200 && r.body.checks.every((c) => c.ok) && r.body.checks.some((c) => c.id === 'transit'), label, r.body?.checks?.filter((c) => !c.ok) ?? r.body);
+            return r.body.checks;
+        };
+        const wf = await call('/inventory/warehouses', { token: fitri, branch: 'SBY' });
+        ok(wf.status === 200 && wf.body.length > 0 && wf.body.every((w) => w.branch === 'SBY'), 'staf gudang hanya melihat gudang cabangnya', wf.body);
+        const wAll = await call('/inventory/warehouses?all=1', { token: fitri, branch: 'SBY' });
+        ok(wAll.body.some((w) => w.branch === 'CKR'), 'pilihan gudang tujuan transfer mencakup cabang lain');
+        ok((await call('/inventory/warehouses', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ code: 'SBY-2', name: 'Gudang 2', branch: 'SBY' }) })).status === 403, 'staf gudang tidak dapat menambah gudang');
+        const nw = await call('/inventory/warehouses', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ code: 'CKR-BJ', name: 'Gudang Barang Jadi Cikarang', branch: 'CKR' }) });
+        ok(nw.status === 201 && nw.body.branch === 'CKR', 'manajer menambah gudang kedua di Cikarang', nw.body);
+        ok((await call('/inventory/warehouses', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ code: 'ckr-bj', name: 'Duplikat', branch: 'CKR' }) })).status === 409, 'kode gudang unik');
+        const st = await call('/inventory/stock', { token: andi, branch: 'ALL' });
+        ok(st.status === 200 && st.body.items.length > 0 && st.body.total === st.body.items.reduce((t, i) => t + i.value, 0), 'daftar stok bernilai per gudang', st.body?.total);
+        /* Opname: staf gudang mencatat, akuntan menyetujui (empat mata) */
+        const k0 = await stockOf('BRG-3390', 'Surabaya'), p0 = await stockOf('BRG-6110', 'Surabaya');
+        const ad = await call('/inventory/adjustments', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ warehouse: 'Surabaya', date: '2026-09-27', reason: 'opname', notes: 'Opname akhir September',
+                lines: [{ sku: 'BRG-3390', countedQty: k0.onHand - 10 }, { sku: 'BRG-6110', countedQty: p0.onHand + 2 }] }) });
+        ok(ad.status === 201 && ad.body.status === 'menunggu' && /^ADJ-2026-\d{4}$/.test(ad.body.docNo) && ad.body.estimatedValue === -10 * k0.avgCost + 2 * p0.avgCost, 'staf gudang mencatat opname (menunggu persetujuan, estimasi selisih)', ad.body);
+        ok((await call(`/inventory/adjustments/${ad.body.id}/approve`, { method: 'POST', token: fitri, branch: 'SBY', body: '{}' })).status === 403, 'staf gudang tidak dapat memposting opname');
+        const rusak = await call('/inventory/adjustments', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ warehouse: 'Surabaya', reason: 'rusak', lines: [{ sku: 'BRG-3390', countedQty: k0.onHand + 5 }] }) });
+        ok(rusak.status === 422 && rusak.body.error.code === 'ADJ_REASON_QTY', 'barang rusak hanya dapat mengurangi stok', rusak.body);
+        ok((await call('/inventory/adjustments', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ warehouse: 'Cikarang', reason: 'opname', lines: [{ sku: 'BRG-1042', countedQty: 1 }] }) })).status === 403, 'staf gudang SBY tidak dapat mengopname gudang Cikarang');
+        const ap1 = await call(`/inventory/adjustments/${ad.body.id}/approve`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ note: 'sesuai berita acara' }) });
+        ok(ap1.status === 200 && ap1.body.status === 'diposting' && ap1.body.journals.length === 1 && ap1.body.totalValue === -10 * k0.avgCost + 2 * p0.avgCost, 'akuntan memposting opname: satu jurnal selisih persediaan', ap1.body?.error ?? ap1.body);
+        const jAdj = await call(`/ledger/journals/${ap1.body.journals[0].id}`, { token: andi, branch: 'ALL' });
+        ok(jAdj.body.lines.some((l) => l.account === '5-1901') && jAdj.body.lines.some((l) => l.account === '1-1501'), 'jurnal opname: persediaan ↔ selisih persediaan (5-1901)', jAdj.body?.lines);
+        ok((await stockOf('BRG-3390', 'Surabaya')).onHand === k0.onHand - 10, 'stok sistem = hasil hitung fisik');
+        const selfAdj = await call('/inventory/adjustments', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ warehouse: 'Cikarang', reason: 'koreksi', lines: [{ sku: 'BRG-1042', countedQty: 41 }] }) });
+        const selfAp = await call(`/inventory/adjustments/${selfAdj.body.id}/approve`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+        ok(selfAdj.status === 201 && selfAp.status === 403 && selfAp.body.error.code === 'SOD_STOCK_ADJUSTMENT', 'pembuat (termasuk admin) tidak dapat menyetujui penyesuaiannya sendiri', selfAp.body);
+        const cx = await call(`/inventory/adjustments/${selfAdj.body.id}/cancel`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'salah input' }) });
+        ok(cx.status === 200 && cx.body.status === 'batal', 'pembuat membatalkan penyesuaian yang belum diposting', cx.body?.status);
+        /* Transfer antar gudang satu cabang */
+        const b0 = await stockOf('BRG-1108', 'Cikarang');
+        ok((await call('/inventory/transfers', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ fromWarehouse: 'Cikarang', toWarehouse: 'Surabaya', lines: [{ sku: 'BRG-1108', qty: 1 }] }) })).status === 403, 'staf gudang SBY tidak dapat mengirim dari gudang Cikarang');
+        const tooMuch = await call('/inventory/transfers', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ fromWarehouse: 'Cikarang', toWarehouse: 'CKR-BJ', lines: [{ sku: 'BRG-1108', qty: b0.onHand + 1 }] }) });
+        ok(tooMuch.status === 422 && tooMuch.body.error.code === 'STOCK_INSUFFICIENT', 'transfer melebihi stok gudang ditolak', tooMuch.body);
+        const lt = await call('/inventory/transfers', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ fromWarehouse: 'Cikarang', toWarehouse: 'CKR-BJ', date: '2026-09-24', lines: [{ sku: 'BRG-1108', qty: 100 }] }) });
+        ok(lt.status === 201 && lt.body.status === 'draf' && !lt.body.interBranch && /^TRS-2026-\d{4}$/.test(lt.body.docNo), 'draf transfer antar gudang satu cabang', lt.body);
+        const ls = await call(`/inventory/transfers/${lt.body.id}/ship`, { method: 'POST', token: admin, branch: 'ALL' });
+        ok(ls.status === 200 && ls.body.status === 'diterima' && ls.body.totalValue === 100 * b0.avgCost, 'kirim antar gudang satu cabang langsung diterima', ls.body?.error ?? ls.body);
+        const bj = await stockOf('BRG-1108', 'CKR-BJ');
+        ok(bj?.onHand === 100 && bj.avgCost === b0.avgCost && (await stockOf('BRG-1108', 'Cikarang')).onHand === b0.onHand - 100, 'stok pindah gudang dengan harga pokok yang sama', bj);
+        /* Transfer antar cabang: dikirim → dalam perjalanan → diterima */
+        const s0 = await stockOf('BRG-4501', 'Cikarang');
+        const it = await call('/inventory/transfers', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ fromWarehouse: 'Cikarang', toWarehouse: 'Surabaya', date: '2026-09-25', notes: 'Kebutuhan proyek Surabaya', lines: [{ sku: 'BRG-4501', qty: 1000 }, { sku: 'BRG-1108', qty: 40 }] }) });
+        ok(it.status === 201 && it.body.interBranch && it.body.toBranch === 'SBY', 'draf transfer Cikarang → Surabaya', it.body);
+        ok((await call(`/inventory/transfers/${it.body.id}/receive`, { method: 'POST', token: fitri, branch: 'SBY', body: '{}' })).status === 409, 'belum dikirim → tidak dapat diterima');
+        const is = await call(`/inventory/transfers/${it.body.id}/ship`, { method: 'POST', token: admin, branch: 'ALL' });
+        const value = 1000 * s0.avgCost + 40 * b0.avgCost;
+        ok(is.status === 200 && is.body.status === 'dikirim' && is.body.totalValue === value && is.body.journals.map((j) => `${j.branch}:${j.rule}`).sort().join(',') === 'CKR:STOCK_TRANSFER_OUT,SBY:STOCK_TRANSFER_TRANSIT', 'kirim antar cabang: jurnal asal (RK/persediaan) & tujuan (dalam perjalanan/RK)', is.body?.error ?? is.body?.journals);
+        const jo = await call(`/ledger/journals/${is.body.journals.find((j) => j.branch === 'CKR').id}`, { token: andi, branch: 'ALL' });
+        ok(jo.body.lines.some((l) => l.account === '3-1501' && l.debit === value && l.counterBranch === 'SBY'), 'jurnal asal mendebit RK dengan cabang lawan SBY', jo.body?.lines);
+        const transit = (await recOk('rekonsiliasi cocok saat barang dalam perjalanan (transit, RK, persediaan)')).find((c) => c.id === 'transit');
+        ok(transit.subledger === value && transit.ledger === value, 'saldo 1-1504 = nilai transfer belum diterima', transit);
+        const tf = await call('/inventory/transfers', { token: fitri, branch: 'SBY' });
+        ok(tf.body.some((t) => t.id === it.body.id && t.status === 'dikirim'), 'gudang tujuan melihat transfer masuk');
+        ok((await call('/inventory/transfers', { token: taufik, branch: 'ALL' })).body.every((t) => t.branch === 'MDN' || t.toBranch === 'MDN'), 'manajer Medan tidak melihat transfer Cikarang → Surabaya (RLS)');
+        ok((await call(`/inventory/transfers/${it.body.id}/receive`, { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ date: '2026-09-20' }) })).status === 422, 'tanggal terima sebelum tanggal kirim ditolak');
+        const rc = await call(`/inventory/transfers/${it.body.id}/receive`, { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ date: '2026-09-26' }) });
+        ok(rc.status === 200 && rc.body.status === 'diterima' && rc.body.journals.some((j) => j.branch === 'SBY' && j.rule === 'STOCK_TRANSFER_IN') && rc.body.receivedByName === 'Fitri Ramadhani', 'gudang Surabaya menerima: jurnal persediaan ← dalam perjalanan', rc.body?.error ?? rc.body?.journals);
+        const sb = await stockOf('BRG-4501', 'Surabaya');
+        ok(sb?.onHand === 1000 && sb.avgCost === s0.avgCost && (await stockOf('BRG-4501', 'Cikarang')).onHand === s0.onHand - 1000, 'stok berpindah cabang dengan harga pokok asal', sb);
+        const transit2 = (await recOk('rekonsiliasi cocok setelah diterima')).find((c) => c.id === 'transit');
+        ok(transit2.subledger === 0 && transit2.ledger === 0, 'barang dalam perjalanan nol setelah diterima', transit2);
+        const kc = await call('/inventory/card?sku=BRG-4501&warehouse=Surabaya', { token: fitri, branch: 'SBY', period: '2026-09' });
+        ok(kc.status === 200 && kc.body.opening === 0 && kc.body.closing === 1000 && kc.body.lines[0].refType === 'transfer_in' && kc.body.lines[0].refNo === it.body.docNo, 'kartu stok tujuan: transfer masuk dengan saldo berjalan', kc.body);
+        const kc2 = await call('/inventory/card?sku=BRG-3390&warehouse=Surabaya', { token: fitri, branch: 'SBY', period: '2026-09' });
+        ok(kc2.body.lines.some((l) => l.refType === 'adjustment' && l.qtyOut === 10) && kc2.body.closing === k0.onHand - 10, 'kartu stok: mutasi opname tercatat', kc2.body?.lines);
+        const dr = await call('/inventory/transfers', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ fromWarehouse: 'Surabaya', toWarehouse: 'Cikarang', lines: [{ sku: 'BRG-4501', qty: 10 }] }) });
+        const dc = await call(`/inventory/transfers/${dr.body.id}/cancel`, { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ reason: 'tidak jadi' }) });
+        ok(dr.status === 201 && dc.status === 200 && dc.body.status === 'batal', 'draf transfer dapat dibatalkan', dc.body?.error ?? dc.body?.status);
+        ok((await call(`/inventory/transfers/${it.body.id}/cancel`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ reason: 'uji batal' }) })).status === 409, 'transfer yang sudah dikirim tidak dapat dibatalkan');
+        const offW = await call('/inventory/warehouses/CKR-BJ', { method: 'PATCH', token: osmond, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif' }) });
+        ok(offW.status === 409 && offW.body.error.code === 'WAREHOUSE_IN_USE', 'gudang yang masih berisi stok tidak dapat dinonaktifkan', offW.body);
+        const tbI = await call('/reports/trial-balance', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(tbI.body.rows.some((r) => r.code === '5-1901'), 'selisih persediaan muncul di neraca saldo');
+        const bsI = await call('/reports/balance-sheet', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(bsI.body.totalAssets === bsI.body.totalLiabEquity, 'neraca seimbang setelah mutasi persediaan', [bsI.body.totalAssets, bsI.body.totalLiabEquity]);
     }
     console.log('Asisten AI');
     const assistant = app.get(assistant_service_js_1.AssistantService);
