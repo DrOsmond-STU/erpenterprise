@@ -18,6 +18,8 @@ const node_path_1 = require("node:path");
 const pg_1 = __importDefault(require("pg"));
 const domain_1 = require("@erp/domain");
 const auth_service_js_1 = require("../auth/auth.service.js");
+const assets_seed_js_1 = require("./assets-seed.js");
+const hr_seed_js_1 = require("./hr-seed.js");
 const purchasing_seed_js_1 = require("./purchasing-seed.js");
 const sales_seed_js_1 = require("./sales-seed.js");
 const config_js_1 = require("../config.js");
@@ -45,10 +47,14 @@ async function seed(adminUrl, password, protoRoot) {
             await c.query(`SELECT set_config('app.company_id', $1, true), set_config('app.branch_codes', '*', true)`, [id]);
             const sales = await (0, sales_seed_js_1.seedSales)(c, id, DATA);
             const purchasing = await (0, purchasing_seed_js_1.seedPurchasing)(c, id, DATA);
+            const assets = await (0, assets_seed_js_1.seedAssets)(c, id, DATA);
+            const hr = await (0, hr_seed_js_1.seedHr)(c, id, DATA);
             await c.query('COMMIT');
             const upgraded = [
                 ...(sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`]),
                 ...(purchasing.skipped ? [] : [`pembelian: ${purchasing.suppliers} pemasok, ${purchasing.orders} PO`]),
+                ...(assets.skipped ? [] : [`pemeliharaan: ${assets.orders} perintah`]),
+                ...(hr.skipped ? [] : [`SDM: ${hr.employees} karyawan`]),
             ];
             return { skipped: true, companyId: id, upgraded };
         }
@@ -157,6 +163,8 @@ async function seed(adminUrl, password, protoRoot) {
         }
         await (0, sales_seed_js_1.seedSales)(c, company, DATA); // setelah faktur & kartu stok
         await (0, purchasing_seed_js_1.seedPurchasing)(c, company, DATA); // setelah produk (dibuat seed penjualan)
+        await (0, assets_seed_js_1.seedAssets)(c, company, DATA); // setelah jurnal penyusutan
+        await (0, hr_seed_js_1.seedHr)(c, company, DATA); // setelah slip gaji
         await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);
         await c.query('COMMIT');
         return { skipped: false, companyId: company, journals: n };

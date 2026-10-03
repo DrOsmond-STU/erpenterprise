@@ -77,7 +77,7 @@ let ReconciliationService = class ReconciliationService {
         if (asOf >= String(lastPosting)) {
             const inv = await one(`SELECT coalesce(sum(on_hand * avg_cost),0)::bigint AS v FROM stock_items WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
             add('inv', 'Persediaan', 'stok', 'Σ kuantitas × harga pokok (kartu stok)', inv, gl(links.invRaw) + gl(links.invFinished), 'Bahan baku & penolong dan barang jadi; barang dalam proses diperiksa terpisah');
-            const fa = await one(`SELECT coalesce(sum(acquisition_cost),0)::bigint AS v FROM assets WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
+            const fa = await one(`SELECT coalesce(sum(acquisition_cost),0)::bigint AS v FROM assets WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2) AND acquisition_date <= $3 AND (disposed_date IS NULL OR disposed_date > $3)`, [companyId, b, asOf]);
             add('fa', 'Aset tetap — harga perolehan', 'aset', 'Σ nilai perolehan (register aset)', fa, glUnder(domain_1.FIXED_ASSET_HEADERS), 'Tanah & bangunan dicatat langsung di buku besar');
             const nbv = await one(`SELECT coalesce(sum(book_value) FILTER (WHERE status = 'aktif'),0)::bigint AS v FROM assets WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
             add('nbv', 'Aset tetap — nilai buku', 'aset', 'Σ nilai buku register aset', nbv, glUnder([...domain_1.FIXED_ASSET_HEADERS, domain_1.ACCUM_DEPR_HEADER]), `Akumulasi penyusutan (${domain_1.ACCUM_DEPR_HEADER}) bersaldo kredit sebagai akun kontra`);
