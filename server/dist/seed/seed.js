@@ -137,6 +137,18 @@ async function seed(adminUrl, password, protoRoot) {
         await c.query(`INSERT INTO warehouses (company_id, code, branch_code, name)
       SELECT $1, coalesce(nullif(split_part(b.short_name, ' ', 1), ''), b.code), b.code, 'Gudang ' || coalesce(nullif(split_part(b.short_name, ' ', 1), ''), b.code)
         FROM branches b WHERE b.company_id = $1 AND NOT EXISTS (SELECT 1 FROM warehouses w WHERE w.company_id = $1 AND w.branch_code = b.code) ON CONFLICT DO NOTHING`, [company]);
+        /* BOM contoh untuk produksi di Cikarang. */
+        for (const [code, sku, name, batch, lines] of [
+            ['BOM-BRK-B', 'BRG-1108', 'Braket dudukan mesin tipe B — pres & cat', 100, [['BRG-1042', 25], ['BRG-4501', 400], ['BRG-5023', 5]]],
+            ['BOM-PNL-IP65', 'BRG-9014', 'Panel kendali IP65 — rakit', 1, [['BRG-3390', 12], ['BRG-4501', 8], ['BRG-2217', 2], ['BRG-5023', 0.5]]],
+        ]) {
+            const bom = (await c.query('INSERT INTO boms (company_id, code, sku, name, batch_qty) VALUES ($1,$2,$3,$4,$5) RETURNING id', [company, code, sku, name, batch])).rows[0];
+            let n = 0;
+            for (const [component, qty] of lines) {
+                n += 1;
+                await c.query('INSERT INTO bom_lines (bom_id, company_id, line_no, sku, qty) VALUES ($1,$2,$3,$4,$5)', [bom.id, company, n, component, qty]);
+            }
+        }
         for (const a of DATA.assets) {
             await c.query(`INSERT INTO assets (company_id, branch_code, code, name, category, gl_account_code, acquisition_date, acquisition_cost, book_value, monthly_depreciation, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [company, a.branch, a.id, a.name, a.category, domain_1.LEGACY_ACCOUNT_MAP[a.account] ?? a.account, a.acquisitionDate, a.acquisitionCost, a.bookValue, a.monthlyDepr, a.status]);
         }

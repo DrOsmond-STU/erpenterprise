@@ -65,6 +65,10 @@ let ReconciliationService = class ReconciliationService {
         WHERE company_id = $1 AND status IN ('dikirim','diterima') AND branch_code <> to_branch_code AND shipped_date <= $2
           AND (received_date IS NULL OR received_date > $2) AND ($3::text IS NULL OR to_branch_code = $3)`, [companyId, asOf, b]);
         add('transit', 'Persediaan dalam perjalanan', 'transfer-stok', 'Σ nilai transfer stok antar cabang yang belum diterima', transit, gl(links.invTransit), `Pengiriman mendebit ${links.invTransit} di cabang tujuan; penerimaan mengkreditnya`);
+        /* Barang dalam proses: bahan dikeluarkan ke perintah kerja s.d. tanggal − hasil produksi s.d. tanggal. */
+        const wip = await one(`SELECT (SELECT coalesce(sum(value),0) FROM wo_consumptions WHERE company_id = $1 AND issue_date <= $2 AND ($3::text IS NULL OR branch_code = $3))
+            - (SELECT coalesce(sum(value),0) FROM wo_outputs WHERE company_id = $1 AND output_date <= $2 AND ($3::text IS NULL OR branch_code = $3)) AS v`, [companyId, asOf, b]);
+        add('wip', 'Barang dalam proses', 'perintah-kerja', 'Σ saldo WIP perintah kerja (bahan dikeluarkan − hasil produksi)', wip, gl(links.invWip), `Pemakaian bahan mendebit ${links.invWip}; hasil produksi mengkreditnya`);
         const bank = await one(`SELECT coalesce(sum(jl.debit - jl.credit),0)::bigint AS v FROM journal_lines jl JOIN journals j ON j.id = jl.journal_id JOIN bank_accounts ba ON ba.company_id = jl.company_id AND ba.code = jl.bank_account_code
         WHERE jl.company_id = $1 AND j.status IN ('posted','reversed') AND jl.journal_date <= $2 AND ba.currency = 'IDR' AND ($3::text IS NULL OR ba.branch_code = $3)`, [companyId, asOf, b]);
         add('bank', 'Kas & bank', 'kas-bank', 'Σ saldo rekening IDR (modul Kas & Bank)', bank, (0, ledger_shared_js_1.cashBalance)(accounts, bal), 'Tiap rekening punya akun detail sendiri di bawah header Bank/Kas; rekening valas tidak dikonsolidasi ke IDR');
@@ -72,7 +76,7 @@ let ReconciliationService = class ReconciliationService {
         const lastPosting = (await c.query(`SELECT max(journal_date) AS d FROM journals WHERE company_id = $1 AND status IN ('posted','reversed')`, [companyId])).rows[0]?.d ?? asOf;
         if (asOf >= String(lastPosting)) {
             const inv = await one(`SELECT coalesce(sum(on_hand * avg_cost),0)::bigint AS v FROM stock_items WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
-            add('inv', 'Persediaan', 'stok', 'Σ kuantitas × harga pokok (kartu stok)', inv, gl(links.invRaw) + gl(links.invWip) + gl(links.invFinished), 'Bahan baku, barang dalam proses, dan barang jadi');
+            add('inv', 'Persediaan', 'stok', 'Σ kuantitas × harga pokok (kartu stok)', inv, gl(links.invRaw) + gl(links.invFinished), 'Bahan baku & penolong dan barang jadi; barang dalam proses diperiksa terpisah');
             const fa = await one(`SELECT coalesce(sum(acquisition_cost),0)::bigint AS v FROM assets WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
             add('fa', 'Aset tetap — harga perolehan', 'aset', 'Σ nilai perolehan (register aset)', fa, glUnder(domain_1.FIXED_ASSET_HEADERS), 'Tanah & bangunan dicatat langsung di buku besar');
             const nbv = await one(`SELECT coalesce(sum(book_value) FILTER (WHERE status = 'aktif'),0)::bigint AS v FROM assets WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2)`, [companyId, b]);
