@@ -29,6 +29,9 @@ const SOURCES = [
         sql: `SELECT p.id, p.doc_no, s.name AS title, p.total AS amount, p.branch_code, p.created_by_name AS by_name, p.created_at AS at FROM purchase_orders p JOIN suppliers s ON s.id = p.supplier_id WHERE p.company_id = $1 AND p.status = 'menunggu' AND coalesce(p.created_by::text, '') <> $2` },
     { kind: 'purchase_requisition', label: 'Permintaan pembelian', perm: 'purchasing.requisition.approve', link: '/permintaan-pembelian', action: 'Setujui / tolak',
         sql: `SELECT id, doc_no, description || ' (' || department || ', prioritas ' || priority || ')' AS title, estimated_total AS amount, branch_code, requester_name AS by_name, submitted_at AS at FROM purchase_requisitions WHERE company_id = $1 AND status = 'menunggu' AND coalesce(created_by::text, '') <> $2` },
+    { kind: 'budget', label: 'Anggaran', perm: 'budget.approve', link: '/anggaran', action: 'Setujui / kembalikan',
+        sql: `SELECT b.id, trim(b.branch_code) || '-' || b.fiscal_year AS doc_no, b.name AS title, (SELECT coalesce(sum(x), 0)::bigint FROM budget_lines l, unnest(l.amounts) x WHERE l.budget_id = b.id) AS amount, b.branch_code, b.created_by_name AS by_name, b.submitted_at AS at
+           FROM budgets b WHERE b.company_id = $1 AND b.status = 'menunggu' AND coalesce(b.created_by::text, '') <> $2 AND coalesce(b.submitted_by::text, '') <> $2` },
     { kind: 'ap_invoice', label: 'Tagihan pemasok draf', perm: 'purchasing.invoice.post', link: '/tagihan-pemasok', action: 'Posting',
         sql: `SELECT id, doc_no, supplier_name AS title, total_gross AS amount, branch_code, 'Staf' AS by_name, now() AS at FROM ap_invoices WHERE company_id = $1 AND status = 'draf' AND coalesce(created_by::text, '') <> $2` },
     { kind: 'supplier_payment', label: 'Pembayaran pemasok', perm: 'purchasing.payment.approve', link: '/pembayaran', action: 'Setujui',

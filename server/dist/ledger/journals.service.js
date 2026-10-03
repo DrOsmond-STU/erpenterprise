@@ -27,7 +27,7 @@ const mapJournal = (j) => ({
     createdAt: j.created_at, createdBy: j.created_by, createdByName: j.created_by_name, postedAt: j.posted_at, postedBy: j.posted_by,
     reversedByJournalId: j.reversed_by_journal_id, reversesJournalId: j.reverses_journal_id, lineCount: j.line_count ?? undefined,
 });
-const mapLine = (l) => ({ lineNo: l.line_no, account: l.account_code, accountName: l.account_name, debit: l.debit, credit: l.credit, bankAccountId: l.bank_account_code, bankName: l.bank_name, party: l.party, counterBranch: l.counter_branch ? String(l.counter_branch).trim() : null, memo: l.memo });
+const mapLine = (l) => ({ lineNo: l.line_no, account: l.account_code, accountName: l.account_name, debit: l.debit, credit: l.credit, bankAccountId: l.bank_account_code, bankName: l.bank_name, party: l.party, counterBranch: l.counter_branch ? String(l.counter_branch).trim() : null, memo: l.memo, projectId: l.project_id ?? null, projectCode: l.project_code ?? null, projectName: l.project_name ?? null });
 let JournalsService = class JournalsService {
     db;
     audit;
@@ -78,9 +78,10 @@ let JournalsService = class JournalsService {
         const j = (await c.query('SELECT * FROM journals WHERE company_id = $1 AND (($2 ~* $3 AND id::text = $2) OR journal_no = $2)', [companyId, idOrNo, UUID.source])).rows[0];
         if (!j)
             throw (0, errors_js_1.notFound)('Jurnal');
-        const lines = (await c.query(`SELECT l.*, a.name AS account_name, b.name AS bank_name FROM journal_lines l
+        const lines = (await c.query(`SELECT l.*, a.name AS account_name, b.name AS bank_name, pr.code AS project_code, pr.name AS project_name FROM journal_lines l
          LEFT JOIN chart_of_accounts a ON a.company_id = l.company_id AND a.code = l.account_code
          LEFT JOIN bank_accounts b ON b.company_id = l.company_id AND b.code = l.bank_account_code
+         LEFT JOIN projects pr ON pr.id = l.project_id
         WHERE l.journal_id = $1 ORDER BY l.line_no`, [j.id])).rows;
         return { ...mapJournal(j), lines: lines.map(mapLine) };
     }
@@ -101,6 +102,19 @@ let JournalsService = class JournalsService {
             const bankAccounts = await this.refs.bankAccounts(c, u.companyId);
             const lines = (0, domain_1.normalizeLines)(input.lines);
             const errs = (0, domain_1.validateJournal)({ ...input, lines }, { accounts, periods, branches, bankAccounts });
+            const pids = [...new Set(lines.map((l) => l.projectId).filter(Boolean))];
+            if (pids.length) {
+                const ok = (await c.query(`SELECT id, code, status, trim(branch_code) AS branch FROM projects WHERE company_id = $1 AND id = ANY($2::uuid[])`, [u.companyId, pids])).rows;
+                for (const id of pids) {
+                    const p = ok.find((x) => x.id === id);
+                    if (!p)
+                        errs.push('Proyek pada baris jurnal tidak dikenal.');
+                    else if (p.status === 'batal')
+                        errs.push(`Proyek ${p.code} batal; tidak dapat menerima biaya.`);
+                    else if (p.branch !== input.branch)
+                        errs.push(`Proyek ${p.code} milik cabang ${p.branch}; jurnal cabang ${input.branch}.`);
+                }
+            }
             if (errs.length)
                 throw new errors_js_1.DomainError('LEDGER_INVALID', errs[0], common_1.HttpStatus.UNPROCESSABLE_ENTITY, errs);
             const period = periods.find((p) => p.group === 'Bulan' && input.date >= p.from && input.date <= p.to);
@@ -119,8 +133,8 @@ let JournalsService = class JournalsService {
         let n = 0;
         for (const l of lines) {
             n += 1;
-            await c.query(`INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, counter_branch, memo)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [j.id, j.company_id, j.branch_code, j.journal_date, n, l.account, l.debit, l.credit, l.bankAccountId ?? null, l.party ?? null, l.counterBranch ?? null, l.memo ?? null]);
+            await c.query(`INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, counter_branch, memo, project_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [j.id, j.company_id, j.branch_code, j.journal_date, n, l.account, l.debit, l.credit, l.bankAccountId ?? null, l.party ?? null, l.counterBranch ?? null, l.memo ?? null, l.projectId ?? null]);
         }
     }
     /** Posting: hanya jurnal pending, oleh orang selain pembuatnya (SoD). Trigger basis data menjaga periode & keseimbangan. */
@@ -168,7 +182,7 @@ let JournalsService = class JournalsService {
             if (period.status !== 'open')
                 throw new errors_js_1.DomainError('LEDGER_PERIOD_CLOSED', `Periode ${period.label} sudah ditutup.`);
             const lines = (await c.query('SELECT * FROM journal_lines WHERE journal_id = $1 ORDER BY line_no', [j.id])).rows
-                .map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit, bankAccountId: l.bank_account_code, party: l.party, counterBranch: l.counter_branch, memo: l.memo }));
+                .map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit, bankAccountId: l.bank_account_code, party: l.party, counterBranch: l.counter_branch, memo: l.memo, projectId: l.project_id }));
             const year = Number(rdate.slice(0, 4));
             const seq = (await c.query('SELECT next_doc_no($1, $2, $3) AS n', [u.companyId, 'JV', year])).rows[0].n;
             const journalNo = `JV-${year}-${String(seq).padStart(6, '0')}`;

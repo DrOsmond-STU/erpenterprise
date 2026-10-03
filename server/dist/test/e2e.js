@@ -769,6 +769,89 @@ async function main() {
         const cpr = await call(`/purchasing/requisitions/${pr2.body.id}/cancel`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ reason: 'tidak jadi' }) });
         ok(cpr.status === 200 && cpr.body.status === 'batal' && cpr.body.timeline.some((t) => t.action === 'purchase_requisition.rfq_created'), 'PR dibatalkan; linimasa mencatat RFQ', cpr.body?.timeline?.map((t) => t.action));
     }
+    console.log('Anggaran & proyek: realisasi buku besar, komitmen, biaya proyek');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const D = '2026-09-24';
+        const sum = (a) => a.reduce((t, v) => t + v, 0);
+        const bl = await call('/budgets', { token: andi, branch: 'ALL' });
+        const demo = bl.body?.find?.((b) => b.branch === 'CKR' && b.fiscalYear === 2026);
+        ok(bl.status === 200 && demo?.status === 'disetujui' && demo.lineCount > 0, 'anggaran contoh CKR 2026 disetujui', bl.body);
+        ok((await call('/budgets', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin anggaran → 403');
+        const det = async () => (await call(`/budgets/${demo.id}?asOf=2026-09-30`, { token: andi, branch: 'ALL' })).body;
+        const d0 = await det();
+        const line0 = d0.lines.find((l) => l.category === 'Beban');
+        ok(d0.elapsedMonths === 9 && line0.months.length === 12 && line0.forecast === line0.actual + line0.commitment + sum(line0.months.slice(9)) && d0.groups.length > 0, 'prakiraan = realisasi + komitmen + anggaran bulan tersisa; rekap per kelompok', line0);
+        const acc = line0.account;
+        const kasCkr = banks0.find((b) => b.branchCode === 'CKR' && b.bankName === 'Kas' && b.status === 'aktif');
+        /* Proyek & dimensi proyek di buku besar */
+        ok((await call('/projects', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin proyek → 403');
+        ok((await call('/projects/options?branch=CKR', { token: sari, branch: 'CKR' })).status === 200, 'pembuat jurnal dapat memilih proyek');
+        const pBody = { branch: 'CKR', name: 'Proyek uji e2e', pmName: 'Osmond Pratama', budget: 10_000_000, startDate: '2026-09-01', endDate: '2026-12-31', status: 'berjalan',
+            tasks: [{ name: 'Persiapan', startDate: '2026-09-01', endDate: '2026-09-30', progress: 100, weight: 1 }, { name: 'Pelaksanaan', startDate: '2026-10-01', endDate: '2026-12-31', progress: 0, weight: 3 }] };
+        const badTask = await call('/projects', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ ...pBody, tasks: [{ name: 'Di luar', startDate: '2027-01-01', endDate: '2027-01-31' }] }) });
+        ok(badTask.status === 422 && badTask.body.error.code === 'PROJECT_TASKS_INVALID', 'tugas di luar rentang proyek ditolak', badTask.body);
+        const pj = await call('/projects', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify(pBody) });
+        ok(pj.status === 201 && /^PRJ-2026-\d{3}$/.test(pj.body.code) && pj.body.progress === 25 && pj.body.health === 'hijau', 'proyek dibuat; kemajuan tertimbang tugas 25%', pj.body);
+        const jv = (amount, branch = 'CKR') => ({ date: D, branch, description: 'Uji e2e biaya proyek', lines: [{ account: acc, debit: amount, credit: 0, projectId: pj.body.id }, { account: kasCkr.glAccountCode, debit: 0, credit: amount }] });
+        const wrong = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ ...jv(1000, 'JKT'), lines: [{ account: '5-3701', debit: 1000, credit: 0, projectId: pj.body.id }, { account: glOf('BNK-007'), debit: 0, credit: 1000 }] }) });
+        ok(wrong.status === 422 && /milik cabang CKR/.test(JSON.stringify(wrong.body)), 'proyek cabang lain ditolak pada jurnal', wrong.body);
+        const j1 = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(jv(2_500_000)) });
+        await call(`/ledger/journals/${j1.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const j1b = await call(`/ledger/journals/${j1.body.id}`, { token: andi, branch: 'CKR' });
+        ok(j1b.body.status === 'posted' && j1b.body.lines[0].projectCode === pj.body.code, 'baris jurnal membawa kode proyek', j1b.body?.lines);
+        const d1 = await det();
+        ok(d1.lines.find((l) => l.account === acc).actual === line0.actual + 2_500_000, 'realisasi anggaran = buku besar (bertambah sebesar jurnal)', [line0.actual, d1.lines.find((l) => l.account === acc).actual]);
+        const p1 = await call(`/projects/${pj.body.id}`, { token: osmond, branch: 'ALL' });
+        ok(p1.body.actual === 2_500_000 && p1.body.entries.length === 1 && p1.body.byAccount[0].account === acc, 'biaya aktual proyek dari baris jurnal bertanda proyek', p1.body);
+        const j2 = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(jv(6_500_000)) });
+        await call(`/ledger/journals/${j2.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const p2 = await call(`/projects/${pj.body.id}`, { token: osmond, branch: 'ALL' });
+        ok(p2.body.actual === 9_000_000 && p2.body.health === 'kuning', 'serapan 90% saat kemajuan 25% → kesehatan kuning', p2.body?.health);
+        await call(`/ledger/journals/${j2.body.id}/reverse`, { method: 'POST', token: andi, branch: 'CKR', body: JSON.stringify({ reason: 'uji balik proyek', date: D }) });
+        const p3 = await call(`/projects/${pj.body.id}`, { token: osmond, branch: 'ALL' });
+        ok(p3.body.actual === 2_500_000 && p3.body.health === 'hijau', 'jurnal balik ikut bertanda proyek → biaya proyek kembali', p3.body?.actual);
+        /* Komitmen: PR jasa (cek anggaran) & PO/tagihan proyek */
+        const pr = await call('/purchasing/requisitions', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', requestDate: D, department: 'Keuangan', description: 'Jasa uji anggaran', projectId: pj.body.id,
+                lines: [{ description: 'Jasa konsultan', qty: 1, price: 1_000_000, expenseAccount: acc }], submit: true }) });
+        const bc = pr.body.budgetCheck?.[0];
+        ok(pr.status === 201 && pr.body.projectCode === pj.body.code && bc?.budgeted && bc.afterRequest === bc.available - 1_000_000, 'PR menampilkan cek sisa anggaran akun & proyek', pr.body?.budgetCheck);
+        await call(`/purchasing/requisitions/${pr.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+        const d2 = await det();
+        ok(d2.lines.find((l) => l.account === acc).commitment === d1.lines.find((l) => l.account === acc).commitment + 1_000_000, 'PR jasa disetujui menjadi komitmen anggaran');
+        const po = await call(`/purchasing/requisitions/${pr.body.id}/order`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ supplierId: (await call('/purchasing/suppliers', { token: sari, branch: 'ALL' })).body.find((s) => s.status === 'aktif').id, orderDate: D }) });
+        ok(po.status === 200 && po.body.projectCode === pj.body.code, 'PO dari PR membawa proyek', po.body?.projectCode);
+        const inv = await call('/purchasing/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ orderId: po.body.id, invoiceDate: D }) });
+        ok(inv.status === 201 && inv.body.projectCode === pj.body.code, 'tagihan dari PO proyek membawa proyek', inv.body);
+        await call(`/purchasing/invoices/${inv.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const p4 = await call(`/projects/${pj.body.id}`, { token: osmond, branch: 'ALL' });
+        ok(p4.body.actual === 3_500_000 && p4.body.orders.length === 1 && p4.body.entries.some((e) => e.source === 'ap_invoice'), 'tagihan jasa diposting → biaya proyek bertambah', p4.body?.actual);
+        const d3 = await det();
+        const l3 = d3.lines.find((l) => l.account === acc);
+        ok(l3.actual === line0.actual + 3_500_000 && l3.commitment === line0.commitment, 'tagihan diposting: komitmen menjadi realisasi', [l3.actual, l3.commitment, line0.commitment]);
+        /* Penyusunan & persetujuan anggaran (penyusun ≠ penyetuju) */
+        const nb = await call('/budgets', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ branch: 'SBY', fiscalYear: 2027, fromActualYear: 2026, growthPct: 10 }) });
+        ok(nb.status === 201 && nb.body.status === 'draf' && nb.body.lines.length > 0, 'anggaran SBY 2027 disusun dari realisasi 2026 + 10%', nb.body?.lines?.length);
+        ok((await call('/budgets', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ branch: 'SBY', fiscalYear: 2027 }) })).status === 409, 'anggaran cabang-tahun ganda → 409');
+        const hdr = await call(`/budgets/${nb.body.id}`, { method: 'PATCH', token: sari, branch: 'ALL', body: JSON.stringify({ lines: [{ account: '5-0000', annual: 1000 }] }) });
+        ok(hdr.status === 422 && hdr.body.error.code === 'BUDGET_INVALID', 'akun header tidak dapat dianggarkan', hdr.body);
+        const pt = await call(`/budgets/${nb.body.id}`, { method: 'PATCH', token: sari, branch: 'ALL', body: JSON.stringify({ lines: [{ account: '5-2401', annual: 12_000_005 }] }) });
+        ok(pt.status === 200 && pt.body.lines[0].months[0] === 1_000_000 && pt.body.lines[0].months[11] === 1_000_005 && pt.body.totals.budget === 12_000_005, 'nilai tahunan dibagi rata, sisa pembulatan di Desember', pt.body?.lines?.[0]?.months);
+        await call(`/budgets/${nb.body.id}/submit`, { method: 'POST', token: sari, branch: 'ALL' });
+        ok((await call(`/budgets/${nb.body.id}/approve`, { method: 'POST', token: sari, branch: 'ALL', body: '{}' })).status === 403, 'staf keuangan tidak dapat menyetujui anggaran');
+        const ib = await call('/inbox', { token: andi, branch: 'ALL' });
+        ok(ib.body.items.some((i) => i.kind === 'budget' && i.docNo === 'SBY-2027'), 'anggaran menunggu masuk kotak persetujuan', ib.body?.byKind);
+        const apb = await call(`/budgets/${nb.body.id}/approve`, { method: 'POST', token: andi, branch: 'ALL', body: '{}' });
+        ok(apb.status === 200 && apb.body.status === 'disetujui' && apb.body.approvedByName === 'Andi Firmansyah', 'akuntan senior menyetujui anggaran');
+        const rv = await call(`/budgets/${nb.body.id}/revise`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ reason: 'penyesuaian target' }) });
+        ok(rv.status === 200 && rv.body.status === 'draf' && rv.body.revision === 1, 'revisi mengembalikan anggaran ke draf (revisi 1)', rv.body?.status);
+        const ab = await call('/budgets', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ branch: 'JKT', fiscalYear: 2027, lines: [{ account: '5-2401', annual: 1_200_000 }] }) });
+        await call(`/budgets/${ab.body.id}/submit`, { method: 'POST', token: admin, branch: 'ALL' });
+        const selfAp = await call(`/budgets/${ab.body.id}/approve`, { method: 'POST', token: admin, branch: 'ALL', body: '{}' });
+        ok(selfAp.status === 403 && selfAp.body.error.code === 'SOD_BUDGET', 'admin pun tidak dapat menyetujui anggaran susunannya sendiri', selfAp.body);
+        const recP = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(recP.body.checks.every((k) => k.ok), 'rekonsiliasi tetap cocok setelah alur anggaran & proyek', recP.body.checks.filter((k) => !k.ok));
+    }
     console.log('Kas & bank: transfer, rekonsiliasi, setoran PPN');
     {
         const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;

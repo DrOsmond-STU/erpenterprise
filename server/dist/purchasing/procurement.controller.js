@@ -32,7 +32,7 @@ const line = zod_1.z.object({
 const prBase = {
     branch: opt(branch), requestDate: opt(date), neededDate: opt(date.nullable()), department: opt(zod_1.z.string().trim().min(2, 'Departemen minimal 2 karakter').max(80)),
     requesterName: opt(text(120)), description: opt(zod_1.z.string().trim().min(5, 'Deskripsi minimal 5 karakter').max(300)), priority: opt(zod_1.z.enum(['rendah', 'sedang', 'tinggi'])),
-    notes: opt(text(500)), submit: opt(zod_1.z.boolean()),
+    notes: opt(text(500)), submit: opt(zod_1.z.boolean()), projectId: opt(zod_1.z.string().uuid('Proyek tidak sah').nullable()),
 };
 const prCreate = zod_1.z.object({ ...prBase, department: prBase.department.unwrap(), description: prBase.description.unwrap(), lines: zod_1.z.array(line).min(1, 'Minimal satu baris').max(100) });
 const prPatch = zod_1.z.object({ ...prBase, lines: opt(zod_1.z.array(line).min(1, 'Minimal satu baris').max(100)) });

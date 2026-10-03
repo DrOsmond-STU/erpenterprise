@@ -101,8 +101,8 @@ async function postAutoJournal(c, u, j) {
     let n = 0;
     for (const l of lines) {
         n += 1;
-        await c.query(`INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, memo, counter_branch)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [ins.id, u.companyId, j.branch, j.date, n, l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.memo ?? null, l.counterBranch ?? null]);
+        await c.query(`INSERT INTO journal_lines (journal_id, company_id, branch_code, journal_date, line_no, account_code, debit, credit, bank_account_code, party, memo, counter_branch, project_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [ins.id, u.companyId, j.branch, j.date, n, l.account, l.debit, l.credit, l.bank ?? null, l.party ?? null, l.memo ?? null, l.counterBranch ?? null, l.project ?? null]);
     }
     return { id: ins.id, journalNo: ins.journal_no };
 }
@@ -115,7 +115,7 @@ async function reverseAutoJournals(c, u, source, sourceId, date, reason) {
         const rev = await postAutoJournal(c, u, {
             branch: (0, exports.trimBranch)(j.branch_code), date, source: 'reversal', sourceId: j.id, rule: 'REVERSAL', ref: j.ref ?? j.journal_no,
             description: `Pembalikan ${j.journal_no}: ${reason}`,
-            lines: lines.map((l) => ({ account: l.account_code, debit: l.credit, credit: l.debit, bank: l.bank_account_code, party: l.party, memo: l.memo, counterBranch: l.counter_branch ? (0, exports.trimBranch)(l.counter_branch) : null })),
+            lines: lines.map((l) => ({ account: l.account_code, debit: l.credit, credit: l.debit, bank: l.bank_account_code, party: l.party, memo: l.memo, counterBranch: l.counter_branch ? (0, exports.trimBranch)(l.counter_branch) : null, project: l.project_id })),
         });
         await c.query(`UPDATE journals SET reverses_journal_id = $2 WHERE id = $1`, [rev.id, j.id]);
         await c.query(`UPDATE journals SET status = 'reversed', reversed_by_journal_id = $2 WHERE id = $1`, [j.id, rev.id]);

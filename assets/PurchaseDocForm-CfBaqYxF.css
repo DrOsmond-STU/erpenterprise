@@ -1,0 +1,1 @@
+.doc-grid[data-v-f30d7616]{grid-template-columns:repeat(4,minmax(0,1fr))}.span-3[data-v-f30d7616]{grid-column:span 3}.span-2[data-v-f30d7616]{grid-column:span 2}@media(max-width:760px){.doc-grid[data-v-f30d7616]{grid-template-columns:minmax(0,1fr)}.span-3[data-v-f30d7616],.span-2[data-v-f30d7616]{grid-column:auto}}

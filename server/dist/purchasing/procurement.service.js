@@ -24,6 +24,8 @@ const errors_js_1 = require("../common/errors.js");
 const db_service_js_1 = require("../db/db.service.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const sales_shared_js_1 = require("../sales/sales.shared.js");
+const budget_shared_js_1 = require("../planning/budget.shared.js");
+const project_shared_js_1 = require("../planning/project.shared.js");
 const lines_js_1 = require("./lines.js");
 const orders_service_js_1 = require("./orders.service.js");
 const PR_LABEL = { draf: 'Draf', menunggu: 'Menunggu persetujuan', disetujui: 'Disetujui', ditolak: 'Ditolak', selesai: 'Selesai — sudah menjadi PO', batal: 'Batal' };
@@ -34,9 +36,9 @@ const mapPr = (r) => ({
     submittedAt: r.submitted_at, slaDueAt: r.sla_due_at, slaOverdue: r.status === 'menunggu' && r.sla_due_at && new Date(r.sla_due_at).getTime() < Date.now(),
     createdBy: r.created_by, createdByName: r.created_by_name, decidedByName: r.decided_by_name, decidedAt: r.decided_at, decisionNote: r.decision_note,
     rfqId: r.rfq_id, rfqNo: r.rfq_no ?? null, rfqStatus: r.rfq_status ?? null, orderId: r.order_id, orderNo: r.order_no ?? null, orderStatus: r.order_status ?? null,
-    lineCount: r.line_count ?? undefined, createdAt: r.created_at,
+    lineCount: r.line_count ?? undefined, createdAt: r.created_at, projectId: r.project_id ?? null, projectCode: r.project_code ?? null,
 });
-const PR_SELECT = `SELECT r.*, q.doc_no AS rfq_no, q.status AS rfq_status, o.doc_no AS order_no, o.status AS order_status,
+const PR_SELECT = `SELECT r.*, q.doc_no AS rfq_no, q.status AS rfq_status, o.doc_no AS order_no, o.status AS order_status, (SELECT pj.code FROM projects pj WHERE pj.id = r.project_id) AS project_code,
   (SELECT count(*)::int FROM purchase_requisition_lines l WHERE l.requisition_id = r.id) AS line_count
   FROM purchase_requisitions r LEFT JOIN rfqs q ON q.id = r.rfq_id LEFT JOIN purchase_orders o ON o.id = r.order_id`;
 const mapPrLine = (l) => ({
@@ -106,7 +108,22 @@ let ProcurementService = class ProcurementService {
     async loadRequisition(c, companyId, id) {
         const r = await this.prRow(c, companyId, id);
         const rfqs = (await c.query(`${RFQ_SELECT} WHERE q.company_id = $1 AND q.requisition_id = $2 ORDER BY q.created_at`, [companyId, id])).rows.map(mapRfq);
-        return { ...mapPr(r), lines: await this.prLines(c, id), rfqs, timeline: await (0, sales_shared_js_1.auditTrail)(c, companyId, 'purchase_requisition', r.doc_no) };
+        const lines = await this.prLines(c, id);
+        /* Cek anggaran baris jasa: sisa anggaran disetujui akun itu (cabang & tahun PR); PR yang belum disetujui belum termasuk komitmen. */
+        const request = new Map();
+        for (const l of lines)
+            if (l.kind === 'jasa' && l.expenseAccount)
+                request.set(l.expenseAccount, (request.get(l.expenseAccount) ?? 0) + l.estTotal);
+        const avail = request.size ? await (0, budget_shared_js_1.budgetAvailability)(c, companyId, (0, sales_shared_js_1.trimBranch)(r.branch_code), Number(String(r.request_date).slice(0, 4)), [...request.keys()]) : [];
+        const pendingOwn = ['draf', 'menunggu', 'ditolak'].includes(r.status);
+        const budgetCheck = [...request].map(([account, amount]) => {
+            const a = avail.find((x) => x.account === account);
+            if (!a)
+                return { account, request: amount, budgeted: false };
+            const after = a.available - (pendingOwn ? amount : 0);
+            return { account, request: amount, budgeted: true, budget: a.budget, actual: a.actual, commitment: a.commitment, available: a.available, afterRequest: after, over: after < 0 };
+        });
+        return { ...mapPr(r), lines, rfqs, budgetCheck, timeline: await (0, sales_shared_js_1.auditTrail)(c, companyId, 'purchase_requisition', r.doc_no) };
     }
     async getRequisition(u, s, id, requestId) {
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), (c) => this.loadRequisition(c, u.companyId, id));
@@ -139,9 +156,10 @@ let ProcurementService = class ProcurementService {
             const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
             if (!br || br.status !== 'aktif')
                 throw (0, sales_shared_js_1.invalid)('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
+            const projectId = await (0, project_shared_js_1.assertProject)(c, u.companyId, b.projectId, branch);
             const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'PR', Number(date.slice(0, 4)));
-            const r = (await c.query(`INSERT INTO purchase_requisitions (company_id, branch_code, doc_no, request_date, needed_date, department, requester_name, description, priority, notes, created_by, created_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, [u.companyId, branch, docNo, date, b.neededDate ?? null, b.department.trim(), (b.requesterName?.trim() || u.name), b.description.trim(), b.priority ?? 'sedang', b.notes ?? null, u.id, u.name])).rows[0];
+            const r = (await c.query(`INSERT INTO purchase_requisitions (company_id, branch_code, doc_no, request_date, needed_date, department, requester_name, description, priority, notes, created_by, created_by_name, project_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, [u.companyId, branch, docNo, date, b.neededDate ?? null, b.department.trim(), (b.requesterName?.trim() || u.name), b.description.trim(), b.priority ?? 'sedang', b.notes ?? null, u.id, u.name, projectId])).rows[0];
             const est = await this.writeLines(c, u.companyId, r.id, branch, b.lines ?? []);
             await this.rec(c, u, branch, 'purchase_requisition.created', 'purchase_requisition', docNo, { estimated: est, priority: b.priority ?? 'sedang' }, requestId);
             if (b.submit)
@@ -161,6 +179,8 @@ let ProcurementService = class ProcurementService {
                 throw (0, sales_shared_js_1.invalid)('NEEDED_DATE', 'Tanggal dibutuhkan tidak boleh sebelum tanggal permintaan.');
             await c.query(`UPDATE purchase_requisitions SET request_date = $2, needed_date = $3, department = coalesce($4, department), requester_name = coalesce($5, requester_name),
             description = coalesce($6, description), priority = coalesce($7, priority), notes = coalesce($8, notes), status = 'draf', submitted_at = NULL, sla_due_at = NULL, updated_at = now() WHERE id = $1`, [id, date, b.neededDate === undefined ? r.needed_date : b.neededDate, b.department?.trim() || null, b.requesterName?.trim() || null, b.description?.trim() || null, b.priority ?? null, b.notes ?? null]);
+            if (b.projectId !== undefined)
+                await c.query('UPDATE purchase_requisitions SET project_id = $2 WHERE id = $1', [id, await (0, project_shared_js_1.assertProject)(c, u.companyId, b.projectId, (0, sales_shared_js_1.trimBranch)(r.branch_code))]);
             const est = b.lines ? await this.writeLines(c, u.companyId, id, (0, sales_shared_js_1.trimBranch)(r.branch_code), b.lines) : Number(r.estimated_total);
             await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(r.branch_code), 'purchase_requisition.updated', 'purchase_requisition', r.doc_no, { estimated: est }, requestId);
             if (b.submit)
@@ -229,7 +249,7 @@ let ProcurementService = class ProcurementService {
             const branch = (0, sales_shared_js_1.trimBranch)(r.branch_code);
             (0, sales_shared_js_1.assertBranch)(u, s, branch);
             const orderId = await this.orders.createIn(c, u, branch, {
-                supplierId: b.supplierId, orderDate: b.orderDate, submit: b.submit ?? true, requisitionId: id,
+                supplierId: b.supplierId, orderDate: b.orderDate, submit: b.submit ?? true, requisitionId: id, projectId: r.project_id,
                 notes: `Dari ${r.doc_no} — ${r.description} (${r.department}, ${r.requester_name})`.slice(0, 500),
                 lines: lines.map((l) => ({ productId: l.productId, description: l.description, kind: l.kind, unit: l.unit, qty: l.qty, price: override.get(l.lineNo)?.price ?? l.estPrice, discPct: override.get(l.lineNo)?.discPct ?? 0, expenseAccount: l.expenseAccount })),
             }, requestId);
@@ -369,7 +389,7 @@ let ProcurementService = class ProcurementService {
             const price = new Map(chosen.prices.map((p) => [p.lineNo, p]));
             const date = b.orderDate ?? (0, sales_shared_js_1.todayWib)();
             const orderId = await this.orders.createIn(c, u, branch, {
-                supplierId: chosen.supplierId, orderDate: date, submit: b.submit ?? true, requisitionId: pr.id, rfqId: id,
+                supplierId: chosen.supplierId, orderDate: date, submit: b.submit ?? true, requisitionId: pr.id, rfqId: id, projectId: pr.project_id,
                 expectedDate: chosen.leadDays !== null && chosen.leadDays !== undefined ? (0, domain_1.addDays)(date, chosen.leadDays) : undefined,
                 notes: `Dari ${q.doc_no} / ${pr.doc_no} — penawaran ${chosen.quoteRef ?? chosen.supplierName}${b.reason ? `; alasan: ${b.reason}` : ''}`.slice(0, 500),
                 lines: lines.map((l) => ({ productId: l.productId, description: l.description, kind: l.kind, unit: l.unit, qty: l.qty, price: price.get(l.lineNo).price, discPct: price.get(l.lineNo).discPct ?? 0, expenseAccount: l.expenseAccount })),

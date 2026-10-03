@@ -23,6 +23,7 @@ const errors_js_1 = require("../common/errors.js");
 const db_service_js_1 = require("../db/db.service.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const sales_shared_js_1 = require("../sales/sales.shared.js");
+const project_shared_js_1 = require("../planning/project.shared.js");
 const lines_js_1 = require("./lines.js");
 const suppliers_service_js_1 = require("./suppliers.service.js");
 const STATUS_LABEL = { draf: 'Draf', menunggu: 'Menunggu persetujuan', disetujui: 'Disetujui — menunggu barang', ditolak: 'Ditolak', 'diterima-sebagian': 'Diterima sebagian', selesai: 'Selesai', batal: 'Batal' };
@@ -31,12 +32,14 @@ const mapPo = (o) => ({
     date: o.order_date, expectedDate: o.expected_date, status: o.status, statusLabel: STATUS_LABEL[o.status] ?? o.status,
     subtotal: o.subtotal, discount: o.discount, net: o.net_amount, ppn: o.ppn_amount, total: o.total, notes: o.notes, approvalReasons: o.approval_reasons ?? [],
     createdBy: o.created_by, createdByName: o.created_by_name, submittedAt: o.submitted_at, decidedByName: o.decided_by_name, decidedAt: o.decided_at, decisionNote: o.decision_note,
+    projectId: o.project_id ?? null, projectCode: o.project_code ?? null, projectName: o.project_name ?? null,
     requisitionId: o.requisition_id ?? null, requisitionNo: o.requisition_no ?? null, rfqId: o.rfq_id ?? null, rfqNo: o.rfq_no ?? null,
     createdAt: o.created_at, lineCount: o.line_count ?? undefined, receivedPct: o.received_pct === null || o.received_pct === undefined ? undefined : Number(o.received_pct),
 });
 exports.mapPo = mapPo;
 const SELECT = `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code,
   (SELECT pr.doc_no FROM purchase_requisitions pr WHERE pr.id = o.requisition_id) AS requisition_no, (SELECT q.doc_no FROM rfqs q WHERE q.id = o.rfq_id) AS rfq_no,
+  (SELECT pj.code FROM projects pj WHERE pj.id = o.project_id) AS project_code, (SELECT pj.name FROM projects pj WHERE pj.id = o.project_id) AS project_name,
   (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = o.id) AS line_count,
   (SELECT CASE WHEN sum(l.qty) FILTER (WHERE l.kind = 'barang') > 0 THEN round(100 * sum(l.qty_received) FILTER (WHERE l.kind = 'barang') / sum(l.qty) FILTER (WHERE l.kind = 'barang')) END
      FROM purchase_order_lines l WHERE l.order_id = o.id) AS received_pct
@@ -101,11 +104,12 @@ let PurchaseOrdersService = class PurchaseOrdersService {
         if (!br || br.status !== 'aktif')
             throw (0, sales_shared_js_1.invalid)('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
         const sup = await this.supplier(c, u.companyId, b.supplierId);
+        const projectId = await (0, project_shared_js_1.assertProject)(c, u.companyId, b.projectId, branch);
         const { lines, totals } = await (0, lines_js_1.resolvePoLines)(c, u.companyId, branch, b.lines ?? []);
         const date = b.orderDate ?? (0, sales_shared_js_1.todayWib)();
         const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'PO', Number(date.slice(0, 4)));
-        const o = (await c.query(`INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, requisition_id, rfq_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`, [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? (0, domain_1.addDays)(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.requisitionId ?? null, b.rfqId ?? null])).rows[0];
+        const o = (await c.query(`INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, requisition_id, rfq_id, project_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? (0, domain_1.addDays)(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.requisitionId ?? null, b.rfqId ?? null, projectId])).rows[0];
         await (0, lines_js_1.insertPoLines)(c, o.id, u.companyId, branch, lines);
         await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'purchase_order.created', entityType: 'purchase_order', entityId: docNo, after: { supplier: sup.name, total: totals.total }, requestId });
         if (b.submit)
@@ -119,6 +123,8 @@ let PurchaseOrdersService = class PurchaseOrdersService {
                 throw (0, errors_js_1.conflict)('PO_LOCKED', `PO ${o.doc_no} berstatus ${STATUS_LABEL[o.status]}; hanya draf atau PO ditolak yang dapat diubah.`);
             const sup = await this.supplier(c, u.companyId, b.supplierId ?? o.supplier_id);
             const res = b.lines ? await (0, lines_js_1.resolvePoLines)(c, u.companyId, (0, sales_shared_js_1.trimBranch)(o.branch_code), b.lines) : null;
+            if (b.projectId !== undefined)
+                await c.query('UPDATE purchase_orders SET project_id = $2 WHERE id = $1', [id, await (0, project_shared_js_1.assertProject)(c, u.companyId, b.projectId, (0, sales_shared_js_1.trimBranch)(o.branch_code))]);
             await c.query(`UPDATE purchase_orders SET supplier_id = $2, order_date = coalesce($3, order_date), expected_date = coalesce($4, expected_date), notes = coalesce($5, notes),
             subtotal = coalesce($6, subtotal), discount = coalesce($7, discount), net_amount = coalesce($8, net_amount), ppn_amount = coalesce($9, ppn_amount), total = coalesce($10, total),
             status = 'draf', approval_reasons = '[]'::jsonb, updated_at = now() WHERE id = $1`, [id, sup.id, b.orderDate ?? null, b.expectedDate ?? null, b.notes ?? null, res?.totals.subtotal ?? null, res?.totals.discount ?? null, res?.totals.net ?? null, res?.totals.ppn ?? null, res?.totals.total ?? null]);

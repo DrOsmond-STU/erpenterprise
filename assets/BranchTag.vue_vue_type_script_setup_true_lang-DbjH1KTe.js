@@ -1,1 +1,0 @@
-import{d as n,a as o,c as s,j as a,t as c,o as r}from"./index-BpT4y8vr.js";const i=["title"],_=n({__name:"BranchTag",props:{code:{}},setup(t){const e=o();return(l,m)=>(r(),s("span",{class:"branch-tag",title:a(e).nameOf(t.code)},c(a(e).shortOf(t.code)),9,i))}});export{_};

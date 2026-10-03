@@ -14,3 +14,4 @@ export * from './pos.js';
 export * from './payroll.js';
 export * from './fixed-assets.js';
 export * from './procurement.js';
+export * from './planning.js';
