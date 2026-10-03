@@ -29,6 +29,7 @@ const hr_module_js_1 = require("./hr/hr.module.js");
 const workflow_module_js_1 = require("./workflow/workflow.module.js");
 const purchasing_module_js_1 = require("./purchasing/purchasing.module.js");
 const planning_module_js_1 = require("./planning/planning.module.js");
+const crm_module_js_1 = require("./crm/crm.module.js");
 const sales_module_js_1 = require("./sales/sales.module.js");
 let AppModule = class AppModule {
 };
@@ -37,7 +38,7 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             throttler_1.ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule, assistant_module_js_1.AssistantModule, iam_module_js_1.IamModule, sales_module_js_1.SalesModule, purchasing_module_js_1.PurchasingModule, cash_module_js_1.CashModule, inventory_module_js_1.InventoryModule, production_module_js_1.ProductionModule, pos_module_js_1.PosModule, assets_module_js_1.AssetsModule, hr_module_js_1.HrModule, workflow_module_js_1.WorkflowModule, planning_module_js_1.PlanningModule,
+            db_module_js_1.DbModule, audit_module_js_1.AuditModule, auth_module_js_1.AuthModule, ledger_module_js_1.LedgerModule, org_module_js_1.OrgModule, assistant_module_js_1.AssistantModule, iam_module_js_1.IamModule, sales_module_js_1.SalesModule, purchasing_module_js_1.PurchasingModule, cash_module_js_1.CashModule, inventory_module_js_1.InventoryModule, production_module_js_1.ProductionModule, pos_module_js_1.PosModule, assets_module_js_1.AssetsModule, hr_module_js_1.HrModule, workflow_module_js_1.WorkflowModule, planning_module_js_1.PlanningModule, crm_module_js_1.CrmModule,
         ],
         controllers: [admin_controller_js_1.AdminController],
         providers: [

@@ -85,24 +85,27 @@ let OrdersService = class OrdersService {
         if (!/^[A-Z]{3}$/.test(branch))
             throw (0, sales_shared_js_1.invalid)('BRANCH_REQUIRED', 'Pilih cabang pesanan.');
         (0, sales_shared_js_1.assertBranch)(u, s, branch);
-        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
-            const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
-            if (!br || br.status !== 'aktif')
-                throw (0, sales_shared_js_1.invalid)('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
-            const cust = await this.customer(c, u.companyId, b.customerId);
-            const { lines, totals } = await (0, lines_js_1.resolveLines)(c, u.companyId, b.lines ?? []);
-            const date = b.orderDate ?? (0, sales_shared_js_1.todayWib)();
-            const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'SO', Number(date.slice(0, 4)));
-            const o = (await c.query(`INSERT INTO sales_orders (company_id, branch_code, doc_no, customer_id, order_date, delivery_date, channel, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`, [u.companyId, branch, docNo, cust.id, date, b.deliveryDate ?? (0, domain_1.addDays)(date, 14), b.channel ?? cust.segment, b.notes ?? null,
-                totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name])).rows[0];
-            await (0, lines_js_1.insertLines)(c, 'sales_order_lines', 'order_id', o.id, u.companyId, branch, lines);
-            await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'sales_order.created', entityType: 'sales_order', entityId: docNo, after: { customer: cust.name, total: totals.total, lines: lines.length }, requestId });
-            if (b.submit)
-                await this.doSubmit(c, u, o.id, requestId);
-            return this.load(c, u.companyId, o.id);
-        });
+        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => this.load(c, u.companyId, await this.createIn(c, u, branch, b, requestId)));
     }
+    /** Buat pesanan di transaksi berjalan (dipakai juga konversi penawaran). Mengembalikan id pesanan. */
+    async createIn(c, u, branch, b, requestId) {
+        const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
+        if (!br || br.status !== 'aktif')
+            throw (0, sales_shared_js_1.invalid)('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
+        const cust = await this.customer(c, u.companyId, b.customerId);
+        const { lines, totals } = await (0, lines_js_1.resolveLines)(c, u.companyId, b.lines ?? []);
+        const date = b.orderDate ?? (0, sales_shared_js_1.todayWib)();
+        const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'SO', Number(date.slice(0, 4)));
+        const o = (await c.query(`INSERT INTO sales_orders (company_id, branch_code, doc_no, customer_id, order_date, delivery_date, channel, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, quotation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`, [u.companyId, branch, docNo, cust.id, date, b.deliveryDate ?? (0, domain_1.addDays)(date, 14), b.channel ?? cust.segment, b.notes ?? null,
+            totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.quotationId ?? null])).rows[0];
+        await (0, lines_js_1.insertLines)(c, 'sales_order_lines', 'order_id', o.id, u.companyId, branch, lines);
+        await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'sales_order.created', entityType: 'sales_order', entityId: docNo, after: { customer: cust.name, total: totals.total, lines: lines.length }, requestId });
+        if (b.submit)
+            await this.doSubmit(c, u, o.id, requestId);
+        return o.id;
+    }
+    loadIn(c, companyId, id) { return this.load(c, companyId, id); }
     async update(u, s, id, b, requestId) {
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
             const o = await this.row(c, u.companyId, id, true);
@@ -174,6 +177,12 @@ let OrdersService = class OrdersService {
             if (!mayCancel)
                 throw (0, errors_js_1.forbidden)('Hanya pembuat pesanan atau penyetuju yang dapat membatalkan pesanan.');
             await c.query(`UPDATE sales_orders SET status = 'batal', decision_note = $2, updated_at = now() WHERE id = $1`, [id, reason]);
+            /* Pesanan dari penawaran batal: penawaran tetap diterima & dapat dikonversi lagi; peluang kembali negosiasi. */
+            if (o.quotation_id) {
+                const q = (await c.query('UPDATE quotations SET sales_order_id = NULL, updated_at = now() WHERE id = $1 RETURNING opportunity_id', [o.quotation_id])).rows[0];
+                if (q?.opportunity_id)
+                    await c.query(`UPDATE opportunities SET stage = 'negosiasi', probability = 75, closed_at = NULL, updated_at = now() WHERE id = $1 AND stage = 'menang'`, [q.opportunity_id]);
+            }
             await this.audit.record(c, { companyId: u.companyId, branchCode: (0, sales_shared_js_1.trimBranch)(o.branch_code), userId: u.id, sessionId: u.sessionId, action: 'sales_order.cancelled', entityType: 'sales_order', entityId: o.doc_no, after: { reason }, requestId });
             return this.load(c, u.companyId, id);
         });

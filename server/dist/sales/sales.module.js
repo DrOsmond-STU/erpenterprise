@@ -17,6 +17,6 @@ let SalesModule = class SalesModule {
 };
 exports.SalesModule = SalesModule;
 exports.SalesModule = SalesModule = __decorate([
-    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [sales_controller_js_1.SalesController], providers: [customers_service_js_1.CustomersService, orders_service_js_1.OrdersService, invoices_service_js_1.InvoicesService], exports: [invoices_service_js_1.InvoicesService] })
+    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [sales_controller_js_1.SalesController], providers: [customers_service_js_1.CustomersService, orders_service_js_1.OrdersService, invoices_service_js_1.InvoicesService], exports: [invoices_service_js_1.InvoicesService, orders_service_js_1.OrdersService] })
 ], SalesModule);
 //# sourceMappingURL=sales.module.js.map
