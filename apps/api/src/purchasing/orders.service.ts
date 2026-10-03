@@ -26,10 +26,12 @@ export const mapPo = (o: any) => ({
   date: o.order_date, expectedDate: o.expected_date, status: o.status, statusLabel: STATUS_LABEL[o.status] ?? o.status,
   subtotal: o.subtotal, discount: o.discount, net: o.net_amount, ppn: o.ppn_amount, total: o.total, notes: o.notes, approvalReasons: o.approval_reasons ?? [],
   createdBy: o.created_by, createdByName: o.created_by_name, submittedAt: o.submitted_at, decidedByName: o.decided_by_name, decidedAt: o.decided_at, decisionNote: o.decision_note,
+  requisitionId: o.requisition_id ?? null, requisitionNo: o.requisition_no ?? null, rfqId: o.rfq_id ?? null, rfqNo: o.rfq_no ?? null,
   createdAt: o.created_at, lineCount: o.line_count ?? undefined, receivedPct: o.received_pct === null || o.received_pct === undefined ? undefined : Number(o.received_pct),
 });
 
 const SELECT = `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code,
+  (SELECT pr.doc_no FROM purchase_requisitions pr WHERE pr.id = o.requisition_id) AS requisition_no, (SELECT q.doc_no FROM rfqs q WHERE q.id = o.rfq_id) AS rfq_no,
   (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = o.id) AS line_count,
   (SELECT CASE WHEN sum(l.qty) FILTER (WHERE l.kind = 'barang') > 0 THEN round(100 * sum(l.qty_received) FILTER (WHERE l.kind = 'barang') / sum(l.qty) FILTER (WHERE l.kind = 'barang')) END
      FROM purchase_order_lines l WHERE l.order_id = o.id) AS received_pct
@@ -83,22 +85,25 @@ export class PurchaseOrdersService {
     const branch = String(b.branch ?? (s.branch === 'ALL' ? '' : s.branch)).toUpperCase();
     if (!/^[A-Z]{3}$/.test(branch)) throw invalid('BRANCH_REQUIRED', 'Pilih cabang PO.');
     assertBranch(u, s, branch);
-    return this.db.run(contextOf(u, s, requestId), async (c) => {
-      const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
-      if (!br || br.status !== 'aktif') throw invalid('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
-      const sup = await this.supplier(c, u.companyId, b.supplierId);
-      const { lines, totals } = await resolvePoLines(c, u.companyId, branch, b.lines ?? []);
-      const date = b.orderDate ?? todayWib();
-      const docNo = await nextDocNo(c, u.companyId, 'PO', Number(date.slice(0, 4)));
-      const o = (await c.query(
-        `INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-        [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? addDays(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name])).rows[0];
-      await insertPoLines(c, o.id, u.companyId, branch, lines);
-      await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'purchase_order.created', entityType: 'purchase_order', entityId: docNo, after: { supplier: sup.name, total: totals.total }, requestId });
-      if (b.submit) await this.doSubmit(c, u, o.id, requestId);
-      return this.load(c, u.companyId, o.id);
-    });
+    return this.db.run(contextOf(u, s, requestId), async (c) => this.load(c, u.companyId, await this.createIn(c, u, branch, b, requestId)));
+  }
+
+  /** Buat PO di dalam transaksi berjalan (dipakai juga konversi PR / pemenang RFQ). Mengembalikan id PO. */
+  async createIn(c: PoolClient, u: RequestUser, branch: string, b: PoInput & { requisitionId?: string; rfqId?: string }, requestId: string): Promise<string> {
+    const br = (await c.query('SELECT status FROM branches WHERE company_id = $1 AND code = $2', [u.companyId, branch])).rows[0];
+    if (!br || br.status !== 'aktif') throw invalid('BRANCH_INACTIVE', `Cabang ${branch} tidak aktif.`);
+    const sup = await this.supplier(c, u.companyId, b.supplierId);
+    const { lines, totals } = await resolvePoLines(c, u.companyId, branch, b.lines ?? []);
+    const date = b.orderDate ?? todayWib();
+    const docNo = await nextDocNo(c, u.companyId, 'PO', Number(date.slice(0, 4)));
+    const o = (await c.query(
+      `INSERT INTO purchase_orders (company_id, branch_code, doc_no, supplier_id, order_date, expected_date, notes, subtotal, discount, net_amount, ppn_amount, total, created_by, created_by_name, requisition_id, rfq_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+      [u.companyId, branch, docNo, sup.id, date, b.expectedDate ?? addDays(date, sup.lead_days), b.notes ?? null, totals.subtotal, totals.discount, totals.net, totals.ppn, totals.total, u.id, u.name, b.requisitionId ?? null, b.rfqId ?? null])).rows[0];
+    await insertPoLines(c, o.id, u.companyId, branch, lines);
+    await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'purchase_order.created', entityType: 'purchase_order', entityId: docNo, after: { supplier: sup.name, total: totals.total }, requestId });
+    if (b.submit) await this.doSubmit(c, u, o.id, requestId);
+    return o.id;
   }
 
   async update(u: RequestUser, s: ScopeContext, id: string, b: PoInput, requestId: string) {
@@ -163,6 +168,9 @@ export class PurchaseOrdersService {
       if (Number(moved) > 0) throw conflict('PO_HAS_ACTIVITY', `PO ${o.doc_no} sudah memiliki penerimaan atau tagihan.`);
       if (!(o.created_by === u.id || u.permissions.has('purchasing.order.approve'))) throw forbidden('Hanya pembuat PO atau penyetuju yang dapat membatalkan PO.');
       await c.query(`UPDATE purchase_orders SET status = 'batal', decision_note = $2, updated_at = now() WHERE id = $1`, [id, reason]);
+      /* PO hasil PR/RFQ batal: PR kembali disetujui (dapat dikonversi lagi), RFQ terbuka untuk memilih pemenang lain. */
+      await c.query(`UPDATE purchase_requisitions SET status = 'disetujui', order_id = NULL, updated_at = now() WHERE company_id = $1 AND order_id = $2`, [u.companyId, id]);
+      await c.query(`UPDATE rfqs SET status = 'terbuka', order_id = NULL, awarded_quote_id = NULL, award_reason = NULL, awarded_by = NULL, awarded_by_name = NULL, awarded_at = NULL, updated_at = now() WHERE company_id = $1 AND order_id = $2`, [u.companyId, id]);
       await this.audit.record(c, { companyId: u.companyId, branchCode: trimBranch(o.branch_code), userId: u.id, sessionId: u.sessionId, action: 'purchase_order.cancelled', entityType: 'purchase_order', entityId: o.doc_no, after: { reason }, requestId });
       return this.load(c, u.companyId, id);
     });

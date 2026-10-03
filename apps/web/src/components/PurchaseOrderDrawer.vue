@@ -107,6 +107,7 @@ const journalId = ref<string | null>(null);
         <dl class="deflist">
           <dt>Pemasok</dt><dd>{{ o.supplierCode }} · {{ o.supplierName }} <Pill v-if="o.supplier.status !== 'aktif'" :status="o.supplier.status" /></dd>
           <dt>Cabang</dt><dd>{{ ctx.nameOf(o.branch) }}</dd>
+          <dt v-if="o.requisitionNo">Asal</dt><dd v-if="o.requisitionNo" data-po-source><RouterLink class="code" :to="{ path: '/permintaan-pembelian', query: { id: o.requisitionId } }">{{ o.requisitionNo }}</RouterLink><template v-if="o.rfqNo"> · <RouterLink class="code" :to="{ path: '/rfq', query: { id: o.rfqId } }">{{ o.rfqNo }}</RouterLink></template></dd>
           <dt>Tanggal PO</dt><dd class="num">{{ F.date(o.date) }}</dd>
           <dt>Perkiraan tiba</dt><dd class="num">{{ F.date(o.expectedDate) }}</dd>
           <dt>Termin</dt><dd>{{ o.supplier.termsDays ? `Net ${o.supplier.termsDays}` : 'Tunai' }}</dd>

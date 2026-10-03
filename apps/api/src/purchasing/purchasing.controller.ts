@@ -69,7 +69,7 @@ export class PurchasingController {
   constructor(private readonly suppliers: SuppliersService, private readonly orders: PurchaseOrdersService, private readonly invoices: ApInvoicesService, private readonly payments: SupplierPaymentsService) {}
 
   /* --- Pemasok --- */
-  @Get('suppliers') @RequirePermission(READ_ORDERS)
+  @Get('suppliers') @RequirePermission(`${READ_ORDERS}|purchasing.rfq.manage|purchasing.order.create`)
   listSuppliers(@CurrentUser() u: RequestUser, @Scope() s: ScopeContext, @Req() r: AppRequest) { return this.suppliers.list(u, s, r.requestId); }
 
   @Get('suppliers/:id') @RequirePermission(READ_ORDERS)

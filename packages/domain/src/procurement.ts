@@ -1,0 +1,58 @@
+/**
+ * Pengadaan (dok. 07 §6.1–6.2): SLA persetujuan permintaan pembelian menurut
+ * prioritas, nilai penawaran pemasok atas baris PR, dan aturan pemilihan pemenang RFQ.
+ */
+import { salesTotals, type ItemKind } from './sales.js';
+
+export type PrPriority = 'rendah' | 'sedang' | 'tinggi';
+/** Batas keputusan sejak PR diajukan (jam): prioritas tinggi wajib diputus dalam 24 jam. */
+export const PR_SLA_HOURS: Record<PrPriority, number> = { tinggi: 24, sedang: 72, rendah: 120 };
+export const MIN_RFQ_VENDORS = 2;
+
+export function slaDue(submittedAt: Date, priority: PrPriority): Date {
+  return new Date(submittedAt.getTime() + PR_SLA_HOURS[priority] * 3_600_000);
+}
+
+export interface PrLineLite { lineNo: number; qty: number; kind: ItemKind }
+export interface QuotePrice { lineNo: number; price: number; discPct?: number }
+
+/** Total penawaran = baris PR × harga pemasok (aturan PPN sama dengan PO). Semua baris wajib berharga. */
+export function quoteTotals(lines: PrLineLite[], prices: QuotePrice[]) {
+  const byLine = new Map(prices.map((p) => [p.lineNo, p]));
+  const problems: string[] = [];
+  const rows = lines.map((l) => {
+    const p = byLine.get(l.lineNo);
+    if (!p) problems.push(`Baris ${l.lineNo}: harga penawaran belum diisi.`);
+    else if (!Number.isInteger(p.price) || p.price < 0) problems.push(`Baris ${l.lineNo}: harga harus rupiah bulat ≥ 0.`);
+    else if ((p.discPct ?? 0) < 0 || (p.discPct ?? 0) > 100) problems.push(`Baris ${l.lineNo}: diskon 0–100%.`);
+    return { qty: l.qty, price: p?.price ?? 0, discPct: p?.discPct ?? 0, kind: l.kind };
+  });
+  for (const p of prices) if (!lines.some((l) => l.lineNo === p.lineNo)) problems.push(`Baris ${p.lineNo} tidak ada di permintaan pembelian.`);
+  const t = salesTotals(rows);
+  return { problems, net: t.net, ppn: t.ppn, total: t.total, lines: t.lines };
+}
+
+export interface QuoteLite { id: string; status: 'diundang' | 'masuk' | 'menolak'; total: number | null; supplierName?: string }
+
+/** Penawaran terbaik = total terendah di antara penawaran yang masuk (dok. 07 §6.2). */
+export function bestQuote<T extends QuoteLite>(quotes: T[]): T | null {
+  return quotes.filter((q) => q.status === 'masuk' && q.total !== null)
+    .reduce<T | null>((best, q) => (!best || (q.total as number) < (best.total as number) ? q : best), null);
+}
+
+/**
+ * Syarat memilih pemenang: penawaran yang dipilih harus masuk; kurang dari dua
+ * penawaran pembanding (sumber tunggal) atau memilih selain harga terendah wajib beralasan.
+ */
+export function awardProblems(quotes: QuoteLite[], chosenId: string, reason?: string | null): string[] {
+  const chosen = quotes.find((q) => q.id === chosenId);
+  if (!chosen) return ['Penawaran yang dipilih bukan bagian dari RFQ ini.'];
+  if (chosen.status !== 'masuk') return ['Pemenang harus dari penawaran yang sudah masuk.'];
+  const out: string[] = [];
+  const hasReason = (reason ?? '').trim().length >= 10;
+  const received = quotes.filter((q) => q.status === 'masuk').length;
+  if (received < MIN_RFQ_VENDORS && !hasReason) out.push(`Baru ${received} penawaran masuk (minimal ${MIN_RFQ_VENDORS}); pengadaan sumber tunggal wajib diberi alasan (≥ 10 karakter).`);
+  const best = bestQuote(quotes);
+  if (best && best.id !== chosen.id && !hasReason) out.push(`Penawaran terendah adalah ${best.supplierName ?? 'pemasok lain'}; memilih selain harga terbaik wajib diberi alasan (≥ 10 karakter).`);
+  return out;
+}

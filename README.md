@@ -21,6 +21,7 @@ rugi, dan neraca** — per cabang maupun konsolidasi — dan diperiksa oleh hala
 | Modul | Dokumen → jurnal | Pemeriksaan rekonsiliasi |
 | --- | --- | --- |
 | Penjualan & piutang | faktur (pendapatan, PPN keluaran, HPP), penerimaan | piutang |
+| Pengadaan (PR, RFQ) | komitmen pra-akuntansi → PO; jurnal saat barang PO diterima & ditagih | hutang, GRNI, persediaan |
 | Pembelian & hutang | penerimaan barang (persediaan/GRNI), tagihan, pembayaran | hutang, GRNI |
 | Kas & bank | transfer (RK antar cabang), jurnal dari mutasi bank, setoran PPN | kas-bank, RK |
 | Persediaan | opname/penyesuaian, transfer antar gudang & cabang | persediaan, dalam perjalanan |
@@ -292,6 +293,25 @@ dan pembayaran (RLS per cabang; pemasok per perusahaan), akun 2-1102, dan pembay
 historis dari kolom tagihan lama. Seed (juga jalur *upgrade*) mengisi 10 pemasok
 contoh dengan rekening terverifikasi, 11 PO, serta menautkan tagihan lama ke
 pemasok & PO-nya.
+
+### Permintaan pembelian & RFQ (`/permintaan-pembelian`, `/rfq`)
+
+- **Permintaan pembelian (PR)** dari unit kerja: departemen, pemohon, keperluan, prioritas,
+  baris barang berstok atau jasa (akun biaya detail) dengan harga perkiraan. Diajukan →
+  diputus orang selain pemohon (`SOD_REQUISITION`); **SLA** keputusan menurut prioritas
+  (tinggi 24 jam, sedang 3 hari, rendah 5 hari) tampil di daftar & kotak persetujuan.
+- PR disetujui diproses menjadi **PO langsung** (satu pemasok, harga dapat disesuaikan) atau
+  **RFQ** ke minimal dua pemasok. Penawaran dicatat per pemasok (harga per baris, diskon,
+  waktu kirim, masa berlaku) atau dicatat *tidak menawar*; **harga terbaik** = total
+  terendah. Memilih selain harga terbaik, atau penawaran kurang dari dua (sumber
+  tunggal), wajib beralasan dan tercatat di jejak audit.
+- Pemenang → PO dengan harga & waktu kirim penawarannya, lalu alur PO biasa (ambang
+  persetujuan, penerimaan barang → persediaan/GRNI, tagihan → utang usaha). PO yang
+  dibatalkan mengembalikan PR ke *disetujui* dan RFQ ke *terbuka*.
+- Izin: `purchasing.requisition.create` (staf keuangan, gudang, produksi, manajer),
+  `purchasing.requisition.approve` (manajer), `purchasing.rfq.manage` (staf keuangan,
+  manajer). Migrasi `0017_procurement.sql` (RLS per cabang) mengisi tiga PR contoh dan
+  satu RFQ terbuka.
 
 ## Kas & bank, rekonsiliasi, setoran pajak
 

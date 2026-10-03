@@ -13,3 +13,4 @@ export * from './production.js';
 export * from './pos.js';
 export * from './payroll.js';
 export * from './fixed-assets.js';
+export * from './procurement.js';

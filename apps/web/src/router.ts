@@ -44,6 +44,8 @@ export const NAV: NavGroup[] = [
   {
     label: 'Pembelian',
     items: [
+      { path: '/permintaan-pembelian', label: 'Permintaan Pembelian', icon: 'clipboard', permission: 'purchasing.requisition.create|purchasing.requisition.approve|purchasing.rfq.manage|purchasing.order.create' },
+      { path: '/rfq', label: 'RFQ & Vendor', icon: 'users', permission: 'purchasing.requisition.create|purchasing.requisition.approve|purchasing.rfq.manage|purchasing.order.create' },
       { path: '/pesanan-pembelian', label: 'Pesanan Pembelian', icon: 'cart', permission: 'purchasing.invoice.read|purchasing.receipt.create' },
       { path: '/penerimaan-barang', label: 'Penerimaan Barang', icon: 'truck', permission: 'purchasing.invoice.read|purchasing.receipt.create' },
       { path: '/tagihan-pemasok', label: 'Tagihan Pemasok', icon: 'invoice', permission: 'purchasing.invoice.read' },
@@ -123,6 +125,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/piutang', component: () => import('@/pages/ReceivablesPage.vue'), meta: { title: 'Piutang Usaha', permission: 'sales.invoice.read' } },
   { path: '/pelanggan', component: () => import('@/pages/CustomersPage.vue'), meta: { title: 'Pelanggan', permission: 'sales.invoice.read' } },
   { path: '/produk', component: () => import('@/pages/ProductsPage.vue'), meta: { title: 'Produk & Jasa', permission: 'sales.invoice.read' } },
+  { path: '/permintaan-pembelian', component: () => import('@/pages/RequisitionsPage.vue'), meta: { title: 'Permintaan Pembelian', permission: 'purchasing.requisition.create|purchasing.requisition.approve|purchasing.rfq.manage|purchasing.order.create' } },
+  { path: '/rfq', component: () => import('@/pages/RfqPage.vue'), meta: { title: 'RFQ & Vendor', permission: 'purchasing.requisition.create|purchasing.requisition.approve|purchasing.rfq.manage|purchasing.order.create' } },
   { path: '/pesanan-pembelian', component: () => import('@/pages/PurchaseOrdersPage.vue'), meta: { title: 'Pesanan Pembelian', permission: 'purchasing.invoice.read|purchasing.receipt.create' } },
   { path: '/penerimaan-barang', component: () => import('@/pages/GoodsReceiptsPage.vue'), meta: { title: 'Penerimaan Barang', permission: 'purchasing.invoice.read|purchasing.receipt.create' } },
   { path: '/tagihan-pemasok', component: () => import('@/pages/ApInvoicesPage.vue'), meta: { title: 'Tagihan Pemasok', permission: 'purchasing.invoice.read' } },

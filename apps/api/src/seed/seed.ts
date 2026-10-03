@@ -44,6 +44,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
       const purchasing = await seedPurchasing(c, id, DATA);
       const assets = await seedAssets(c, id, DATA);
       const hr = await seedHr(c, id, DATA);
+      await c.query('SELECT seed_procurement_demo($1)', [id]);
       await c.query('COMMIT');
       const upgraded = [
         ...(sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`]),
@@ -173,6 +174,7 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
     await seedPurchasing(c, company, DATA);   // setelah produk (dibuat seed penjualan)
     await seedAssets(c, company, DATA);       // setelah jurnal penyusutan
     await seedHr(c, company, DATA);           // setelah slip gaji
+    await c.query('SELECT seed_procurement_demo($1)', [company]);   // setelah pengguna, produk & pemasok
     await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);
     await c.query('COMMIT');
     return { skipped: false, companyId: company, journals: n };

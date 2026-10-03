@@ -415,6 +415,43 @@ ok(['Pesanan Pembelian', 'Tagihan Pemasok', 'Pembayaran', 'Faktur', 'Pesanan Pen
 await page.goto(base + '/tagihan-pemasok'); await page.waitForSelector('[data-table=ap-invoices] tbody tr[data-row]');
 ok(await page.locator('[data-action=new-ap-invoice]').count() === 1, 'admin dapat menginput tagihan pemasok'); await shot('61-admin-pembelian');
 
+console.log('Pengadaan: permintaan pembelian → RFQ → PO');
+await logout(); await login('fitri@knm.co.id');
+await page.goto(base + '/permintaan-pembelian'); await page.waitForSelector('[data-table=requisitions] tbody tr[data-row]');
+ok(await page.locator('[data-table=requisitions] tbody tr[data-row]').count() >= 1, 'daftar permintaan pembelian dimuat'); await shot('62-pr');
+await page.click('[data-action=new-pr]'); await page.waitForSelector('[data-line] [data-field=product] option >> text=BRG-3390', { state: 'attached' });
+await page.fill('[data-field=department]', 'Gudang'); await page.fill('[data-field=description]', 'Kabel NYY stok pengaman uji web'); await page.selectOption('[data-field=priority]', 'tinggi');
+await page.selectOption('[data-line] [data-field=product]', await page.locator('[data-line] [data-field=product] option', { hasText: 'BRG-3390' }).first().getAttribute('value'));
+await page.fill('[data-line] [data-field=qty]', '50'); await page.fill('[data-line] [data-field=price]', '35000');
+ok((await page.locator('[data-total]').innerText()).replace(/\D/g, '') === '1750000', 'perkiraan nilai PR (sebelum PPN)', await page.locator('[data-total]').innerText());
+await shot('63-pr-baru'); await page.click('[data-action=submit-pr]');
+await page.waitForSelector('.drawer [data-table=pr-lines]'); await page.waitForTimeout(300);
+const prNo = (await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim();
+ok(/^PR-2026-\d{4}$/.test(prNo) && (await page.locator('.drawer [data-decision]').innerText()).includes('SLA'), 'PR diajukan; SLA prioritas tinggi tampil', prNo);
+ok(await page.locator('[data-action=approve-pr]').count() === 0, 'pemohon tidak ditawari tombol setujui');
+await page.keyboard.press('Escape'); await logout(); await login('osmond@knm.co.id');
+await page.goto(base + '/permintaan-pembelian'); await page.waitForSelector(`[data-pr="${prNo}"]`); await page.click(`[data-pr="${prNo}"]`);
+await page.waitForSelector('[data-action=approve-pr]'); await page.click('[data-action=approve-pr]');
+await page.waitForSelector('[data-action=pr-to-rfq]'); ok(true, 'manajer menyetujui PR; tombol RFQ / PO langsung tersedia');
+await page.click('[data-action=pr-to-rfq]'); await page.waitForSelector('[data-field=rfq-supplier]');
+await page.locator('[data-field=rfq-supplier]').nth(0).check(); await page.locator('[data-field=rfq-supplier]').nth(1).check();
+ok((await page.locator('[data-rfq-count]').innerText()).startsWith('2'), 'dua pemasok dipilih untuk RFQ'); await shot('64-rfq-baru');
+await page.click('[data-action=save-rfq]'); await page.waitForURL(/\/rfq\?id=/); await page.waitForSelector('.drawer [data-table=rfq-quotes] tbody tr');
+const qCodes = await page.locator('[data-table=rfq-quotes] tbody tr').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-quote')));
+const quote = async (code, price, lead) => {
+  await page.click(`[data-quote="${code}"] [data-action=record-quote]`); await page.waitForSelector('[data-field=quote-price]');
+  await page.fill('[data-field=quote-price]', String(price)); await page.fill('[data-field=lead]', String(lead)); await page.click('[data-action=save-quote]');
+  await page.waitForFunction((c) => document.querySelector(`[data-quote="${c}"]`)?.textContent?.includes('Penawaran masuk'), code, { timeout: 15000 });
+};
+await quote(qCodes[0], 36000, 3); await quote(qCodes[1], 34000, 7);
+ok((await page.locator(`[data-quote="${qCodes[1]}"]`).innerText()).includes('Terbaik'), 'penawaran terendah ditandai harga terbaik'); await shot('65-rfq-banding');
+await page.click(`[data-quote="${qCodes[1]}"] [data-action=award]`); await page.waitForSelector('[data-action=confirm-award]'); await page.click('[data-action=confirm-award]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow .pill')?.textContent?.includes('Dipesan'), null, { timeout: 15000 });
+ok(await page.locator('.drawer [data-link=po]').count() === 1, 'pemenang dipilih → PO dibuat & tertaut'); await shot('66-rfq-pemenang');
+await page.click('.drawer [data-link=po]'); await page.waitForURL(/\/pesanan-pembelian\?id=/); await page.waitForSelector('.drawer [data-po-source]');
+ok((await page.locator('.drawer [data-po-source]').innerText()).includes(prNo) && (await page.locator('.drawer [data-table=po-lines]').innerText()).includes('34.000'), 'PO menampilkan asal PR/RFQ dan harga pemenang'); await shot('67-po-dari-rfq');
+await page.keyboard.press('Escape');
+
 console.log('Kas & bank: transfer, rekonsiliasi, setoran pajak');
 const API = 'http://localhost:3000/api/v1';
 const apiToken = async (email) => (await (await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.77.${Date.now() % 200}.${(ipSeq += 1) % 250 + 1}` }, body: JSON.stringify({ email, password: PW }) })).json()).access_token;
