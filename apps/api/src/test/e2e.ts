@@ -999,6 +999,66 @@ async function main() {
     ok(pl.status === 200 && bsP.body.totalAssets === bsP.body.totalLiabEquity, 'neraca seimbang setelah produksi', [bsP.body.totalAssets, bsP.body.totalLiabEquity]);
   }
 
+  console.log('POS / kasir: shift, transaksi, tutup & posting');
+  {
+    const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token as string;
+    const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+    const kas = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName === 'Kas');
+    const bank = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas' && b.currency === 'IDR');
+    const balOf = async (code: string) => (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL', period: '2026-09' })).body.accounts.find((b: any) => b.code === code).balance;
+    const stockOf = async (sku: string) => (await call('/inventory/stock', { token: andi, branch: 'ALL' })).body.items.find((i: any) => i.sku === sku && i.warehouse === 'Cikarang');
+    ok((await call('/pos/shifts', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin POS → 403');
+    const wrongCash = await call('/pos/shifts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ warehouse: 'Cikarang', cashAccount: 'BNK-001', openingCash: 0 }) });
+    ok(wrongCash.status === 422 && wrongCash.body.error.code === 'BANK_BRANCH', 'rekening kas harus milik cabang toko', wrongCash.body);
+    const sh = await call('/pos/shifts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ warehouse: 'Cikarang', cashAccount: kas.code, settlementAccount: bank.code, openingCash: 500_000, date: '2026-09-29' }) });
+    ok(sh.status === 201 && sh.body.status === 'buka' && /^SHF-2026-\d{4}$/.test(sh.body.docNo), 'kasir membuka shift toko Cikarang', sh.body);
+    const id = sh.body.id;
+    const again = await call('/pos/shifts', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ warehouse: 'Cikarang', cashAccount: kas.code, openingCash: 0 }) });
+    ok(again.status === 409 && again.body.error.code === 'SHIFT_ALREADY_OPEN', 'satu shift terbuka per kasir', again.body);
+    const cat = await call('/pos/catalog?warehouse=Cikarang', { token: admin, branch: 'ALL' });
+    const brk = cat.body.find((p: any) => p.sku === 'BRG-1108'), baut = cat.body.find((p: any) => p.sku === 'BRG-4501');
+    ok(cat.status === 200 && brk.price > 0 && brk.available > 3, 'katalog toko: harga & stok tersedia', cat.body?.slice?.(0, 3));
+    const s0 = await stockOf('BRG-1108');
+    const t1 = await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'tunai', tendered: 2_000_000, lines: [{ sku: 'BRG-1108', qty: 2 }, { sku: 'BRG-4501', qty: 10 }] }) });
+    const net1 = 2 * brk.price + 10 * baut.price;
+    ok(t1.status === 201 && t1.body.net === net1 && t1.body.ppn === Math.round(net1 * 0.11) && t1.body.change === 2_000_000 - t1.body.total && /^TRX-2026-\d{5}$/.test(t1.body.trxNo), 'transaksi tunai: DPP + PPN 11%, kembalian', t1.body);
+    const t2 = await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'qris', reference: 'QR-778812', lines: [{ sku: 'BRG-1108', qty: 1 }] }) });
+    ok(t2.status === 201 && t2.body.method === 'qris' && t2.body.change === null, 'transaksi QRIS');
+    const avail = (await call('/pos/catalog?warehouse=Cikarang', { token: admin, branch: 'ALL' })).body.find((p: any) => p.sku === 'BRG-1108').available;
+    ok(avail === brk.available - 3, 'stok terjual dicadangkan sampai shift diposting', [brk.available, avail]);
+    ok((await stockOf('BRG-1108')).onHand === s0.onHand, 'kartu stok belum berubah sebelum posting');
+    const over = await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'debit', lines: [{ sku: 'BRG-1108', qty: avail + 1 }] }) });
+    ok(over.status === 422 && over.body.error.code === 'STOCK_INSUFFICIENT', 'penjualan melebihi stok toko ditolak', over.body);
+    const lowCash = await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'tunai', tendered: 1000, lines: [{ sku: 'BRG-1108', qty: 1 }] }) });
+    ok(lowCash.status === 422 && lowCash.body.error.code === 'POS_TENDERED', 'uang diterima kurang dari total ditolak', lowCash.body);
+    ok((await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ method: 'tunai', lines: [{ sku: 'BRG-1108', qty: 1 }] }) })).status === 403, 'hanya kasir pemilik shift yang mencatat transaksi');
+    const t3 = await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'tunai', lines: [{ sku: 'BRG-4501', qty: 4 }] }) });
+    ok((await call(`/pos/transactions/${t3.body.id}/void`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ reason: 'salah input' }) })).status === 403, 'staf tanpa izin supervisor tidak dapat membatalkan transaksi');
+    const vd = await call(`/pos/transactions/${t3.body.id}/void`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ reason: 'pelanggan batal beli' }) });
+    ok(vd.status === 200 && vd.body.summary.voids === 1 && vd.body.summary.count === 2, 'supervisor membatalkan transaksi (tidak dihitung)', vd.body?.summary);
+    const expected = 500_000 + t1.body.total;
+    ok(vd.body.summary.expectedCash === expected && vd.body.summary.nonCash === t2.body.total, 'kas seharusnya = kas awal + penjualan tunai', vd.body.summary);
+    const cl = await call(`/pos/shifts/${id}/close`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ countedCash: expected - 1_000, note: 'kurang seribu' }) });
+    ok(cl.status === 200 && cl.body.status === 'ditutup' && cl.body.cashDiff === -1_000, 'kasir menutup shift dengan hitung kas (selisih −1.000)', cl.body);
+    ok((await call(`/pos/shifts/${id}/transactions`, { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ method: 'tunai', lines: [{ sku: 'BRG-1108', qty: 1 }] }) })).status === 409, 'shift ditutup tidak menerima transaksi');
+    const selfP = await call(`/pos/shifts/${id}/post`, { method: 'POST', token: admin, branch: 'ALL' });
+    ok(selfP.status === 403 && selfP.body.error.code === 'SOD_POS_SHIFT', 'kasir (termasuk admin) tidak dapat memposting shift sendiri', selfP.body);
+    const k0 = await balOf(kas.code), b0 = await balOf(bank.code);
+    const ps = await call(`/pos/shifts/${id}/post`, { method: 'POST', token: osmond, branch: 'ALL' });
+    ok(ps.status === 200 && ps.body.status === 'diposting' && ps.body.journals.length === 1 && ps.body.journals[0].rule === 'POS_SHIFT' && ps.body.cogs > 0, 'supervisor memposting shift: satu jurnal', ps.body?.error ?? ps.body);
+    const jp = await call(`/ledger/journals/${ps.body.journals[0].id}`, { token: andi, branch: 'ALL' });
+    const L = (a: string) => jp.body.lines.filter((l: any) => l.account === a);
+    const netAll = net1 + brk.price;
+    ok(L('4-1101')[0]?.credit === netAll && L('2-1401')[0]?.credit === t1.body.ppn + t2.body.ppn && L('5-4101')[0]?.debit === 1_000 && L('5-1101')[0]?.debit === ps.body.cogs,
+      'jurnal: Cr penjualan & PPN keluaran, Dr HPP, Dr selisih kas', jp.body?.lines);
+    ok(await balOf(kas.code) === k0 + t1.body.total - 1_000 && await balOf(bank.code) === b0 + t2.body.total, 'saldo kas toko & rekening penampung bertambah', [k0, b0]);
+    ok((await stockOf('BRG-1108')).onHand === s0.onHand - 3, 'stok toko berkurang saat posting');
+    const recP = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+    ok(recP.body.checks.every((c: any) => c.ok), 'rekonsiliasi (persediaan, kas-bank, neraca) tetap cocok setelah POS', recP.body.checks.filter((c: any) => !c.ok));
+    ok((await call(`/pos/shifts/${id}/post`, { method: 'POST', token: osmond, branch: 'ALL' })).status === 409, 'shift tidak dapat diposting dua kali');
+    ok((await call('/pos/shifts', { token: taufik, branch: 'ALL' })).body.every((x: any) => x.branch === 'MDN'), 'shift toko lain tidak terlihat dari Medan (RLS)');
+  }
+
   console.log('Asisten AI');
   const assistant = app.get(AssistantService);
   assistant.useClientForTest(null);

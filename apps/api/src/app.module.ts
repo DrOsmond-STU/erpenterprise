@@ -14,13 +14,14 @@ import { OrgModule } from './org/org.module.js';
 import { CashModule } from './cash/cash.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { ProductionModule } from './production/production.module.js';
+import { PosModule } from './pos/pos.module.js';
 import { PurchasingModule } from './purchasing/purchasing.module.js';
 import { SalesModule } from './sales/sales.module.js';
 
 @Module({
   imports: [
     ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60_000, limit: 600 }] }),
-    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule, AssistantModule, IamModule, SalesModule, PurchasingModule, CashModule, InventoryModule, ProductionModule,
+    DbModule, AuditModule, AuthModule, LedgerModule, OrgModule, AssistantModule, IamModule, SalesModule, PurchasingModule, CashModule, InventoryModule, ProductionModule, PosModule,
   ],
   controllers: [AdminController],
   providers: [

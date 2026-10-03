@@ -362,6 +362,28 @@ Peran baru **Staf Produksi** (`production.read`, `production.manage`); Manajer
 Operasional mendapat `production.complete`. Migrasi `0011_production.sql` menambah
 `boms`, `bom_lines`, `work_orders`, `wo_consumptions`, `wo_outputs`.
 
+## POS / kasir
+
+Menu **POS → Kasir**: kasir (`pos.operate`, peran baru **Kasir**) membuka shift untuk
+satu toko (= gudang sumber stok) dengan rekening **kas laci** dan, opsional, rekening
+**penampung non-tunai** (QRIS, kartu debit/kredit, transfer) milik cabang toko itu.
+
+- **Transaksi**: harga produk = DPP, PPN 11% per transaksi (seperti faktur); tunai dengan
+  uang diterima & kembalian. Qty terjual **dicadangkan** dari stok toko sampai shift
+  diposting sehingga tidak bisa oversell. Supervisor (`pos.shift.post`) dapat **void**
+  transaksi selama shift buka (dengan alasan).
+- **Tutup shift**: kasir menghitung kas; kas seharusnya = kas awal + penjualan tunai,
+  selisihnya dicatat.
+- **Posting** oleh orang lain dari kasir (juga untuk admin): stok toko berkurang dengan
+  HPP rata-rata dan satu jurnal `POS_SHIFT`: Dr kas laci (penjualan tunai ± selisih),
+  Dr rekening penampung (non-tunai), Cr penjualan barang, Cr PPN keluaran, Dr HPP / Cr
+  persediaan, dan selisih kas ke pemetaan *Selisih kas kasir* (bawaan 5-4101). Kas awal
+  sudah bagian dari saldo rekening kas sehingga tidak dijurnal.
+
+Migrasi `0012_pos.sql` menambah `pos_shifts`, `pos_transactions`,
+`pos_transaction_lines`, izin `pos.read`/`pos.operate`/`pos.shift.post`, dan peran Kasir;
+Manajer Operasional dan Akuntan Senior dapat memposting shift.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

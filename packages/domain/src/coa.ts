@@ -156,6 +156,7 @@ export const ACCOUNT_LINK_DEFS: AccountLinkDef[] = [
   { key: 'invWip', group: 'Persediaan', label: 'Persediaan barang dalam proses', category: 'Aset', default: '1-1502', note: 'Produksi (WIP).' },
   { key: 'invFinished', group: 'Persediaan', label: 'Persediaan barang jadi', category: 'Aset', default: '1-1503', note: 'Kartu stok kategori barang jadi.' },
   { key: 'invTransit', group: 'Persediaan', label: 'Persediaan dalam perjalanan', category: 'Aset', default: '1-1504', note: 'Transfer stok antar cabang yang sudah dikirim tetapi belum diterima.' },
+  { key: 'cashOverShort', group: 'Kas & bank', label: 'Selisih kas kasir', category: 'Beban', default: '5-4101', note: 'Kekurangan (debit) / kelebihan (kredit) hasil hitung kas saat tutup shift POS.' },
   { key: 'invVariance', group: 'Persediaan', label: 'Selisih persediaan', category: 'Beban', default: '5-1901', note: 'Selisih opname, barang rusak/hilang, dan pembulatan harga pokok.' },
   { key: 'ap', group: 'Pembelian', label: 'Utang usaha', category: 'Liabilitas', default: '2-1101', note: 'Tagihan pemasok & pembayarannya.' },
   { key: 'grni', group: 'Pembelian', label: 'Utang barang diterima belum ditagih', category: 'Liabilitas', default: '2-1102', note: 'Dikredit saat penerimaan barang, didebit saat tagihan pemasok diposting (3-way match).' },
@@ -167,7 +168,7 @@ export const ACCOUNT_LINK_DEFS: AccountLinkDef[] = [
   { key: 'currentEarnings', group: 'Tutup buku', label: 'Laba periode berjalan', category: 'Ekuitas', default: '3-2201', note: 'Akun dihitung; tidak menerima jurnal.' },
   { key: 'retainedEarnings', group: 'Tutup buku', label: 'Laba ditahan', category: 'Ekuitas', default: '3-2101', note: 'Tujuan penutupan laba akhir tahun buku.' },
 ];
-export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'invTransit' | 'invVariance' | 'ap' | 'grni' | 'ppnIn' | 'taxPayable' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
+export type AccountLinkKey = 'ar' | 'salesGoods' | 'salesService' | 'ppnOut' | 'cogs' | 'invRaw' | 'invWip' | 'invFinished' | 'invTransit' | 'invVariance' | 'cashOverShort' | 'ap' | 'grni' | 'ppnIn' | 'taxPayable' | 'salaryPayable' | 'rkBranch' | 'rkHeadOffice' | 'currentEarnings' | 'retainedEarnings';
 export type AccountLinks = Record<AccountLinkKey, string>;
 export const DEFAULT_ACCOUNT_LINKS = Object.fromEntries(ACCOUNT_LINK_DEFS.map((d) => [d.key, d.default])) as AccountLinks;
 

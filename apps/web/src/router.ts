@@ -60,6 +60,7 @@ export const NAV: NavGroup[] = [
       { path: '/transfer-stok', label: 'Transfer Stok', icon: 'truck', permission: 'inventory.read' },
     ],
   },
+  { label: 'POS', items: [{ path: '/kasir', label: 'Kasir', icon: 'cart', permission: 'pos.read' }] },
   {
     label: 'Produksi',
     items: [
@@ -112,6 +113,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/stok', component: () => import('@/pages/StockPage.vue'), meta: { title: 'Stok & Kartu Stok', permission: 'inventory.read' } },
   { path: '/penyesuaian-stok', component: () => import('@/pages/StockAdjustmentsPage.vue'), meta: { title: 'Penyesuaian & Opname', permission: 'inventory.read' } },
   { path: '/transfer-stok', component: () => import('@/pages/StockTransfersPage.vue'), meta: { title: 'Transfer Stok', permission: 'inventory.read' } },
+  { path: '/kasir', component: () => import('@/pages/PosPage.vue'), meta: { title: 'Kasir', permission: 'pos.read' } },
   { path: '/perintah-kerja', component: () => import('@/pages/WorkOrdersPage.vue'), meta: { title: 'Perintah Kerja', permission: 'production.read' } },
   { path: '/bom', component: () => import('@/pages/BomsPage.vue'), meta: { title: 'Bill of Materials', permission: 'production.read' } },
   { path: '/jurnal', component: () => import('@/pages/JournalsPage.vue'), meta: { title: 'Jurnal Umum', permission: 'ledger.journal.read' } },
