@@ -13,6 +13,8 @@ const schema = z.object({
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(43200),
   SEED_PASSWORD: z.string().min(12).optional(),
+  /* Kunci enkripsi kolom rahasia (K-41). Bila kosong diturunkan dari JWT_SECRET. */
+  DATA_ENCRYPTION_KEY: z.preprocess(blank, z.string().min(32).optional()),
   /* Asisten AI (opsional). Tanpa kunci, fitur asisten nonaktif dan endpoint-nya menjawab 503. */
   ANTHROPIC_API_KEY: z.preprocess(blank, z.string().min(20).optional()),
   ASSISTANT_MODEL: z.preprocess(blank, z.string().regex(/^claude-[a-z0-9-]+$/).default('claude-opus-5')),

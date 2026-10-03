@@ -1059,6 +1059,129 @@ async function main() {
     ok((await call('/pos/shifts', { token: taufik, branch: 'ALL' })).body.every((x: any) => x.branch === 'MDN'), 'shift toko lain tidak terlihat dari Medan (RLS)');
   }
 
+  console.log('Aset tetap: perolehan, penyusutan, pelepasan, pemeliharaan');
+  {
+    const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+    const ckrBank = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas' && b.currency === 'IDR');
+    const ckrKas = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName === 'Kas');
+    const recAll = async () => { const r = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' }); return r.body.checks; };
+    ok((await call('/assets', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin aset → 403');
+    const list = await call('/assets', { token: andi, branch: 'ALL' });
+    ok(list.status === 200 && list.body.assets.length >= 8 && list.body.glOptions.some((g: any) => g.code === '1-2301'), 'register aset & pilihan akun aset tetap', list.body?.assets?.length);
+    const active = list.body.assets.filter((a: any) => a.status === 'aktif');
+    const pv = await call('/assets/depreciation/preview?period=2026-09', { token: andi, branch: 'ALL' });
+    ok(pv.status === 200 && pv.body.total === active.reduce((t: number, a: any) => t + Math.min(a.monthly, a.bookValue - a.salvage), 0) && pv.body.branches.every((b: any) => !b.lagging.length), 'pratinjau penyusutan September dari tarif bulanan', pv.body?.branches);
+    ok([400, 422].includes((await call('/assets/depreciation/preview?period=2026-13', { token: andi, branch: 'ALL' })).status), 'periode tidak sah ditolak');
+    const lag = await call('/assets/depreciation/run', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ period: '2026-11' }) });
+    ok(lag.status === 409 && lag.body.error.code === 'DEPRECIATION_LAGGING', 'penyusutan melompati bulan ditolak', lag.body);
+    const na = await call('/assets', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ name: 'Forklift listrik Toyota 8FBE15', category: 'Kendaraan operasional', glAccount: '1-2401', branch: 'CKR', location: 'Cikarang — Gudang',
+      acquisitionDate: '2026-09-15', cost: 120_000_000, usefulLifeMonths: 60, bank: ckrBank.code }) });
+    ok(na.status === 201 && /^AST-\d{4}$/.test(na.body.code) && na.body.monthly === 2_000_000 && na.body.bookValue === 120_000_000, 'staf keuangan mencatat perolehan aset (tarif garis lurus)', na.body);
+    const naD = await call(`/assets/${na.body.id}`, { token: andi, branch: 'ALL' });
+    ok(naD.body.journals.length === 1 && naD.body.journals[0].rule === 'ASSET_ACQUISITION', 'perolehan dijurnal: Dr aset tetap / Cr bank');
+    ok((await call('/assets', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ name: 'Salah akun', category: 'X lain', glAccount: '5-3401', branch: 'CKR', acquisitionDate: '2026-09-15', cost: 1_000, usefulLifeMonths: 12, bank: ckrBank.code }) })).body.error?.code === 'ASSET_ACCOUNT', 'akun selain aset tetap ditolak');
+    ok((await call('/assets/depreciation/run', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ period: '2026-09' }) })).status === 403, 'staf tanpa izin penyusutan → 403');
+    const run = await call('/assets/depreciation/run', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ period: '2026-09' }) });
+    const ckrRun = run.body.posted?.find((p: any) => p.branch === 'CKR');
+    ok(run.status === 200 && run.body.posted.length === 4 && ckrRun.total === pv.body.branches.find((b: any) => b.branch === 'CKR').total + 2_000_000, 'akuntan menjalankan penyusutan September: satu jurnal per cabang', run.body?.error ?? run.body?.posted);
+    ok((await call('/assets/depreciation/run', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ period: '2026-09' }) })).body.error?.code === 'DEPRECIATION_DONE', 'penyusutan periode yang sama tidak dapat diulang');
+    const runs = await call('/assets/depreciation/runs', { token: andi, branch: 'ALL' });
+    const jr = await call(`/ledger/journals/${runs.body.find((r: any) => r.branch === 'CKR' && r.period === '2026-09').journalId}`, { token: andi, branch: 'ALL' });
+    ok(jr.body.lines.some((l: any) => l.account === '5-3201' && l.debit === ckrRun.total) && jr.body.lines.some((l: any) => l.account === '1-2901' && l.credit === ckrRun.total), 'jurnal: Dr beban penyusutan / Cr akumulasi penyusutan', jr.body?.lines);
+    const checks1 = await recAll();
+    ok(checks1.every((c: any) => c.ok), 'rekonsiliasi (aset tetap & nilai buku) cocok setelah penyusutan', checks1.filter((c: any) => !c.ok));
+    const fork = (await call('/assets', { token: andi, branch: 'ALL' })).body.assets.find((a: any) => a.code === 'AST-0031');
+    ok(fork.bookValue === 376_000_000 && fork.depreciatedThrough === '2026-09-30', 'nilai buku aset berkurang', fork);
+    const disp = await call(`/assets/${fork.id}/dispose`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ date: '2026-09-30', proceeds: 300_000_000, bank: ckrBank.code, note: 'dijual ke pihak ketiga' }) });
+    ok(disp.status === 200 && disp.body.status === 'dihapuskan' && disp.body.gain === -76_000_000, 'pelepasan aset: rugi = hasil − nilai buku', disp.body);
+    const dj = (await call(`/assets/${fork.id}`, { token: andi, branch: 'ALL' })).body.journals.find((j: any) => j.rule === 'ASSET_DISPOSAL');
+    const djl = (await call(`/ledger/journals/${dj.id}`, { token: andi, branch: 'ALL' })).body.lines;
+    ok(djl.some((l: any) => l.account === '1-2901' && l.debit === 104_000_000) && djl.some((l: any) => l.account === '5-4101' && l.debit === 76_000_000) && djl.some((l: any) => l.account === '1-2401' && l.credit === 480_000_000), 'jurnal pelepasan: akumulasi, bank, rugi, harga perolehan', djl);
+    ok((await call(`/assets/${fork.id}/dispose`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ date: '2026-09-30', proceeds: 0, note: 'ulang' }) })).status === 409, 'aset yang sudah dilepas tidak dapat dilepas lagi');
+    const checks2 = await recAll();
+    ok(checks2.every((c: any) => c.ok), 'rekonsiliasi cocok setelah pelepasan', checks2.filter((c: any) => !c.ok));
+
+    const cnc = list.body.assets.find((a: any) => a.code === 'AST-0014');
+    const oli0 = (await call('/inventory/stock', { token: andi, branch: 'ALL' })).body.items.find((i: any) => i.sku === 'BRG-0885' && i.warehouse === 'Cikarang');
+    const mo = await call('/assets/maintenance', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ assetId: cnc.id, kind: 'korektif', priority: 'tinggi', assignee: 'Slamet Riyadi', scheduledDate: '2026-09-25', description: 'Ganti bearing spindle', estimatedCost: 5_000_000 }) });
+    ok(mo.status === 201 && mo.body.status === 'dijadwalkan' && /^MNT-2026-\d{4}$/.test(mo.body.docNo), 'perintah pemeliharaan dijadwalkan', mo.body);
+    ok((await call(`/assets/maintenance/${mo.body.id}/start`, { method: 'POST', token: sari, branch: 'CKR' })).body.status === 'berjalan', 'pemeliharaan dimulai');
+    const mc = await call(`/assets/maintenance/${mo.body.id}/complete`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ date: '2026-09-26', serviceCost: 3_500_000, bank: ckrKas.code, parts: [{ warehouse: 'Cikarang', sku: 'BRG-0885', qty: 2 }] }) });
+    ok(mc.status === 200 && mc.body.status === 'selesai' && mc.body.partsCost === 2 * oli0.avgCost && mc.body.totalCost === 3_500_000 + 2 * oli0.avgCost && mc.body.journals.length === 1, 'selesai: biaya jasa + suku cadang dari stok dijurnal', mc.body?.error ?? mc.body);
+    const mj = (await call(`/ledger/journals/${mc.body.journals[0].id}`, { token: andi, branch: 'ALL' })).body.lines;
+    ok(mj.some((l: any) => l.account === '5-3401' && l.debit === mc.body.totalCost) && mj.some((l: any) => l.account === '1-1501' && l.credit === mc.body.partsCost), 'jurnal: Dr beban pemeliharaan / Cr kas & persediaan', mj);
+    ok((await call(`/assets/maintenance/${mo.body.id}/complete`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ serviceCost: 1 }) })).status === 409, 'pemeliharaan selesai tidak dapat diselesaikan ulang');
+    const checks3 = await recAll();
+    ok(checks3.every((c: any) => c.ok), 'rekonsiliasi (persediaan, kas) cocok setelah pemeliharaan', checks3.filter((c: any) => !c.ok));
+    const plA = await call('/reports/income-statement', { token: andi, branch: 'ALL', period: '2026-09' });
+    ok(plA.status === 200 && JSON.stringify(plA.body).includes('5-3200') && JSON.stringify(plA.body).includes('5-3400'), 'laba rugi memuat beban penyusutan & pemeliharaan');
+  }
+
+  console.log('SDM: karyawan terenkripsi, kehadiran, penggajian');
+  {
+    const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+    const hoBank = banks.find((b: any) => b.branchCode === 'JKT' && b.status === 'aktif' && b.bankName !== 'Kas' && b.currency === 'IDR');
+    const ckrBank = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas' && b.currency === 'IDR');
+    const recAll = async () => (await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' })).body.checks;
+    ok((await call('/hr/employees', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin SDM → 403');
+    const emps = await call('/hr/employees', { token: andi, branch: 'ALL' });
+    ok(emps.status === 200 && emps.body.length >= 10 && emps.body.every((e: any) => !e.nik || /^\*{4}\d{4}$/.test(e.nik)), 'daftar karyawan dengan NIK tersamar', emps.body?.slice?.(0, 2));
+    let first = emps.body[0];
+    if (!first.nik) {   /* basis data hasil pemutakhiran: data rahasia belum ada */
+      first = (await call(`/hr/employees/${first.id}`, { method: 'PATCH', token: admin, branch: 'ALL', body: JSON.stringify({ nik: '3175010101010099', bankName: 'BCA', bankAccount: '8001234567' }) })).body;
+    }
+    ok((await call(`/hr/employees/${first.id}/reveal`, { method: 'POST', token: andi, branch: 'ALL' })).status === 403, 'tanpa hr.restricted.read data rahasia tidak dapat dibuka');
+    const rv = await call(`/hr/employees/${first.id}/reveal`, { method: 'POST', token: admin, branch: 'ALL' });
+    ok(rv.status === 200 && /^\d{16}$/.test(rv.body.nik) && rv.body.nik.endsWith(first.nik.slice(-4)), 'pemegang izin membuka NIK terdekripsi (dicatat di jejak audit)', rv.body);
+    const aud = await call(`/admin/audit?entity=${first.code}`, { token: admin, branch: 'ALL' });
+    ok(aud.status !== 200 || JSON.stringify(aud.body).includes('employee.restricted_read'), 'pembukaan data rahasia tercatat');
+    const ne = await call('/hr/employees', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ name: 'Rudi Hartanto', branch: 'SBY', dept: 'Gudang', title: 'Staf Gudang', joinDate: '2026-09-01',
+      employment: 'kontrak', ptkp: 'TK/0', basicSalary: 6_920_000, fixedAllowance: 1_000_000, nik: '3578 0101 0101 0001', bankName: 'Mandiri', bankAccount: '1400012345678' }) });
+    ok(ne.status === 201 && ne.body.nik === '****0001' && ne.body.bankAccount === '****5678' && !JSON.stringify(ne.body).includes('3578010101010001'), 'karyawan baru: data rahasia disimpan terenkripsi, respons tersamar', ne.body);
+    ok([400, 422].includes((await call('/hr/employees', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ name: 'NIK salah', branch: 'SBY', dept: 'Gudang', basicSalary: 1, nik: '123' }) })).status), 'NIK tidak 16 digit ditolak');
+    const fill = await call('/hr/attendance/fill', { method: 'POST', token: admin, branch: 'SBY', body: JSON.stringify({ date: '2026-09-10' }) });
+    ok(fill.status === 200 && fill.body.inserted >= 2, 'isi hadir massal untuk karyawan cabang', fill.body);
+    for (const [d, h] of [['2026-09-10', 3], ['2026-09-11', 2]] as [string, number][]) {
+      await call('/hr/attendance', { method: 'POST', token: admin, branch: 'SBY', body: JSON.stringify({ employeeId: ne.body.id, date: d, status: 'hadir', clockIn: '08:00', clockOut: '20:00', overtimeHours: h }) });
+    }
+    const alpa = await call('/hr/attendance', { method: 'POST', token: admin, branch: 'SBY', body: JSON.stringify({ employeeId: ne.body.id, date: '2026-09-12', status: 'alpa', overtimeHours: 1 }) });
+    ok(alpa.status === 422 && alpa.body.error.code === 'ATT_OVERTIME', 'lembur tanpa hadir ditolak', alpa.body);
+    const day = await call('/hr/attendance?date=2026-09-10', { token: andi, branch: 'SBY' });
+    ok(day.status === 200 && day.body.summary.filled === day.body.summary.total && day.body.rows.find((r: any) => r.employeeId === ne.body.id).overtimeHours === 3, 'rekap kehadiran harian & lembur', day.body?.summary);
+    const run = await call('/hr/payroll/runs', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ branch: 'SBY', period: '2026-09' }) });
+    const slip = run.body.slips?.find((p: any) => p.employeeId === ne.body.id);
+    const otExpected = Math.round((1.5 + 2 * 2 + 1.5 + 2) * 6_920_000 / 173);
+    ok(run.status === 201 && run.body.status === 'draf' && run.body.slips.length >= 3 && slip.overtime === otExpected && slip.overtimeHours === 5, 'daftar gaji SBY September: lembur dari kehadiran', run.body?.error ?? slip);
+    ok(slip.net === slip.gross - slip.bpjsEmployee - slip.pph21 && slip.bpjsEmployee === Math.round(7_920_000 * 0.04), 'slip: bruto − BPJS 4% − PPh 21 = neto', slip);
+    ok((await call('/hr/payroll/runs', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ branch: 'SBY', period: '2026-09' }) })).status === 409, 'satu daftar gaji per cabang per periode');
+    ok((await call('/hr/payroll/runs', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ branch: 'CKR', period: '2026-08' }) })).body.error?.code === 'PAYROLL_LEGACY', 'periode yang sudah punya slip data awal ditolak');
+    const selfPost = await call(`/hr/payroll/runs/${run.body.id}/post`, { method: 'POST', token: admin, branch: 'ALL' });
+    ok(selfPost.status === 403 && selfPost.body.error.code === 'SOD_PAYROLL', 'penyusun (termasuk admin) tidak dapat memposting daftar gajinya sendiri', selfPost.body);
+    const posted = await call(`/hr/payroll/runs/${run.body.id}/post`, { method: 'POST', token: andi, branch: 'ALL' });
+    ok(posted.status === 200 && posted.body.status === 'diposting' && posted.body.slips.every((p: any) => p.status === 'diproses') && posted.body.journals.length === 1, 'akuntan memposting daftar gaji', posted.body?.error ?? posted.body?.status);
+    const pj = (await call(`/ledger/journals/${posted.body.journals[0].id}`, { token: andi, branch: 'ALL' })).body.lines;
+    const T = posted.body.totals;
+    ok(pj.some((l: any) => l.account === '2-1201' && l.credit === T.net) && pj.some((l: any) => l.account === '2-1301' && l.credit === T.pph21) && pj.some((l: any) => l.account === '2-1601' && l.credit === T.bpjsEmployee + T.bpjsEmployer)
+      && pj.some((l: any) => l.account === '5-2201' && l.debit === T.gross + T.bpjsEmployer), 'jurnal gaji: beban gaji + BPJS pemberi kerja / utang gaji, PPh 21, BPJS', pj);
+    const c1 = await recAll();
+    ok(c1.every((c: any) => c.ok), 'rekonsiliasi utang gaji cocok setelah posting', c1.filter((c: any) => !c.ok));
+    ok((await call('/hr/attendance', { method: 'POST', token: admin, branch: 'SBY', body: JSON.stringify({ employeeId: ne.body.id, date: '2026-09-15', status: 'hadir', overtimeHours: 1 }) })).body.error?.code === 'ATT_LOCKED', 'kehadiran periode yang sudah digaji terkunci');
+    const payable = await call('/hr/payroll/payable', { token: sari, branch: 'ALL' });
+    const sbySlips = payable.body.filter((p: any) => p.runId === run.body.id);
+    const legacy = payable.body.find((p: any) => p.branch === 'JKT' && !p.runId);
+    ok(payable.status === 200 && sbySlips.length === posted.body.slips.length, 'slip siap bayar tampil untuk staf keuangan');
+    const wrong = await call('/hr/payroll/payments', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: ckrBank.code, date: '2026-09-30', slipIds: sbySlips.map((p: any) => p.id) }) });
+    ok(wrong.status === 403, 'gaji cabang lain hanya dibayar dari rekening kantor pusat', wrong.body);
+    const ids = [...sbySlips.map((p: any) => p.id), ...(legacy ? [legacy.id] : [])];
+    const paid = await call('/hr/payroll/payments', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: hoBank.code, date: '2026-09-30', slipIds: ids }) });
+    ok(paid.status === 201 && paid.body.count === ids.length && paid.body.journals.map((j: any) => j.branch).sort().join() === 'JKT,SBY', 'kantor pusat membayar gaji: jurnal pusat & cabang lewat RK', paid.body?.error ?? paid.body);
+    ok((await call('/hr/payroll/payments', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ bankAccount: hoBank.code, date: '2026-09-30', slipIds: ids }) })).status === 409, 'slip yang sudah dibayar tidak dapat dibayar ulang');
+    const c2 = await recAll();
+    ok(c2.every((c: any) => c.ok), 'rekonsiliasi (utang gaji, RK antar kantor, bank) cocok setelah pembayaran', c2.filter((c: any) => !c.ok));
+    const tb = await call('/reports/trial-balance', { token: andi, branch: 'ALL', period: '2026-09' });
+    ok(tb.body.rows.some((r: any) => r.code === '2-1601'), 'utang BPJS muncul di neraca saldo');
+  }
+
   console.log('Asisten AI');
   const assistant = app.get(AssistantService);
   assistant.useClientForTest(null);

@@ -71,3 +71,25 @@ export function payrollJournalLines(slips: SlipForJournal[], a: { directLabor: s
 
 /** Samarkan nilai rahasia (NIK, NPWP, rekening): hanya 4 karakter terakhir. */
 export const maskTail = (v: string | null | undefined) => (v ? `****${String(v).replace(/\s+/g, '').slice(-4)}` : null);
+
+/**
+ * Pembayaran gaji dari satu rekening untuk slip beberapa cabang: cabang rekening
+ * Dr utang gaji (slip sendiri) + Dr RK (slip cabang lain) / Cr bank; cabang lain
+ * Dr utang gaji / Cr RK — RK selalu berpasangan dengan cabang lawan.
+ */
+export function payrollPaymentLegs(groups: { branch: string; amount: Rupiah }[], a: { bankBranch: string; bankGl: string; bank: string; salaryPayable: string; headOffice: string; rkBranch: string; rkHeadOffice: string }) {
+  const rkOf = (b: string) => (b === a.headOffice ? a.rkBranch : a.rkHeadOffice);
+  const total = groups.reduce((t, g) => t + g.amount, 0);
+  const home: { account: string; debit: Rupiah; credit: Rupiah; bank?: string; counterBranch?: string | null; memo?: string | null }[] = [];
+  const legs: { branch: string; lines: typeof home }[] = [];
+  for (const g of groups) {
+    if (!g.amount) continue;
+    if (g.branch === a.bankBranch) home.push({ account: a.salaryPayable, debit: g.amount, credit: 0, memo: 'Pembayaran gaji' });
+    else {
+      home.push({ account: rkOf(a.bankBranch), debit: g.amount, credit: 0, counterBranch: g.branch, memo: `Gaji dibayarkan untuk ${g.branch}` });
+      legs.push({ branch: g.branch, lines: [{ account: a.salaryPayable, debit: g.amount, credit: 0, memo: 'Pembayaran gaji' }, { account: rkOf(g.branch), debit: 0, credit: g.amount, counterBranch: a.bankBranch, memo: `Dibayar oleh ${a.bankBranch}` }] });
+    }
+  }
+  home.push({ account: a.bankGl, debit: 0, credit: total, bank: a.bank, memo: null });
+  return [{ branch: a.bankBranch, lines: home }, ...legs];
+}

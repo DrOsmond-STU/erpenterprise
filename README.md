@@ -384,6 +384,50 @@ Migrasi `0012_pos.sql` menambah `pos_shifts`, `pos_transactions`,
 `pos_transaction_lines`, izin `pos.read`/`pos.operate`/`pos.shift.post`, dan peran Kasir;
 Manajer Operasional dan Akuntan Senior dapat memposting shift.
 
+## Aset tetap & pemeliharaan
+
+Menu **Aset**: **Aset Tetap & Penyusutan**, **Pemeliharaan**.
+
+- **Perolehan** (`asset.manage`): akun detail di bawah 1-2300/1-2400/1-2500, harga
+  perolehan, umur manfaat, nilai residu; dibayar dari rekening cabang aset → Dr aset tetap /
+  Cr bank. Tarif garis lurus bulanan; penyusutan mulai bulan perolehan.
+- **Penyusutan bulanan** (`asset.depreciate`): pratinjau per cabang, lalu satu jurnal per
+  cabang per bulan Dr beban penyusutan (5-3201) / Cr akumulasi (1-2901), tidak melewati
+  nilai residu; bulan tidak boleh dilompati dan tidak dapat diulang.
+- **Pelepasan** (`asset.depreciate`): hasil penjualan ke rekening cabang; Dr akumulasi +
+  Dr bank / Cr harga perolehan, selisih ke laba (4-2101) atau rugi (5-4101) lain-lain.
+- **Pemeliharaan** (`asset.manage`): dijadwalkan → berjalan → selesai. Biaya jasa dibayar
+  dari kas/bank cabang dan suku cadang dikeluarkan dari stok gudang cabang; Dr beban
+  pemeliharaan (5-3401) / Cr kas & persediaan.
+
+Pemeriksaan rekonsiliasi *aset tetap* & *nilai buku* membandingkan register dengan buku
+besar (aset yang dilepas lewat sistem dikeluarkan). Migrasi `0013_fixed_assets.sql`.
+
+## SDM & penggajian
+
+Menu **SDM**: **Karyawan**, **Kehadiran & Lembur**, **Penggajian**.
+
+- **Karyawan** (`hr.manage`): NIK, NPWP, dan nomor rekening disimpan terenkripsi
+  AES-256-GCM (kunci `DATA_ENCRYPTION_KEY`, atau diturunkan dari `JWT_SECRET` bila
+  kosong), ditampilkan tersamar `****1234`; **buka data rahasia** hanya dengan
+  `hr.restricted.read` dan setiap pembukaan dicatat di jejak audit (K-41). Gaji pokok hanya
+  terlihat oleh SDM & penggajian.
+- **Kehadiran**: status harian, jam masuk/pulang, jam lembur; tombol tandai hadir massal.
+  Terkunci setelah gaji periodenya diposting.
+- **Daftar gaji** (`payroll.process`): per cabang per bulan dari karyawan aktif — lembur
+  (upah sejam = gaji pokok/173; jam pertama ×1,5, berikutnya ×2), BPJS pekerja 4% &
+  pemberi kerja 10,24% dari gaji pokok + tunjangan tetap, PPh 21 metode setahun (biaya
+  jabatan 5% maks. 6 jt, PTKP, tarif Pasal 17). **Posting** oleh orang lain
+  (`payroll.approve`): Dr beban tenaga kerja langsung (Produksi) / beban gaji & tunjangan
+  (+ BPJS pemberi kerja) — Cr utang gaji (neto), utang pajak (PPh 21), **utang BPJS**
+  (akun baru 2-1601).
+- **Pembayaran** (`payroll.pay`): pilih slip, bayar dari satu rekening; slip cabang lain
+  hanya dari rekening kantor pusat, dijurnal di kedua sisi lewat RK.
+
+Peran baru **Staf SDM**. Migrasi `0014_hr_payroll.sql` menambah `employees`, `attendance`,
+`payroll_runs`, `payroll_payments`, kolom rincian pada `payslips`, akun 2-1600/2-1601, dan
+mengisi karyawan dari slip gaji yang sudah ada.
+
 ## Asisten AI
 
 Menu **Asisten AI** menjawab pertanyaan keuangan dalam bahasa sehari-hari, misalnya

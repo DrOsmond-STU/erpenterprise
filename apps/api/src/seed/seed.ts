@@ -12,6 +12,8 @@ import { resolve } from 'node:path';
 import pg from 'pg';
 import { LEGACY_ACCOUNT_MAP, LEGACY_CASH_ACCOUNT, ROLE_TEMPLATES, STANDARD_COA } from '@erp/domain';
 import { AuthService } from '../auth/auth.service.js';
+import { seedAssets } from './assets-seed.js';
+import { seedHr } from './hr-seed.js';
 import { seedPurchasing } from './purchasing-seed.js';
 import { seedSales } from './sales-seed.js';
 import { loadConfig } from '../config.js';
@@ -40,10 +42,14 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
       await c.query(`SELECT set_config('app.company_id', $1, true), set_config('app.branch_codes', '*', true)`, [id]);
       const sales = await seedSales(c, id, DATA);
       const purchasing = await seedPurchasing(c, id, DATA);
+      const assets = await seedAssets(c, id, DATA);
+      const hr = await seedHr(c, id, DATA);
       await c.query('COMMIT');
       const upgraded = [
         ...(sales.skipped ? [] : [`penjualan: ${sales.customers} pelanggan, ${sales.orders} pesanan`]),
         ...(purchasing.skipped ? [] : [`pembelian: ${purchasing.suppliers} pemasok, ${purchasing.orders} PO`]),
+        ...(assets.skipped ? [] : [`pemeliharaan: ${assets.orders} perintah`]),
+        ...(hr.skipped ? [] : [`SDM: ${hr.employees} karyawan`]),
       ];
       return { skipped: true, companyId: id, upgraded };
     }
@@ -165,6 +171,8 @@ export async function seed(adminUrl: string, password: string, protoRoot: string
     }
     await seedSales(c, company, DATA);   // setelah faktur & kartu stok
     await seedPurchasing(c, company, DATA);   // setelah produk (dibuat seed penjualan)
+    await seedAssets(c, company, DATA);       // setelah jurnal penyusutan
+    await seedHr(c, company, DATA);           // setelah slip gaji
     await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);
     await c.query('COMMIT');
     return { skipped: false, companyId: company, journals: n };

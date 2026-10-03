@@ -68,6 +68,21 @@ export const NAV: NavGroup[] = [
       { path: '/bom', label: 'Bill of Materials', icon: 'layers', permission: 'production.read' },
     ],
   },
+  {
+    label: 'SDM',
+    items: [
+      { path: '/karyawan', label: 'Karyawan', icon: 'users', permission: 'hr.read' },
+      { path: '/kehadiran', label: 'Kehadiran & Lembur', icon: 'clock', permission: 'hr.read' },
+      { path: '/penggajian', label: 'Penggajian', icon: 'wallet', permission: 'hr.read|payroll.pay' },
+    ],
+  },
+  {
+    label: 'Aset',
+    items: [
+      { path: '/aset', label: 'Aset Tetap & Penyusutan', icon: 'building', permission: 'asset.read' },
+      { path: '/pemeliharaan', label: 'Pemeliharaan', icon: 'gear', permission: 'asset.read' },
+    ],
+  },
   { label: 'Cabang', items: [{ path: '/cabang', label: 'Manajemen Cabang', icon: 'map-pin', permission: 'org.branch.read' }] },
   {
     label: 'Sistem',
@@ -113,6 +128,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/stok', component: () => import('@/pages/StockPage.vue'), meta: { title: 'Stok & Kartu Stok', permission: 'inventory.read' } },
   { path: '/penyesuaian-stok', component: () => import('@/pages/StockAdjustmentsPage.vue'), meta: { title: 'Penyesuaian & Opname', permission: 'inventory.read' } },
   { path: '/transfer-stok', component: () => import('@/pages/StockTransfersPage.vue'), meta: { title: 'Transfer Stok', permission: 'inventory.read' } },
+  { path: '/karyawan', component: () => import('@/pages/EmployeesPage.vue'), meta: { title: 'Karyawan', permission: 'hr.read' } },
+  { path: '/kehadiran', component: () => import('@/pages/AttendancePage.vue'), meta: { title: 'Kehadiran & Lembur', permission: 'hr.read' } },
+  { path: '/penggajian', component: () => import('@/pages/PayrollPage.vue'), meta: { title: 'Penggajian', permission: 'hr.read|payroll.pay' } },
+  { path: '/aset', component: () => import('@/pages/AssetsPage.vue'), meta: { title: 'Aset Tetap & Penyusutan', permission: 'asset.read' } },
+  { path: '/pemeliharaan', component: () => import('@/pages/MaintenancePage.vue'), meta: { title: 'Pemeliharaan', permission: 'asset.read' } },
   { path: '/kasir', component: () => import('@/pages/PosPage.vue'), meta: { title: 'Kasir', permission: 'pos.read' } },
   { path: '/perintah-kerja', component: () => import('@/pages/WorkOrdersPage.vue'), meta: { title: 'Perintah Kerja', permission: 'production.read' } },
   { path: '/bom', component: () => import('@/pages/BomsPage.vue'), meta: { title: 'Bill of Materials', permission: 'production.read' } },
