@@ -7,6 +7,7 @@ import { CASH_TIMELINE } from '@/lib/cash';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import AttachmentsPanel from './AttachmentsPanel.vue';
 import BranchTag from './BranchTag.vue';
 import Drawer from './Drawer.vue';
 import Icon from './Icon.vue';
@@ -75,6 +76,7 @@ const TITLES = { reject: 'Tolak transfer', cancel: 'Batalkan transfer', reverse:
             <td class="code cell-strong">{{ j.journalNo }}</td><td><BranchTag :code="j.branch" /></td><td>{{ j.rule }}<span class="cell-sub">{{ F.date(j.date) }}</span></td><td class="ta-r num">{{ F.rp(j.total) }}</td><td><Pill :status="j.status" /></td></tr>
         </tbody></table></div>
       </div>
+      <AttachmentsPanel entity-type="cash_transfer" :entity-ref="t.docNo" :branch="t.branch" />
       <div v-if="t.timeline.length" class="section">
         <span class="section-title">Linimasa</span>
         <div class="timeline">

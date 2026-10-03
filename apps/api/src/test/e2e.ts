@@ -1182,6 +1182,48 @@ async function main() {
     ok(tb.body.rows.some((r: any) => r.code === '2-1601'), 'utang BPJS muncul di neraca saldo');
   }
 
+  console.log('Kotak persetujuan, dokumen, kepatuhan');
+  {
+    const banks = (await call('/ledger/bank-accounts', { token: andi, branch: 'ALL' })).body.accounts;
+    const ckrBank = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName !== 'Kas' && b.currency === 'IDR');
+    const ckrKas = banks.find((b: any) => b.branchCode === 'CKR' && b.status === 'aktif' && b.bankName === 'Kas');
+    const tr = await call('/cash/transfers', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ fromBank: ckrBank.code, toBank: ckrKas.code, amount: 750_000, date: '2026-09-29', reference: 'Uji kotak masuk' }) });
+    const tra = await call('/cash/transfers', { method: 'POST', token: admin, branch: 'ALL', body: JSON.stringify({ fromBank: ckrBank.code, toBank: ckrKas.code, amount: 250_000, date: '2026-09-29' }) });
+    const ib = await call('/inbox', { token: andi, branch: 'ALL' });
+    ok(ib.status === 200 && ib.body.items.some((i: any) => i.kind === 'cash_transfer' && i.docNo === tr.body.docNo) && ib.body.count === ib.body.items.length, 'kotak persetujuan akuntan memuat transfer yang menunggu', ib.body?.byKind);
+    const ibAdmin = await call('/inbox', { token: admin, branch: 'ALL' });
+    ok(ibAdmin.body.items.some((i: any) => i.docNo === tr.body.docNo) && !ibAdmin.body.items.some((i: any) => i.docNo === tra.body.docNo), 'dokumen buatan sendiri tidak masuk kotak persetujuan (empat mata)');
+    const ibSari = await call('/inbox', { token: sari, branch: 'ALL' });
+    ok(ibSari.status === 200 && !ibSari.body.items.some((i: any) => i.kind === 'cash_transfer'), 'tanpa izin persetujuan, dokumen tidak tampil');
+    await call(`/cash/transfers/${tr.body.id}/reject`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ note: 'uji kotak masuk selesai' }) });
+    await call(`/cash/transfers/${tra.body.id}/reject`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ note: 'uji kotak masuk selesai' }) });
+    ok(!(await call('/inbox', { token: andi, branch: 'ALL' })).body.items.some((i: any) => i.docNo === tr.body.docNo), 'setelah diputus, dokumen keluar dari kotak persetujuan');
+
+    ok((await call('/compliance/sod', { token: sari, branch: 'ALL' })).status === 403, 'laporan SoD memerlukan compliance.read');
+    const sod = await call('/compliance/sod', { token: andi, branch: 'ALL' });
+    /* Satu-satunya temuan yang boleh ada adalah jurnal data awal purwarupa (nomor 4 digit). */
+    const breachRefs = (sod.body.documents ?? []).flatMap((d: any) => d.refs);
+    ok(sod.status === 200 && breachRefs.every((r: string) => /^JV-2026-\d{4}$/.test(r)) && sod.body.documents.length >= 6 && sod.body.users.find((x: any) => x.email === 'admin@knm.co.id')?.superuser, 'laporan SoD: tidak ada pelanggaran empat mata pada transaksi sistem; admin tercatat superuser', breachRefs);
+    const chain = await call('/compliance/audit-chain', { token: andi, branch: 'ALL' });
+    ok(chain.status === 200 && chain.body.intact && chain.body.checked > 50 && chain.body.linkBrokenAt === null && chain.body.contentBrokenAt === null, 'rantai hash jejak audit utuh (tautan & isi)', chain.body);
+
+    const content = 'Kontrak uji e2e — PT Contoh\nNilai: Rp 100.000.000\n';
+    const up = await call('/documents', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ name: 'Kontrak pemasok uji', docType: 'Kontrak', folder: 'Pembelian / Kontrak', entityType: 'cash_transfer', entityRef: tr.body.docNo,
+      expiryDate: '2027-03-31', file: { name: 'kontrak.txt', mime: 'text/plain', base64: Buffer.from(content).toString('base64') } }) });
+    ok(up.status === 201 && /^DOC-2026-\d{4}$/.test(up.body.docNo) && up.body.version === 1 && up.body.versions[0].sha256.length === 64, 'dokumen diunggah dengan SHA-256', up.body);
+    const byEnt = await call(`/documents?entityType=cash_transfer&entityRef=${tr.body.docNo}`, { token: andi, branch: 'ALL' });
+    ok(byEnt.body.length === 1 && byEnt.body[0].id === up.body.id, 'lampiran ditemukan dari dokumen transaksinya');
+    const v2 = await call(`/documents/${up.body.id}/versions`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ note: 'revisi pasal 4', file: { name: 'kontrak-rev.txt', mime: 'text/plain', base64: Buffer.from(content + 'Pasal 4 direvisi.\n').toString('base64') } }) });
+    ok(v2.status === 201 && v2.body.version === 2 && v2.body.versions.length === 2, 'versi baru dokumen');
+    const dl = await fetch(`${base}/documents/${up.body.id}/download?version=1`, { headers: { authorization: `Bearer ${fitri}`, 'x-branch-id': 'SBY' } });
+    ok(dl.status === 200 && (await dl.text()) === content && dl.headers.get('x-content-sha256') === up.body.versions[0].sha256 && dl.headers.get('content-disposition')?.includes('attachment'), 'unduh versi 1 utuh (staf gudang ber-doc.read)');
+    ok((await call('/documents', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ name: 'x x x', docType: 'SOP', file: { name: 'a.txt', mime: 'text/plain', base64: 'YWJj' } }) })).status === 403, 'tanpa doc.manage tidak dapat mengunggah');
+    const bad = await call('/documents', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ name: 'Skrip berbahaya', docType: 'Lain', file: { name: 'x.html', mime: 'text/html', base64: 'PHNjcmlwdD4=' } }) });
+    ok(bad.status === 422 && bad.body.error.code === 'DOC_TYPE', 'jenis berkas berbahaya ditolak', bad.body);
+    const exp = await call(`/documents/${up.body.id}`, { method: 'PATCH', token: sari, branch: 'ALL', body: JSON.stringify({ expiryDate: '2026-01-01' }) });
+    ok(exp.body.status === 'kedaluwarsa', 'dokumen lewat masa berlaku ditandai kedaluwarsa');
+  }
+
   console.log('Asisten AI');
   const assistant = app.get(AssistantService);
   assistant.useClientForTest(null);

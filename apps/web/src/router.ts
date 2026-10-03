@@ -7,7 +7,7 @@ export interface NavGroup { label: string; items: NavItem[] }
 
 /** Navigasi Fase 1 — hanya halaman yang benar-benar terhubung ke API. */
 export const NAV: NavGroup[] = [
-  { label: 'Ikhtisar', items: [{ path: '/dasbor', label: 'Dasbor', icon: 'grid', permission: 'ledger.report.read' }, { path: '/asisten', label: 'Asisten AI', icon: 'sparkles', permission: 'ledger.report.read' }] },
+  { label: 'Ikhtisar', items: [{ path: '/dasbor', label: 'Dasbor', icon: 'grid', permission: 'ledger.report.read' }, { path: '/asisten', label: 'Asisten AI', icon: 'sparkles', permission: 'ledger.report.read' }, { path: '/kotak-masuk', label: 'Kotak Persetujuan', icon: 'bell' }] },
   {
     label: 'Keuangan',
     items: [
@@ -83,6 +83,7 @@ export const NAV: NavGroup[] = [
       { path: '/pemeliharaan', label: 'Pemeliharaan', icon: 'gear', permission: 'asset.read' },
     ],
   },
+  { label: 'Dokumen', items: [{ path: '/dokumen', label: 'Repositori Dokumen', icon: 'book', permission: 'doc.read' }] },
   { label: 'Cabang', items: [{ path: '/cabang', label: 'Manajemen Cabang', icon: 'map-pin', permission: 'org.branch.read' }] },
   {
     label: 'Sistem',
@@ -91,13 +92,16 @@ export const NAV: NavGroup[] = [
       { path: '/peran', label: 'Peran & Izin', icon: 'shield', permission: 'admin.role.manage' },
       { path: '/pengaturan', label: 'Pengaturan', icon: 'gear' },
       { path: '/jejak-audit', label: 'Jejak Audit', icon: 'scroll', permission: 'admin.audit.read' },
+      { path: '/kepatuhan', label: 'Kepatuhan', icon: 'shield', permission: 'compliance.read|admin.audit.read' },
     ],
   },
 ];
 
 /** Halaman pertama yang boleh dibuka pengguna; '/tanpa-akses' bila tidak ada. */
 export function landingFor(session: ReturnType<typeof useSession>): string {
-  for (const g of NAV) for (const i of g.items) if (!i.permission || session.can(i.permission)) return i.path;
+  /* Halaman modul berizin lebih dulu; halaman umum (kotak persetujuan, pengaturan) sebagai cadangan. */
+  for (const g of NAV) for (const i of g.items) if (i.permission && session.can(i.permission)) return i.path;
+  for (const g of NAV) for (const i of g.items) if (!i.permission) return i.path;
   return '/tanpa-akses';
 }
 
@@ -128,6 +132,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/stok', component: () => import('@/pages/StockPage.vue'), meta: { title: 'Stok & Kartu Stok', permission: 'inventory.read' } },
   { path: '/penyesuaian-stok', component: () => import('@/pages/StockAdjustmentsPage.vue'), meta: { title: 'Penyesuaian & Opname', permission: 'inventory.read' } },
   { path: '/transfer-stok', component: () => import('@/pages/StockTransfersPage.vue'), meta: { title: 'Transfer Stok', permission: 'inventory.read' } },
+  { path: '/kotak-masuk', component: () => import('@/pages/InboxPage.vue'), meta: { title: 'Kotak Persetujuan' } },
+  { path: '/dokumen', component: () => import('@/pages/DocumentsPage.vue'), meta: { title: 'Repositori Dokumen', permission: 'doc.read' } },
+  { path: '/kepatuhan', component: () => import('@/pages/CompliancePage.vue'), meta: { title: 'Kepatuhan', permission: 'compliance.read|admin.audit.read' } },
   { path: '/karyawan', component: () => import('@/pages/EmployeesPage.vue'), meta: { title: 'Karyawan', permission: 'hr.read' } },
   { path: '/kehadiran', component: () => import('@/pages/AttendancePage.vue'), meta: { title: 'Kehadiran & Lembur', permission: 'hr.read' } },
   { path: '/penggajian', component: () => import('@/pages/PayrollPage.vue'), meta: { title: 'Penggajian', permission: 'hr.read|payroll.pay' } },

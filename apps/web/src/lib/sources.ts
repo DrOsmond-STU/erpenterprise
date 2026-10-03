@@ -1,0 +1,8 @@
+/** Label modul sumber jurnal otomatis (kolom journals.source_type). */
+export const SOURCE_LABEL: Record<string, string> = {
+  invoice: 'Penjualan — faktur', receipt: 'Penjualan — penerimaan', ap_invoice: 'Pembelian — tagihan', goods_receipt: 'Pembelian — penerimaan barang', supplier_payment: 'Pembelian — pembayaran',
+  stock_move: 'Persediaan', stock_adjustment: 'Persediaan — penyesuaian', stock_transfer: 'Persediaan — transfer', work_order: 'Produksi', pos_shift: 'POS / Kasir',
+  payslip: 'Penggajian', payroll_run: 'Penggajian — posting', payroll_payment: 'Penggajian — pembayaran', depreciation: 'Aset tetap', depreciation_run: 'Aset — penyusutan', asset: 'Aset — perolehan/pelepasan',
+  maintenance: 'Pemeliharaan', maintenance_order: 'Pemeliharaan', cash: 'Kas & Bank', cash_transfer: 'Kas & Bank — transfer', bank_statement: 'Kas & Bank — rekonsiliasi', tax: 'Pajak',
+  tax_settlement: 'Pajak — setoran PPN', reversal: 'Pembalikan', opening: 'Saldo awal', manual: 'Manual',
+};

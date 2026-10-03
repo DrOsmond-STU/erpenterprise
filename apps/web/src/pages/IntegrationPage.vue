@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SOURCE_LABEL } from '@/lib/sources';
 import { computed } from 'vue';
 import { get } from '@/lib/api';
 import * as F from '@/lib/format';
@@ -10,7 +11,6 @@ import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
 import ReportHead from '@/components/ReportHead.vue';
 
-const SOURCE_LABEL: Record<string, string> = { invoice: 'Penjualan', ap_invoice: 'Pembelian', stock_move: 'Persediaan', work_order: 'Produksi', payslip: 'Penggajian', depreciation: 'Aset tetap', maintenance: 'Pemeliharaan', pos_shift: 'POS / Kasir', cash: 'Kas & Bank', tax: 'Pajak', opening: 'Saldo awal', manual: 'Manual' };
 const MODULE_ROUTE: Record<string, string> = { faktur: '/piutang', hutang: '/hutang', 'penerimaan-barang': '/penerimaan-barang', 'kas-bank': '/kas-bank', stok: '/jurnal', aset: '/jurnal', penggajian: '/jurnal', 'neraca-saldo': '/neraca-saldo', neraca: '/neraca', cabang: '/cabang', jurnal: '/jurnal' };
 const ctx = useContext();
 const { data, loading } = useLoader(() => get('/reports/reconciliation'));

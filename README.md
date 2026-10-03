@@ -10,6 +10,30 @@ diposting sebagai jurnal berpasangan per cabang, lalu diturunkan menjadi kartu
 buku besar, neraca saldo, laba rugi, dan neraca — per cabang maupun konsolidasi
 dengan eliminasi rekening koran antar kantor.
 
+## Status implementasi — modul & integrasi buku besar
+
+Seluruh fase rencana pengembangan (dok. 13, Fase 1–5) telah diimplementasikan. Setiap
+modul memposting jurnal otomatis lewat satu jalur (`postAutoJournal`, idempoten per
+dokumen & aturan), sehingga langsung tampil di **kartu buku besar, neraca saldo, laba
+rugi, dan neraca** — per cabang maupun konsolidasi — dan diperiksa oleh halaman
+**Integrasi & Rekonsiliasi**.
+
+| Modul | Dokumen → jurnal | Pemeriksaan rekonsiliasi |
+| --- | --- | --- |
+| Penjualan & piutang | faktur (pendapatan, PPN keluaran, HPP), penerimaan | piutang |
+| Pembelian & hutang | penerimaan barang (persediaan/GRNI), tagihan, pembayaran | hutang, GRNI |
+| Kas & bank | transfer (RK antar cabang), jurnal dari mutasi bank, setoran PPN | kas-bank, RK |
+| Persediaan | opname/penyesuaian, transfer antar gudang & cabang | persediaan, dalam perjalanan |
+| Produksi | pemakaian bahan → WIP, hasil QC → barang jadi | barang dalam proses |
+| POS / kasir | posting shift: kas/penampung, penjualan, PPN, HPP, selisih kas | persediaan, kas-bank |
+| Aset tetap | perolehan, penyusutan bulanan, pelepasan, pemeliharaan | aset tetap, nilai buku |
+| SDM & penggajian | posting gaji (beban, PPh 21, BPJS), pembayaran lintas cabang | utang gaji, RK |
+| Jurnal memorial | dibuat & diposting orang berbeda | keseimbangan jurnal |
+
+Kontrol: RLS per perusahaan/cabang di PostgreSQL, izin granular per aksi, empat mata per
+dokumen (juga untuk admin), kotak persetujuan lintas modul, jejak audit berantai hash
+dengan verifikasi, enkripsi kolom data pribadi karyawan, dan laporan kepatuhan.
+
 ## Struktur repositori
 
 | Jalur | Isi |
@@ -427,6 +451,27 @@ Menu **SDM**: **Karyawan**, **Kehadiran & Lembur**, **Penggajian**.
 Peran baru **Staf SDM**. Migrasi `0014_hr_payroll.sql` menambah `employees`, `attendance`,
 `payroll_runs`, `payroll_payments`, kolom rincian pada `payslips`, akun 2-1600/2-1601, dan
 mengisi karyawan dari slip gaji yang sudah ada.
+
+## Kotak persetujuan, dokumen & kepatuhan
+
+- **Kotak Persetujuan** (menu Ikhtisar; lonceng di bilah atas dengan jumlah, dimuat ulang
+  tiap menit): seluruh dokumen yang menunggu keputusan pengguna — jurnal memorial, pesanan
+  penjualan/pembelian, faktur & tagihan draf, pembayaran pemasok, transfer kas, rekonsiliasi
+  bank, setoran PPN, penyesuaian stok, transfer stok masuk, QC produksi, shift kasir, daftar
+  gaji — disaring izin & cabang, dan **tanpa dokumen buatan sendiri** (empat mata).
+- **Repositori Dokumen** (`doc.read` / `doc.manage`): unggah PDF/gambar/Office/CSV/teks/ZIP
+  ≤ 1 MB, versi baru, unduh versi mana pun (header `X-Content-SHA256`), folder, cabang,
+  masa berlaku (otomatis *kedaluwarsa*), arsip. **Lampiran transaksi** langsung dari laci
+  jurnal dan transfer kas. Jenis berkas berisiko (mis. HTML) ditolak; unduhan selalu
+  `attachment` + `nosniff`.
+- **Kepatuhan** (`compliance.read`): laporan pemisahan tugas per pengguna (konflik izin;
+  Admin Sistem ditandai superuser), pemeriksaan **kontrol empat mata per dokumen** dari data
+  transaksi (jurnal, transfer kas, penyesuaian stok, QC produksi, shift kasir, daftar gaji,
+  pembayaran pemasok — harus nol), dan **verifikasi rantai hash jejak audit** (tautan
+  `prev_hash` dan hash isi setiap baris dihitung ulang, K-71).
+
+Migrasi `0015_documents.sql` menambah `documents`, `document_versions`, dan izin
+`doc.read`, `doc.manage`, `compliance.read`.
 
 ## Asisten AI
 

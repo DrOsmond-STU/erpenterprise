@@ -18,6 +18,7 @@ export const PERMISSIONS = [
   'pos.read', 'pos.operate', 'pos.shift.post',
   'asset.read', 'asset.manage', 'asset.depreciate',
   'hr.read', 'hr.manage', 'hr.restricted.read', 'payroll.process', 'payroll.approve', 'payroll.pay',
+  'doc.read', 'doc.manage', 'compliance.read',
   'admin.user.manage', 'admin.role.manage', 'admin.settings.manage', 'admin.audit.read',
 ] as const;
 
@@ -58,31 +59,31 @@ export const ROLE_TEMPLATES: Record<string, { name: string; permissions: Permiss
   },
   akuntan_senior: {
     name: 'Akuntan Senior',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.post', 'inventory.read', 'inventory.adjust.approve', 'production.read', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.depreciate', 'hr.read', 'payroll.approve', 'admin.audit.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.period.close', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.post', 'ledger.journal.reverse', 'ledger.rules.manage', 'ledger.report.read', 'report.consolidated', 'report.export', 'sales.invoice.read', 'sales.invoice.issue', 'sales.invoice.cancel', 'purchasing.invoice.read', 'purchasing.invoice.post', 'purchasing.payment.approve', 'cash.transfer.approve', 'cash.reconcile', 'cash.reconcile.approve', 'tax.settlement.post', 'inventory.read', 'inventory.adjust.approve', 'production.read', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.depreciate', 'hr.read', 'payroll.approve', 'doc.read', 'doc.manage', 'compliance.read', 'admin.audit.read'],
   },
   staf_keuangan: {
     name: 'Staf Keuangan',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'cash.transfer.create', 'cash.reconcile', 'tax.settlement.create', 'inventory.read', 'asset.read', 'asset.manage', 'payroll.pay'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.journal.create', 'ledger.report.read', 'sales.invoice.read', 'sales.order.create', 'sales.invoice.create', 'sales.receipt.create', 'purchasing.invoice.read', 'purchasing.order.create', 'purchasing.invoice.create', 'purchasing.payment.create', 'cash.transfer.create', 'cash.reconcile', 'tax.settlement.create', 'inventory.read', 'asset.read', 'asset.manage', 'payroll.pay', 'doc.read', 'doc.manage'],
   },
   manajer: {
     name: 'Manajer Operasional',
-    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'sales.customer.manage', 'sales.order.approve', 'purchasing.invoice.read', 'purchasing.supplier.manage', 'purchasing.order.approve', 'purchasing.payment.approve', 'inventory.read', 'inventory.adjust.approve', 'inventory.warehouse.manage', 'production.read', 'production.complete', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.manage', 'hr.read'],
+    permissions: ['org.branch.read', 'org.period.read', 'ledger.account.read', 'ledger.journal.read', 'ledger.report.read', 'report.consolidated', 'sales.invoice.read', 'sales.customer.manage', 'sales.order.approve', 'purchasing.invoice.read', 'purchasing.supplier.manage', 'purchasing.order.approve', 'purchasing.payment.approve', 'inventory.read', 'inventory.adjust.approve', 'inventory.warehouse.manage', 'production.read', 'production.complete', 'pos.read', 'pos.shift.post', 'asset.read', 'asset.manage', 'hr.read', 'doc.read', 'doc.manage', 'compliance.read'],
   },
   gudang: {
     name: 'Staf Gudang',
-    permissions: ['org.branch.read', 'inventory.read', 'inventory.adjust', 'inventory.transfer', 'purchasing.receipt.create'],
+    permissions: ['org.branch.read', 'inventory.read', 'inventory.adjust', 'inventory.transfer', 'purchasing.receipt.create', 'doc.read'],
   },
   sdm: {
     name: 'Staf SDM',
-    permissions: ['org.branch.read', 'hr.read', 'hr.manage', 'hr.restricted.read', 'payroll.process'],
+    permissions: ['org.branch.read', 'hr.read', 'hr.manage', 'hr.restricted.read', 'payroll.process', 'doc.read', 'doc.manage'],
   },
   kasir: {
     name: 'Kasir',
-    permissions: ['org.branch.read', 'pos.read', 'pos.operate'],
+    permissions: ['org.branch.read', 'pos.read', 'pos.operate', 'doc.read'],
   },
   produksi: {
     name: 'Staf Produksi',
-    permissions: ['org.branch.read', 'inventory.read', 'production.read', 'production.manage'],
+    permissions: ['org.branch.read', 'inventory.read', 'production.read', 'production.manage', 'doc.read'],
   },
 };
 
@@ -122,6 +123,7 @@ export const PERMISSION_CATALOG: { group: string; items: { code: Permission; lab
   { group: 'POS / Kasir', items: [{ code: 'pos.read', label: 'Lihat shift & transaksi kasir' }, { code: 'pos.operate', label: 'Buka shift, transaksi & tutup shift' }, { code: 'pos.shift.post', label: 'Posting shift & batalkan transaksi' }] },
   { group: 'Aset tetap', items: [{ code: 'asset.read', label: 'Lihat aset & pemeliharaan' }, { code: 'asset.manage', label: 'Perolehan aset & perintah pemeliharaan' }, { code: 'asset.depreciate', label: 'Penyusutan bulanan & pelepasan aset' }] },
   { group: 'SDM & penggajian', items: [{ code: 'hr.read', label: 'Lihat karyawan, kehadiran & gaji' }, { code: 'hr.manage', label: 'Kelola karyawan & kehadiran' }, { code: 'hr.restricted.read', label: 'Buka data rahasia (NIK, NPWP, rekening)' }, { code: 'payroll.process', label: 'Susun daftar gaji' }, { code: 'payroll.approve', label: 'Posting daftar gaji' }, { code: 'payroll.pay', label: 'Bayar gaji' }] },
+  { group: 'Dokumen & kepatuhan', items: [{ code: 'doc.read', label: 'Lihat & unduh dokumen' }, { code: 'doc.manage', label: 'Unggah dokumen & versi baru' }, { code: 'compliance.read', label: 'Laporan pemisahan tugas & verifikasi jejak audit' }] },
   { group: 'Sistem', items: [
     { code: 'admin.user.manage', label: 'Kelola pengguna' }, { code: 'admin.role.manage', label: 'Kelola peran & izin' },
     { code: 'admin.settings.manage', label: 'Kelola pengaturan' }, { code: 'admin.audit.read', label: 'Lihat jejak audit' },

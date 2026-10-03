@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { get } from '@/lib/api';
 import { useRoute, useRouter } from 'vue-router';
 import Icon from './Icon.vue';
 import { NAV } from '@/router';
@@ -35,6 +36,13 @@ function setPeriod(id: string) {
   toast.push('Periode diubah', `${p?.label}${p?.status === 'closed' ? ' · periode sudah ditutup (hanya baca)' : ''}`, 'ok');
 }
 async function logout() { close(); await session.logout(); router.push('/masuk'); }
+/* Lonceng notifikasi: jumlah dokumen yang menunggu keputusan pengguna (dimuat ulang tiap menit). */
+const inboxCount = ref(0);
+let timer: ReturnType<typeof setInterval> | null = null;
+async function refreshInbox() { if (!session.isAuthenticated) return; try { inboxCount.value = (await get('/inbox', { scoped: false })).count ?? 0; } catch { /* abaikan */ } }
+onMounted(() => { refreshInbox(); timer = setInterval(refreshInbox, 60_000); });
+onUnmounted(() => { if (timer) clearInterval(timer); });
+watch(() => route.path, refreshInbox);
 const months = computed(() => session.periods.filter((p) => p.group === 'Bulan'));
 const others = computed(() => session.periods.filter((p) => p.group !== 'Bulan'));
 </script>
@@ -70,6 +78,9 @@ const others = computed(() => session.periods.filter((p) => p.group !== 'Bulan')
           <b>{{ currentTitle }}</b>
         </div>
         <div class="topbar-spacer"></div>
+        <RouterLink class="btn btn-icon btn-ghost inbox-bell" to="/kotak-masuk" :aria-label="`Kotak persetujuan: ${inboxCount} menunggu`" data-inbox-bell>
+          <Icon name="bell" /><span v-if="inboxCount" class="inbox-badge" data-inbox-count>{{ inboxCount > 99 ? '99+' : inboxCount }}</span>
+        </RouterLink>
         <div class="topbar-user">
           <button class="btn btn-icon btn-ghost" aria-label="Menu pengguna" @click="toggle('user')"><span class="avatar">{{ initials }}</span></button>
           <div v-if="openMenu === 'user'" class="user-menu" role="menu">

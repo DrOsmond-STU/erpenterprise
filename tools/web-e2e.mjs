@@ -12,7 +12,7 @@ const ok = (c, label, extra) => { if (c) console.log('  ✓ ' + label); else { p
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 960 } });
 const page = await ctx.newPage();
-page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
+page.on('pageerror', (e) => { problems.push('pageerror: ' + e.message); console.log('  ! pageerror', page.url(), (e.stack ?? '').split('\n').slice(0, 4).join(' | ')); });
 page.on('console', (m) => { if (m.type() === 'error' && !/40[13]|422|Failed to load resource/.test(m.text())) problems.push('console: ' + m.text()); });
 const base = 'http://localhost:5173';
 let ipSeq = 0;
@@ -627,10 +627,37 @@ await page.goto(base + '/penggajian'); await page.waitForSelector('[data-table=p
 for (const cb of await page.locator('[data-table=payable] input[type=checkbox]').all()) await cb.check();
 await page.click('[data-action=pay-payroll]'); await page.waitForSelector('#py-bank'); await page.fill('#py-date', '2026-09-30');
 await page.click('[data-action=confirm-pay]'); await page.waitForFunction(() => !document.querySelector('[data-table=payable] tbody tr[data-payslip]'), null, { timeout: 15000 });
-ok(await page.locator('[data-table=payroll-payments] tbody tr').count() >= 2, 'staf keuangan membayar seluruh utang gaji (lintas cabang)'); await shot('104-pembayaran-gaji');
+ok(await page.waitForFunction(() => document.querySelectorAll('[data-table=payroll-payments] tbody tr').length >= 2, null, { timeout: 15000 }).then(() => true, () => false), 'staf keuangan membayar seluruh utang gaji (lintas cabang)'); await shot('104-pembayaran-gaji');
 await logout(); await login('andi@knm.co.id');
 await page.goto(base + '/integrasi'); await page.waitForSelector('.pill');
 ok(await page.locator('.pill[data-tone=danger]').count() === 0, 'rekonsiliasi cocok setelah aset & penggajian');
+await logout(); await login('admin@knm.co.id');
+
+console.log('Kotak persetujuan, dokumen, kepatuhan');
+await logout(); await login('sari@knm.co.id'); await salesCtx('ALL');
+await page.goto(base + '/dokumen'); await page.waitForSelector('[data-action=new-document]');
+await page.click('[data-action=new-document]'); await page.waitForSelector('[data-field=doc-file]');
+await page.setInputFiles('[data-field=doc-file]', { name: 'sop-penerimaan.txt', mimeType: 'text/plain', buffer: Buffer.from('SOP penerimaan barang v1\n') });
+await page.fill('#dc-folder', 'Operasional / SOP'); await page.selectOption('#dc-type', 'SOP');
+await page.click('[data-action=save-document]'); await page.waitForSelector('[data-table=doc-versions] tbody tr');
+await page.setInputFiles('[data-field=new-version]', { name: 'sop-penerimaan-v2.txt', mimeType: 'text/plain', buffer: Buffer.from('SOP penerimaan barang v2\n') });
+await page.waitForFunction(() => document.querySelectorAll('[data-table=doc-versions] tbody tr').length === 2, null, { timeout: 15000 });
+const dlP = page.waitForEvent('download', { timeout: 15000 });
+await page.locator('[data-action=download-version]').last().click();
+const dl = await dlP;
+ok(dl.suggestedFilename() === 'sop-penerimaan.txt', 'dokumen diunggah, versi baru, unduh versi lama', dl.suggestedFilename()); await shot('105-dokumen');
+await page.keyboard.press('Escape');
+await page.goto(base + '/transfer-kas'); await page.waitForSelector('[data-table=transfers] tbody tr[data-row]');
+await page.locator('[data-table=transfers] tbody tr[data-row]').first().click(); await page.waitForSelector('[data-attachments]');
+await page.setInputFiles('[data-attachments] [data-field=attachment]', { name: 'bukti-transfer.txt', mimeType: 'text/plain', buffer: Buffer.from('bukti transfer\n') });
+await page.waitForFunction(() => document.querySelector('[data-attachments] .section-title')?.textContent?.includes('(1)'), null, { timeout: 15000 });
+ok(true, 'lampiran diunggah dari laci transaksi'); await page.keyboard.press('Escape');
+await logout(); await login('andi@knm.co.id');
+ok(await page.locator('[data-inbox-bell]').count() === 1, 'lonceng kotak persetujuan tampil di bilah atas');
+await page.goto(base + '/kotak-masuk'); await page.waitForSelector('.kpi-tile'); await page.waitForTimeout(500); await shot('106-kotak-persetujuan');
+ok(true, 'halaman kotak persetujuan dirender');
+await page.goto(base + '/kepatuhan'); await page.waitForSelector('[data-chain]');
+ok((await page.locator('[data-chain]').innerText()).includes('Utuh') && await page.locator('[data-table=sod-users] tbody tr').count() >= 6, 'kepatuhan: rantai audit utuh, laporan SoD per pengguna'); await shot('107-kepatuhan');
 await logout(); await login('admin@knm.co.id');
 
 console.log('Pembatasan hak: staf gudang Surabaya');

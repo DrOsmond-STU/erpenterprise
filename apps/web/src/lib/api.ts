@@ -63,3 +63,26 @@ export const get = <T = any>(path: string, opts?: { scoped?: boolean }) => api<T
 export const post = <T = any>(path: string, body?: unknown, opts?: { scoped?: boolean }) => api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), ...opts });
 export const patch = <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 export const del = <T = any>(path: string, body?: unknown) => api<T>(path, { method: 'DELETE', body: body === undefined ? undefined : JSON.stringify(body) });
+
+/** Unduh berkas biner (mis. lampiran dokumen) lalu simpan lewat tautan sementara. */
+export async function download(path: string, fallbackName = 'berkas'): Promise<void> {
+  const send = async () => fetch(BASE + path, { headers: { Authorization: `Bearer ${ctx().token ?? ''}` }, credentials: 'same-origin' });
+  let res = await send();
+  if (res.status === 401 && (await refreshToken())) res = await send();
+  if (!res.ok) { const body = await parse(res); throw new ApiError(res.status, body?.error?.code ?? 'ERROR', body?.error?.message ?? `Unduhan gagal (${res.status})`); }
+  const name = decodeURIComponent((res.headers.get('content-disposition') ?? '').match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? fallbackName);
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Baca berkas lokal sebagai base64 (tanpa awalan data URL). */
+export function fileToBase64(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+}

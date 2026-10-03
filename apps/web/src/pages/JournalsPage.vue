@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SOURCE_LABEL } from '@/lib/sources';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { get, post } from '@/lib/api';
@@ -14,7 +15,6 @@ import Pill from '@/components/Pill.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
 import NewJournalModal from '@/components/NewJournalModal.vue';
 
-const SOURCE_LABEL: Record<string, string> = { invoice: 'Penjualan', ap_invoice: 'Pembelian', stock_move: 'Persediaan', work_order: 'Produksi', payslip: 'Penggajian', depreciation: 'Aset tetap', maintenance: 'Pemeliharaan', pos_shift: 'POS / Kasir', cash: 'Kas & Bank', tax: 'Pajak', opening: 'Saldo awal', manual: 'Manual' };
 const route = useRoute();
 const router = useRouter();
 const ctx = useContext();

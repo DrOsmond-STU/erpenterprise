@@ -6,6 +6,7 @@ import * as F from '@/lib/format';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import AttachmentsPanel from './AttachmentsPanel.vue';
 import BranchTag from './BranchTag.vue';
 import Drawer from './Drawer.vue';
 import Icon from './Icon.vue';
@@ -20,7 +21,7 @@ const router = useRouter();
 const j = ref<any>(null);
 const busy = ref(false);
 const reason = ref('');
-watch(() => props.id, async (id) => { j.value = null; j.value = await get(`/ledger/journals/${id}`); }, { immediate: true });
+watch(() => props.id, async (id) => { j.value = null; try { j.value = await get(`/ledger/journals/${id}`); } catch { emit("close"); } }, { immediate: true });
 
 async function act(action: 'post' | 'reject' | 'reverse') {
   busy.value = true;
@@ -72,6 +73,7 @@ const isOwn = () => j.value?.createdBy === session.user?.id;
       <div v-if="(j.status === 'pending' && session.can('ledger.journal.post')) || (j.status === 'posted' && session.can('ledger.journal.reverse'))" class="section">
         <div class="field"><label for="jv-reason">Alasan (untuk penolakan / pembalikan)</label><input id="jv-reason" v-model="reason" class="input" placeholder="Wajib diisi untuk menolak atau membalik"></div>
       </div>
+      <AttachmentsPanel entity-type="journal" :entity-ref="j.journalNo" :branch="j.branch" />
     </template>
     <template #foot>
       <template v-if="j?.status === 'pending' && session.can('ledger.journal.post')">
