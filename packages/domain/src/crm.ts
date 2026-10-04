@@ -31,3 +31,69 @@ export function stageProblems(from: string, to: OppStage, lostReason?: string | 
 
 /** Penawaran kedaluwarsa bila masa berlaku lewat sebelum diterima. */
 export const quoteExpired = (validUntil: string, asOf: string, status: string) => (status === 'draf' || status === 'terkirim') && validUntil < asOf;
+
+/* ---------------- CRM lengkap: lead, tiket, penagihan, pemasok ---------------- */
+
+export const LEAD_STATUSES = ['baru', 'dihubungi', 'kualifikasi', 'diskualifikasi', 'dikonversi'] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+/**
+ * Skor lead 0–100: kelengkapan kontak, sumber, kampanye, nilai perkiraan, dan kemajuan status.
+ * Dipakai mengurutkan prospek yang layak dihubungi lebih dulu.
+ */
+export function leadScore(l: { email?: string | null; phone?: string | null; companyName?: string | null; source?: string | null; campaignId?: string | null; estimatedValue?: number; status: string; activities?: number }): number {
+  if (l.status === 'diskualifikasi') return 0;
+  if (l.status === 'dikonversi') return 100;
+  let s = 0;
+  if (l.email) s += 10;
+  if (l.phone) s += 10;
+  if (l.companyName) s += 10;
+  s += ({ Referensi: 20, Tender: 15, Pameran: 10, Website: 8, Telemarketing: 5 } as Record<string, number>)[l.source ?? ''] ?? 3;
+  if (l.campaignId) s += 5;
+  const v = l.estimatedValue ?? 0;
+  s += v >= 500_000_000 ? 20 : v >= 100_000_000 ? 15 : v >= 25_000_000 ? 10 : v > 0 ? 5 : 0;
+  s += ({ baru: 0, dihubungi: 10, kualifikasi: 20 } as Record<string, number>)[l.status] ?? 0;
+  s += Math.min(5, l.activities ?? 0);
+  return Math.min(99, s);
+}
+
+/** Lead hanya dapat dikonversi setelah kualifikasi (atau langsung dari dihubungi bila ada nilai). */
+export function leadConvertProblems(status: string): string[] {
+  if (status === 'dikonversi') return ['Lead sudah dikonversi.'];
+  if (status === 'diskualifikasi') return ['Lead didiskualifikasi; aktifkan kembali (status dihubungi) sebelum dikonversi.'];
+  if (status === 'baru') return ['Hubungi & kualifikasi lead terlebih dahulu sebelum dikonversi menjadi peluang.'];
+  return [];
+}
+
+export const TICKET_PRIORITIES = ['rendah', 'sedang', 'tinggi', 'kritis'] as const;
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
+/** Batas penyelesaian tiket sejak dibuat (jam). */
+export const TICKET_SLA_HOURS: Record<TicketPriority, number> = { kritis: 4, tinggi: 24, sedang: 72, rendah: 120 };
+export const ticketSlaDue = (createdAt: Date, priority: TicketPriority) => new Date(createdAt.getTime() + TICKET_SLA_HOURS[priority] * 3_600_000);
+export const TICKET_FLOW: Record<string, string[]> = {
+  baru: ['diproses', 'menunggu', 'selesai'], diproses: ['menunggu', 'selesai'], menunggu: ['diproses', 'selesai'], selesai: ['ditutup', 'diproses'], ditutup: [],
+};
+
+/** Status janji bayar: ditepati bila pembayaran sejak janji ≥ nilai janji; ingkar bila tanggal lewat. */
+export function promiseStatus(p: { amount: number; paidBefore: number; promiseDate: string; status: string }, paidNow: number, today: string): 'ditepati' | 'ingkar' | 'menunggu' | 'batal' {
+  if (p.status === 'batal') return 'batal';
+  if (paidNow - p.paidBefore >= p.amount) return 'ditepati';
+  return p.promiseDate < today ? 'ingkar' : 'menunggu';
+}
+
+/** Tingkat penagihan dari umur keterlambatan faktur (dunning). */
+export function dunningLevel(overdue: number): { level: number; label: string; action: string } {
+  if (overdue <= 0) return { level: 0, label: 'Belum jatuh tempo', action: 'Pengingat sebelum jatuh tempo' };
+  if (overdue <= 30) return { level: 1, label: 'Pengingat', action: 'Telepon / email pengingat' };
+  if (overdue <= 60) return { level: 2, label: 'Teguran 1', action: 'Surat teguran & minta janji bayar' };
+  if (overdue <= 90) return { level: 3, label: 'Teguran 2', action: 'Teguran kedua; pertimbangkan tahan kredit' };
+  return { level: 4, label: 'Eskalasi', action: 'Tahan kredit pelanggan & eskalasi ke manajemen' };
+}
+
+/** Skor kinerja pemasok 0–100 dari ketepatan kirim, klaim mutu, dan kemenangan RFQ. */
+export function supplierScore(m: { onTimeRate: number | null; tickets: number; receipts: number; rfqWinRate: number | null }): number {
+  const otd = m.onTimeRate ?? 80;
+  const claimRate = m.receipts ? Math.min(1, m.tickets / m.receipts) : 0;
+  const win = m.rfqWinRate ?? 50;
+  return Math.round(otd * 0.6 + (1 - claimRate) * 100 * 0.3 + win * 0.1);
+}

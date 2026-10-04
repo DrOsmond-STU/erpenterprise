@@ -12,7 +12,7 @@ import { exposures, invalid, trimBranch, UUID } from './sales.shared.js';
 
 export interface CustomerInput {
   name?: string; segment?: string; pic?: string; phone?: string; email?: string; address?: string; city?: string; npwp?: string;
-  branch?: string | null; creditLimit?: number; termsDays?: number; status?: 'aktif' | 'ditahan' | 'nonaktif'; reason?: string;
+  branch?: string | null; creditLimit?: number; termsDays?: number; status?: 'aktif' | 'ditahan' | 'nonaktif'; reason?: string; accountManager?: string | null;
 }
 export interface ProductInput { sku?: string; name?: string; kind?: 'barang' | 'jasa'; unit?: string; price?: number; status?: 'aktif' | 'nonaktif'; reason?: string }
 
@@ -108,10 +108,10 @@ export class CustomersService {
       const r = (await c.query(
         `UPDATE customers SET name = coalesce($3, name), segment = coalesce($4, segment), pic = coalesce($5, pic), phone = coalesce($6, phone), email = coalesce($7, email),
             address = coalesce($8, address), city = coalesce($9, city), npwp = coalesce($10, npwp), branch_code = CASE WHEN $11::text = '' THEN NULL ELSE coalesce($11, branch_code) END,
-            credit_limit = $12, terms_days = coalesce($13, terms_days), status = $14, updated_at = now()
+            credit_limit = $12, terms_days = coalesce($13, terms_days), status = $14, account_manager = coalesce($15, account_manager), updated_at = now()
           WHERE company_id = $1 AND id = $2 RETURNING *`,
         [u.companyId, id, b.name ?? null, b.segment ?? null, b.pic ?? null, b.phone ?? null, b.email ?? null, b.address ?? null, b.city ?? null, b.npwp ?? null,
-          b.branch === undefined ? null : b.branch ?? '', limit, b.termsDays ?? null, status])).rows[0];
+          b.branch === undefined ? null : b.branch ?? '', limit, b.termsDays ?? null, status, b.accountManager ?? null])).rows[0];
       await this.audit.record(c, { companyId: u.companyId, userId: u.id, sessionId: u.sessionId, action: 'customer.updated', entityType: 'customer', entityId: cur.code,
         before: mapCustomer(cur), after: { ...mapCustomer(r), reason: b.reason }, requestId });
       const [out] = await this.withExposure(c, u.companyId, [r]);

@@ -19,7 +19,7 @@ const customerBase = {
   address: opt(text(400)), city: opt(text(80)), npwp: opt(z.string().trim().regex(/^[0-9.\-\s]{15,25}$/, 'NPWP 15/16 digit').or(z.literal(''))),
   branch: opt(z.string().trim().toUpperCase().pipe(z.string().regex(/^([A-Z]{3})?$/, 'Kode cabang 3 huruf')).nullable()),
   creditLimit: opt(money), termsDays: opt(z.number().int().min(0).max(365)),
-  status: opt(z.enum(['aktif', 'ditahan', 'nonaktif'])),
+  status: opt(z.enum(['aktif', 'ditahan', 'nonaktif'])), accountManager: opt(text(120).nullable()),
 };
 const customerCreate = z.object(customerBase);
 const customerPatch = z.object({ ...customerBase, name: opt(customerBase.name), reason: opt(reason) });
