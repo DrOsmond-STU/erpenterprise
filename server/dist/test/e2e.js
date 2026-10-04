@@ -919,6 +919,120 @@ async function main() {
         const recC = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
         ok(recC.body.checks.every((k) => k.ok), 'rekonsiliasi tetap cocok setelah alur CRM → faktur', recC.body.checks.filter((k) => !k.ok));
     }
+    console.log('CRM lengkap: lead, kampanye, kontak, aktivitas, penagihan, tiket, profil 360');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const plusDays = (n) => new Date(Date.now() + 7 * 3_600_000 + n * 86_400_000).toISOString().slice(0, 10);
+        const dash = await call('/crm/dashboard', { token: sari, branch: 'ALL' });
+        ok(dash.status === 200 && dash.body.pipeline.stages.length === 6 && dash.body.leads.total >= 6 && dash.body.collection.openAr > 0 && dash.body.tickets.open >= 1, 'dasbor CRM: pipeline, lead, penagihan, tiket', dash.body?.leads);
+        ok((await call('/crm/leads', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin CRM tidak dapat membaca lead');
+        /* Lead → konversi menjadi pelanggan + kontak + peluang */
+        const camps = (await call('/crm/campaigns', { token: sari, branch: 'ALL' })).body;
+        const camp = camps.find((k) => k.channel === 'Pameran');
+        ok(camp && camp.leads >= 1, 'kampanye contoh dengan lead tertaut', camps);
+        const tag = Date.now().toString(36);
+        const noContact = await call('/crm/leads', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', name: 'Tanpa Kontak' }) });
+        ok(noContact.status === 422 && noContact.body.error.code === 'LEAD_CONTACT', 'lead wajib punya telepon atau email', noContact.body);
+        const lBody = { branch: 'CKR', name: 'Dimas Pratama', companyName: `PT Lead Uji ${tag}`, title: 'Manajer Pengadaan', email: `dimas.${tag}@leaduji.co.id`, phone: '081299887766', source: 'Referensi', campaignId: camp.id, estimatedValue: 80_000_000 };
+        const ld = await call('/crm/leads', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(lBody) });
+        ok(ld.status === 201 && /^LEAD-2026-\d{4}$/.test(ld.body.code) && ld.body.status === 'baru' && ld.body.score > 40 && ld.body.campaignName === camp.name, 'lead baru dengan skor & kampanye', ld.body);
+        const dup = await call('/crm/leads', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ ...lBody, phone: undefined }) });
+        ok(dup.status === 409 && dup.body.error.code === 'LEAD_DUPLICATE', 'lead ganda (email sama) ditolak', dup.body);
+        const early = await call(`/crm/leads/${ld.body.id}/convert`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ newCustomer: {} }) });
+        ok(early.status === 422 && early.body.error.code === 'LEAD_CONVERT', 'lead baru belum dapat dikonversi sebelum dihubungi/kualifikasi', early.body);
+        const call1 = await call('/crm/activities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ kind: 'telepon', subject: 'Perkenalan produk', notes: 'Tertarik panel kendali', done: true, leadId: ld.body.id }) });
+        const ld2 = await call(`/crm/leads/${ld.body.id}`, { token: sari, branch: 'CKR' });
+        ok(call1.status === 201 && ld2.body.status === 'dihubungi' && ld2.body.activityCount === 1, 'telepon tercatat → status lead dihubungi', ld2.body?.status);
+        await call(`/crm/leads/${ld.body.id}/status`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ status: 'kualifikasi' }) });
+        const noPerm = await call(`/crm/leads/${ld.body.id}/convert`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ newCustomer: {} }) });
+        ok(noPerm.status === 403, 'staf tanpa izin kelola pelanggan tidak dapat membuat pelanggan baru dari lead', noPerm.body);
+        const cv = await call(`/crm/leads/${ld.body.id}/convert`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ newCustomer: { creditLimit: 50_000_000, segment: 'Kontrak' }, opportunityName: 'Panel kendali lini baru', value: 90_000_000 }) });
+        ok(cv.status === 200 && cv.body.status === 'dikonversi' && cv.body.convertedCustomerName === lBody.companyName && /^OPP-2026-\d{4}$/.test(cv.body.convertedOpportunityCode), 'konversi lead: pelanggan baru + peluang', cv.body);
+        const newCustId = cv.body.convertedCustomerId;
+        const ct = await call(`/crm/contacts?partyType=customer&partyId=${newCustId}`, { token: sari, branch: 'ALL' });
+        ok(ct.status === 200 && ct.body.length === 1 && ct.body[0].isPrimary && ct.body[0].name === 'Dimas Pratama', 'kontak utama pelanggan dari lead', ct.body);
+        const opp = await call(`/crm/opportunities/${cv.body.convertedOpportunityId}`, { token: sari, branch: 'CKR' });
+        ok(opp.body.stage === 'kualifikasi' && opp.body.customerId === newCustId && opp.body.value === 90_000_000, 'peluang hasil konversi di tahap kualifikasi', opp.body);
+        /* Kontak: kontak utama baru menjadi PIC data induk pelanggan */
+        ok((await call('/crm/contacts', { method: 'POST', token: fitri, branch: 'SBY', body: JSON.stringify({ partyType: 'customer', partyId: newCustId, name: 'X' }) })).status === 403, 'staf gudang tidak dapat menambah kontak pelanggan');
+        const c2 = await call('/crm/contacts', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ partyType: 'customer', partyId: newCustId, name: 'Rini Hartati', title: 'Keuangan', phone: '0215550101', isPrimary: true }) });
+        const custNow = await call(`/sales/customers/${newCustId}`, { token: sari, branch: 'ALL' });
+        const ct2 = await call(`/crm/contacts?partyType=customer&partyId=${newCustId}`, { token: sari, branch: 'ALL' });
+        ok(c2.status === 201 && custNow.body.pic === 'Rini Hartati' && ct2.body.filter((x) => x.isPrimary).length === 1, 'kontak utama baru → PIC pelanggan; hanya satu kontak utama', [custNow.body?.pic, ct2.body?.map((x) => x.isPrimary)]);
+        /* Aktivitas & tugas */
+        const nolink = await call('/crm/activities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ kind: 'tugas', subject: 'Tanpa tautan', dueAt: `${plusDays(1)}T09:00:00+07:00` }) });
+        ok(nolink.status === 422 && nolink.body.error.code === 'ACTIVITY_LINK', 'aktivitas wajib tertaut ke pihak/dokumen', nolink.body);
+        const nodue = await call('/crm/activities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ kind: 'tugas', subject: 'Tanpa tenggat', customerId: newCustId }) });
+        ok(nodue.status === 422 && nodue.body.error.code === 'ACTIVITY_DUE', 'tugas terjadwal wajib bertenggat', nodue.body);
+        const task = await call('/crm/activities', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ kind: 'kunjungan', subject: 'Survei lokasi pelanggan baru', dueAt: `${plusDays(1)}T10:00:00+07:00`, customerId: newCustId }) });
+        const mine = await call('/crm/activities?mine=1&status=terbuka', { token: sari, branch: 'ALL' });
+        ok(task.status === 201 && task.body.status === 'terbuka' && mine.body.rows.some((a) => a.id === task.body.id) && Array.isArray(mine.body.opportunities), 'tugas terjadwal masuk agenda "tugas saya" (+ tindak lanjut peluang)', mine.body?.summary);
+        const done = await call(`/crm/activities/${task.body.id}/complete`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ result: 'Lokasi siap', followUp: { subject: 'Kirim penawaran', dueAt: `${plusDays(3)}T09:00:00+07:00` } }) });
+        const custActs = await call(`/crm/activities?customerId=${newCustId}&status=all`, { token: sari, branch: 'ALL' });
+        ok(done.body.status === 'selesai' && custActs.body.rows.some((a) => a.subject === 'Kirim penawaran' && a.status === 'terbuka') && custActs.body.rows.some((a) => a.subject === 'Perkenalan produk'), 'selesai + tindak lanjut; riwayat lead ikut ke pelanggan', custActs.body?.rows?.map((a) => a.subject));
+        /* Kampanye: biaya = tagihan pemasok bertanda kampanye (diposting), ROI dari peluang menang */
+        ok((await call('/crm/campaigns', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ name: 'Uji', startDate: '2026-10-01', endDate: '2026-10-31' }) })).status === 403, 'staf tanpa izin kampanye tidak dapat membuat kampanye');
+        const k = await call('/crm/campaigns', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ name: `Webinar uji ${tag}`, channel: 'Digital', startDate: '2026-09-01', endDate: '2026-12-31', budget: 10_000_000, status: 'berjalan' }) });
+        const sup = (await call('/purchasing/suppliers', { token: sari, branch: 'ALL' })).body.find((x) => x.status === 'aktif');
+        const ap = await call('/purchasing/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', supplierId: sup.id, invoiceDate: '2026-09-26', campaignId: k.body.id, lines: [{ description: 'Biaya platform webinar', qty: 1, price: 4_000_000, expenseAccount: '5-2401' }] }) });
+        await call(`/purchasing/invoices/${ap.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const kd = await call(`/crm/campaigns/${k.body.id}`, { token: sari, branch: 'ALL' });
+        ok(ap.status === 201 && ap.body.campaignName === k.body.name && kd.body.spend === 4_000_000 && kd.body.budgetUsed === 40 && kd.body.roi === -100 && kd.body.invoices.length === 1, 'biaya kampanye dari tagihan pemasok diposting (buku besar); ROI', kd.body);
+        /* Penagihan & janji bayar → penerimaan piutang */
+        const col = await call('/crm/collections', { token: andi, branch: 'ALL' });
+        const item = col.body.items.find((i) => i.overdueDays > 0 && i.open >= 2_000_000 && !i.promise);
+        ok(col.status === 200 && item && item.dunning.level >= 1 && col.body.byLevel.length === 5, 'penagihan: faktur jatuh tempo per tingkat', col.body?.summary);
+        const tooMuch = await call('/crm/collections/promises', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ invoiceId: item.invoiceId, promiseDate: plusDays(3), amount: item.open + 1 }) });
+        ok(tooMuch.status === 422 && tooMuch.body.error.code === 'PROMISE_AMOUNT', 'janji bayar melebihi sisa tagihan ditolak', tooMuch.body);
+        const past = await call('/crm/collections/promises', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ invoiceId: item.invoiceId, promiseDate: '2026-01-01', amount: 1_000_000 }) });
+        ok(past.status === 422 && past.body.error.code === 'PROMISE_DATE', 'janji bayar bertanggal lampau ditolak', past.body);
+        const pr = await call('/crm/collections/promises', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ invoiceId: item.invoiceId, promiseDate: plusDays(3), amount: 1_000_000, note: 'Transfer Jumat' }) });
+        const col2 = await call('/crm/collections', { token: andi, branch: 'ALL' });
+        ok(pr.status === 201 && col2.body.items.find((i) => i.invoiceId === item.invoiceId)?.promise?.status === 'menunggu', 'janji bayar tercatat (menunggu)', pr.body);
+        const bank = banks0.find((b) => b.branchCode === item.branch && b.status === 'aktif' && b.currency === 'IDR');
+        const rcpt = await call(`/sales/invoices/${item.invoiceId}/receipts`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ date: '2026-09-29', amount: 1_000_000, bankAccount: bank.code, reference: 'TRF-JANJI' }) });
+        const col3 = await call('/crm/collections', { token: andi, branch: 'ALL' });
+        ok(rcpt.status === 200 && col3.body.items.find((i) => i.invoiceId === item.invoiceId)?.promise?.status === 'ditepati', 'penerimaan piutang (dijurnal) → janji bayar ditepati', [rcpt.status, rcpt.body?.error, col3.body.items.find((i) => i.invoiceId === item.invoiceId)?.promise]);
+        const lg = await call('/crm/collections/log', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ invoiceId: item.invoiceId, kind: 'telepon', note: 'Konfirmasi sisa tagihan', nextDate: plusDays(7) }) });
+        ok(lg.status === 200 && lg.body.some((a) => a.kind === 'penagihan' && a.status === 'terbuka'), 'log penagihan + tindak lanjut terjadwal', lg.body?.length);
+        ok((await call(`/crm/collections/customers/${newCustId}/hold`, { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ reason: 'uji tahan kredit' }) })).status === 403, 'tahan kredit memerlukan izin kelola pelanggan');
+        const hold = await call(`/crm/collections/customers/${newCustId}/hold`, { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ reason: 'Eskalasi penagihan' }) });
+        const soHeld = await call('/sales/orders', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: newCustId, lines: [{ description: 'Jasa uji', kind: 'jasa', qty: 1, price: 1_000_000 }], submit: true }) });
+        ok(hold.body.status === 'ditahan' && soHeld.body.status === 'menunggu', 'pelanggan ditahan → pesanan baru menunggu persetujuan manajer', [hold.body, soHeld.body?.status, soHeld.body?.approvalReasons]);
+        /* Tiket: keluhan pelanggan & klaim pemasok */
+        const pos = (await call('/purchasing/orders', { token: sari, branch: 'ALL' })).body;
+        const po = pos.find((o) => ['selesai', 'diterima-sebagian'].includes(o.status));
+        const otherSup = (await call('/purchasing/suppliers', { token: sari, branch: 'ALL' })).body.find((x) => x.id !== po.supplierId);
+        const badClaim = await call('/crm/tickets', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ partyType: 'supplier', supplierId: otherSup.id, purchaseOrderId: po.id, subject: 'Barang cacat uji', priority: 'tinggi' }) });
+        ok(badClaim.status === 422 && badClaim.body.error.code === 'TICKET_LINK', 'klaim dengan PO pemasok lain ditolak', badClaim.body);
+        const claim = await call('/crm/tickets', { method: 'POST', token: osmond, branch: 'ALL', body: JSON.stringify({ partyType: 'supplier', supplierId: po.supplierId, purchaseOrderId: po.id, subject: 'Barang cacat uji klaim', category: 'mutu', priority: 'tinggi' }) });
+        const slaH = (new Date(claim.body.slaDueAt).getTime() - new Date(claim.body.createdAt).getTime()) / 3_600_000;
+        ok(claim.status === 201 && /^TKT-2026-\d{4}$/.test(claim.body.code) && claim.body.purchaseOrderNo === po.docNo && Math.round(slaH) === 24, 'klaim mutu ke pemasok tertaut PO; SLA prioritas tinggi 24 jam', claim.body);
+        const inv = col.body.items.find((i) => i.customerId && i.customerId !== item.customerId) ?? item;
+        const tk = await call('/crm/tickets', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ partyType: 'customer', customerId: inv.customerId, invoiceId: inv.invoiceId, subject: 'Selisih nilai tagihan uji', category: 'tagihan', priority: 'kritis' }) });
+        ok(tk.status === 201 && tk.body.invoiceNo === inv.invoiceNo, 'tiket keluhan pelanggan tertaut faktur', tk.body);
+        const jump = await call(`/crm/tickets/${tk.body.id}/status`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ status: 'ditutup' }) });
+        ok(jump.status === 409 && jump.body.error.code === 'TICKET_FLOW', 'alur tiket ditegakkan (baru tidak langsung ditutup)', jump.body);
+        await call(`/crm/tickets/${tk.body.id}/status`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ status: 'diproses' }) });
+        const noRes = await call(`/crm/tickets/${tk.body.id}/status`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ status: 'selesai' }) });
+        ok(noRes.status === 422 && noRes.body.error.code === 'TICKET_RESOLUTION', 'penyelesaian tiket wajib berisi resolusi', noRes.body);
+        await call(`/crm/tickets/${tk.body.id}/status`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ status: 'selesai', resolution: 'Nilai dikoreksi, nota dikirim ulang' }) });
+        const closed = await call(`/crm/tickets/${tk.body.id}/status`, { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ status: 'ditutup', satisfaction: 5 }) });
+        ok(closed.body.status === 'ditutup' && closed.body.satisfaction === 5 && closed.body.activities.length === 3 && closed.body.timeline.length >= 4, 'tiket selesai → ditutup dengan kepuasan; riwayat status tercatat', closed.body?.activities?.length);
+        /* Profil 360 pelanggan & pemasok — angka cocok dengan dokumen yang dijurnal */
+        const cp = await call(`/crm/customers/${inv.customerId}/profile`, { token: sari, branch: 'ALL' });
+        const sumOpen = cp.body.invoices.reduce((t, i) => t + i.open, 0);
+        const agingTotal = cp.body.aging.reduce((t, b) => t + b.value, 0);
+        ok(cp.status === 200 && cp.body.kpi.openAr === sumOpen && agingTotal === sumOpen && cp.body.tickets.some((t) => t.id === tk.body.id) && cp.body.monthly.length === 12, 'profil 360 pelanggan: piutang = Σ faktur terbuka = umur piutang; tiket tampil', { openAr: cp.body?.kpi?.openAr, sumOpen, agingTotal });
+        const cpNew = await call(`/crm/customers/${newCustId}/profile`, { token: sari, branch: 'ALL' });
+        ok(cpNew.body.customer.status === 'ditahan' && cpNew.body.customer.accountManager && cpNew.body.opportunities.length === 1 && cpNew.body.contacts.length === 2 && cpNew.body.orders.length === 1, 'profil pelanggan baru: kontak, peluang, pesanan, status kredit', cpNew.body?.customer);
+        const sp = await call(`/crm/suppliers/${po.supplierId}/profile`, { token: sari, branch: 'ALL' });
+        const sumAp = sp.body.invoices.filter((i) => ['belum-dibayar', 'sebagian'].includes(i.status)).reduce((t, i) => t + i.total - i.paid, 0);
+        ok(sp.status === 200 && sp.body.kpi.claims >= 1 && sp.body.kpi.score > 0 && sp.body.kpi.deliveries >= 1 && sp.body.kpi.openAp === sumAp, 'profil 360 pemasok: kinerja kirim, klaim, skor, hutang terbuka', sp.body?.kpi);
+        ok((await call(`/crm/suppliers/${po.supplierId}/profile`, { token: fitri, branch: 'SBY' })).status === 403, 'profil pemasok memerlukan izin baca CRM/pembelian');
+        const recF = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(recF.body.checks.every((x) => x.ok), 'rekonsiliasi tetap cocok setelah alur CRM lengkap (penerimaan, tagihan kampanye)', recF.body.checks.filter((x) => !x.ok));
+    }
     console.log('Kas & bank: transfer, rekonsiliasi, setoran PPN');
     {
         const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;

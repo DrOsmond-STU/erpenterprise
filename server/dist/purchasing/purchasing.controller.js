@@ -61,7 +61,7 @@ const receiveInput = zod_1.z.object({
 const invoiceInput = zod_1.z.object({
     branch: opt(branch), supplierId: opt(zod_1.z.string().uuid('Pilih pemasok')), orderId: opt(zod_1.z.string().uuid()), invoiceDate: opt(date), dueDate: opt(date),
     supplierInvoiceNo: opt(text(60)), supplierTotal: opt(money), notes: opt(text(500)), lines: opt(zod_1.z.array(line).min(1, 'Minimal satu baris').max(100)),
-    projectId: opt(zod_1.z.string().uuid('Proyek tidak sah').nullable()),
+    projectId: opt(zod_1.z.string().uuid('Proyek tidak sah').nullable()), campaignId: opt(zod_1.z.string().uuid('Kampanye tidak sah').nullable()),
 });
 const paymentInput = zod_1.z.object({
     invoiceId: zod_1.z.string().uuid('Pilih tagihan'), amount: zod_1.z.number().int('Nilai rupiah bulat').positive('Nilai pembayaran harus lebih dari nol').max(1e13),
