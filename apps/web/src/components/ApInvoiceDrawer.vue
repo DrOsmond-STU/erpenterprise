@@ -87,6 +87,7 @@ const journalId = ref<string | null>(null);
           <dt>Pemasok</dt><dd>{{ inv.supplierCode ?? '' }} {{ inv.supplierName }}</dd>
           <dt>No. tagihan pemasok</dt><dd class="code">{{ inv.supplierInvoiceNo ?? '—' }}</dd>
           <dt>Cabang</dt><dd>{{ ctx.nameOf(inv.branch) }}</dd>
+          <template v-if="inv.campaignName"><dt>Kampanye</dt><dd>{{ inv.campaignName }}</dd></template>
           <dt>Tanggal</dt><dd class="num">{{ F.date(inv.date) }}</dd>
           <dt>Jatuh tempo</dt><dd class="num">{{ F.date(inv.dueDate) }}</dd>
           <dt v-if="inv.orderNo">PO</dt><dd v-if="inv.orderNo"><a v-if="inv.orderId" href="#" class="code" data-action="open-po" @click.prevent="emit('openOrder', inv.orderId)">{{ inv.orderNo }}</a><span v-else class="code">{{ inv.orderNo }}</span></dd>

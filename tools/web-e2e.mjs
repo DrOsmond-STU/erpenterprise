@@ -512,6 +512,81 @@ await page.keyboard.press('Escape');
 await page.goto(base + `/lead`); await page.waitForSelector(`[data-col=menang] [data-opp="${oppNo}"]`);
 ok(true, 'peluang otomatis pindah ke kolom menang');
 
+console.log('CRM lengkap: dasbor, prospek, aktivitas, penagihan, tiket, kampanye, profil 360');
+await logout(); await login('sari@knm.co.id'); await salesCtx('ALL');
+await page.goto(base + '/crm'); await page.waitForSelector('[data-crm-pipeline] [data-stage-row]');
+ok(await page.locator('[data-stage-row]').count() === 6 && await page.locator('.worklist-item').count() === 4, 'dasbor CRM: pipeline per tahap & daftar perhatian'); await shot('75-crm-dasbor');
+await page.goto(base + '/prospek'); await page.waitForSelector('[data-table=leads] tbody tr[data-row]');
+ok(await page.locator('[data-table=leads] tbody tr[data-row]').count() >= 6, 'daftar lead dengan skor'); await shot('76-prospek');
+const wtag = Date.now().toString(36);
+await page.click('[data-action=new-lead]'); await page.waitForSelector('[data-field=lead-name]');
+await page.selectOption('#ld-branch', 'CKR'); await page.fill('[data-field=lead-name]', 'Bayu Web'); await page.fill('[data-field=lead-company]', `CV Lead Web ${wtag}`);
+await page.fill('[data-field=lead-phone]', `0812${Date.now() % 100000000}`); await page.fill('[data-field=lead-email]', `bayu.${wtag}@leadweb.id`);
+await page.click('[data-action=save-lead]'); await page.waitForSelector('.drawer [data-activity-form]');
+ok(/^LEAD-2026-\d{4}$/.test((await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim()), 'lead baru tersimpan');
+await page.fill('.drawer [data-field=act-subject]', 'Telepon perkenalan web'); await page.click('.drawer [data-action=add-activity]');
+await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow')?.textContent?.includes('Dihubungi'), null, { timeout: 15000 });
+ok(true, 'aktivitas telepon tercatat → lead dihubungi');
+await page.click('.drawer [data-lead-status=kualifikasi]'); await page.waitForFunction(() => document.querySelector('.drawer .drawer-eyebrow')?.textContent?.includes('Kualifikasi'), null, { timeout: 15000 });
+await page.click('[data-action=convert-lead]'); await page.waitForSelector('[data-field=conv-customer] option:nth-child(2)', { state: 'attached' });
+await page.selectOption('[data-field=conv-customer]', { index: 1 }); await page.click('[data-action=confirm-convert]');
+await page.waitForSelector('.drawer [data-converted]', { timeout: 15000 });
+ok(/OPP-2026-\d{4}/.test(await page.locator('.drawer [data-converted]').innerText()), 'lead dikonversi ke pelanggan yang ada + peluang'); await shot('77-prospek-konversi');
+await page.keyboard.press('Escape');
+
+await page.goto(base + '/aktivitas'); await page.waitForSelector('[data-table=activities]');
+await page.click('[data-action=new-task]'); await page.waitForSelector('[data-field=task-party] option:nth-child(2)', { state: 'attached' });
+await page.selectOption('[data-field=task-party]', { index: 1 }); await page.fill('[data-field=task-subject]', `Kunjungan web ${wtag}`);
+await page.click('[data-action=save-task]'); await page.waitForSelector(`[data-activity="Kunjungan web ${wtag}"]`);
+ok(true, 'tugas baru masuk agenda "tugas saya"'); await shot('78-aktivitas');
+await page.locator(`[data-activity="Kunjungan web ${wtag}"] [data-action=complete-activity]`).click(); await page.waitForSelector('[data-field=done-result]');
+await page.fill('[data-field=done-result]', 'Pelanggan minta penawaran'); await page.check('[data-field=done-follow]'); await page.click('[data-action=confirm-complete]');
+await page.waitForSelector(`[data-activity="Tindak lanjut: Kunjungan web ${wtag}"]`, { timeout: 15000 });
+ok(await page.locator(`[data-activity="Kunjungan web ${wtag}"]`).count() === 0, 'tugas selesai + tindak lanjut otomatis terjadwal');
+
+await page.goto(base + '/penagihan'); await page.waitForSelector('[data-table=collections] tbody tr[data-row]');
+ok(await page.locator('[data-dunning] [data-level]').count() === 5, 'penagihan per tingkat (dunning)'); await shot('79-penagihan');
+await page.locator('[data-table=collections] tbody tr[data-row]').first().click(); await page.waitForSelector('.drawer [data-promise]');
+await page.click('[data-action=new-promise]'); await page.fill('[data-field=promise-amount]', '500000'); await page.click('[data-action=save-promise]');
+await page.waitForFunction(() => document.querySelector('.drawer [data-promise]')?.textContent?.includes('menunggu'), null, { timeout: 15000 });
+ok(true, 'janji bayar tercatat (menunggu penerimaan)');
+await page.click('[data-action=log-collection]'); await page.fill('[data-field=coll-note]', 'Sudah dihubungi bagian keuangan'); await page.click('[data-action=save-collection]');
+await page.waitForFunction(() => document.querySelector('.drawer [data-activities]')?.textContent?.includes('Sudah dihubungi bagian keuangan'), null, { timeout: 15000 });
+ok(true, 'kontak penagihan tercatat di riwayat faktur'); await shot('80-penagihan-detail');
+await page.keyboard.press('Escape');
+
+await page.goto(base + '/tiket'); await page.waitForSelector('[data-table=tickets]');
+await page.click('[data-action=new-ticket]'); await page.waitForSelector('[data-field=ticket-customer] option:nth-child(2)', { state: 'attached' });
+await page.selectOption('[data-field=ticket-customer]', { index: 1 }); await page.fill('[data-field=ticket-subject]', `Keluhan kemasan web ${wtag}`);
+await page.selectOption('[data-field=ticket-priority]', 'tinggi'); await page.click('[data-action=save-ticket]');
+await page.waitForSelector('.drawer [data-ticket-to=diproses]');
+ok(/^TKT-2026-\d{4}$/.test((await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim()), 'tiket keluhan pelanggan dibuat dengan SLA');
+await page.click('.drawer [data-ticket-to=diproses]'); await page.click('[data-action=confirm-ticket-status]');
+await page.waitForSelector('.drawer [data-ticket-to=selesai]'); await page.click('.drawer [data-ticket-to=selesai]');
+await page.fill('[data-field=ticket-resolution]', 'Kemasan diganti, barang dikirim ulang'); await page.click('[data-action=confirm-ticket-status]');
+await page.waitForSelector('.drawer [data-ticket-to=ditutup]');
+ok((await page.locator('.drawer').innerText()).includes('Kemasan diganti'), 'tiket diproses → selesai dengan resolusi'); await shot('81-tiket');
+await page.keyboard.press('Escape');
+
+await page.goto(base + '/pelanggan'); await page.waitForSelector('tbody tr[data-row]');
+await page.locator('tbody tr[data-row]').first().click(); await page.waitForSelector('[data-action=customer-360]');
+await page.click('[data-action=customer-360]'); await page.waitForSelector('[data-profile-kpi] .kpi-tile');
+ok(/\/pelanggan\/[0-9a-f-]{36}$/.test(page.url()) && await page.locator('[data-profile-kpi] .kpi-tile').count() === 4, 'profil 360 pelanggan dari data induk'); await shot('82-profil-pelanggan');
+await page.click('[data-profile-tab=piutang]'); await page.waitForSelector('[data-table=profile-invoices]');
+await page.click('[data-profile-tab=kontak]'); await page.waitForSelector('[data-contacts]');
+ok(true, 'tab piutang & kontak profil pelanggan');
+await page.goto(base + '/pemasok'); await page.waitForSelector('tbody tr[data-row]');
+await page.locator('tbody tr[data-row]').first().click(); await page.waitForSelector('[data-action=supplier-360]');
+await page.click('[data-action=supplier-360]'); await page.waitForSelector('[data-supplier-kpi] .kpi-tile');
+ok((await page.locator('[data-supplier-kpi]').innerText()).includes('/ 100'), 'profil 360 pemasok dengan skor kinerja'); await shot('83-profil-pemasok');
+
+await logout(); await login('osmond@knm.co.id'); await salesCtx('ALL');
+await page.goto(base + '/kampanye'); await page.waitForSelector('[data-table=campaigns] tbody tr[data-row]');
+await page.click('[data-action=new-campaign]'); await page.fill('[data-field=campaign-name]', `Kampanye web ${wtag}`); await page.fill('[data-field=campaign-end]', '2026-12-31'); await page.fill('[data-field=campaign-budget]', '15000000');
+await page.click('[data-action=save-campaign]'); await page.waitForSelector('.drawer .drawer-eyebrow .code');
+ok(/^CMP-2026-\d{3}$/.test((await page.locator('.drawer .drawer-eyebrow .code').innerText()).trim()), 'kampanye baru; biaya dari tagihan pemasok bertanda kampanye'); await shot('84-kampanye');
+await page.keyboard.press('Escape');
+
 console.log('Kas & bank: transfer, rekonsiliasi, setoran pajak');
 const API = 'http://localhost:3000/api/v1';
 const apiToken = async (email) => (await (await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.77.${Date.now() % 200}.${(ipSeq += 1) % 250 + 1}` }, body: JSON.stringify({ email, password: PW }) })).json()).access_token;
@@ -762,6 +837,7 @@ await page.click('.topbar-user button'); await page.click('.user-menu .menu-item
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);
 const nav = await page.locator('.rail-link-text').allInnerTexts();
 ok(!nav.includes('Neraca') && !nav.includes('Jurnal Umum') && !nav.includes('Asisten AI'), 'menu laporan, jurnal & asisten tersembunyi bagi staf gudang', nav);
+ok(!nav.includes('Prospek & Lead') && nav.includes('Tiket Layanan'), 'staf gudang hanya melihat tiket layanan dari menu CRM (klaim pemasok)', nav);
 ok(!(await page.locator('.contextbar').innerText()).includes('Semua cabang'), 'staf gudang tidak mendapat konteks semua cabang');
 await shot('17-gudang');
 

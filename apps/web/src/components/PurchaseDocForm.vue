@@ -43,8 +43,12 @@ const form = ref({
   supplierTotal: '' as string | number,
   notes: d?.notes ?? '',
   projectId: d?.projectId ?? '',
+  campaignId: '',
 });
 const projects = ref<any[]>([]);
+/* Tagihan biaya pemasaran dapat ditandai kampanye CRM → biaya aktual & ROI kampanye. */
+const campaigns = ref<any[]>([]);
+if (props.kind === 'invoice' && !d) get('/crm/campaign-options').then((r) => { campaigns.value = r; }).catch(() => {});
 const loadProjects = async () => { try { projects.value = await get(`/projects/options?branch=${form.value.branch}`); } catch { projects.value = []; } };
 watch(() => form.value.branch, loadProjects, { immediate: true });
 const lines = ref<PurchaseLine[]>(d?.lines?.length
@@ -64,6 +68,7 @@ async function save(submit: boolean) {
   if (props.kind === 'order') { body.orderDate = form.value.date; if (form.value.second) body.expectedDate = form.value.second; body.submit = submit; }
   else {
     body.invoiceDate = form.value.date; if (form.value.second) body.dueDate = form.value.second;
+    if (form.value.campaignId && !d) body.campaignId = form.value.campaignId;
     if (form.value.supplierInvoiceNo) body.supplierInvoiceNo = form.value.supplierInvoiceNo;
     if (form.value.supplierTotal !== '' && !d) body.supplierTotal = Math.round(Number(form.value.supplierTotal));
     body.lines = body.lines.map((l: any) => ({ ...l, productId: null, kind: 'jasa' }));
@@ -101,6 +106,8 @@ const title = computed(() => (d ? `Ubah ${props.kind === 'order' ? 'PO' : 'tagih
       <div v-if="projects.length && !(d && kind === 'invoice')" class="field span-2"><label for="pd-project">Proyek (opsional)</label>
         <select id="pd-project" v-model="form.projectId" class="select" data-field="project"><option value="">— tanpa proyek —</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select>
         <span class="field-hint">Baris jasa/biaya ditandai proyek saat tagihan diposting.</span></div>
+      <div v-if="campaigns.length" class="field span-2"><label for="pd-campaign">Kampanye pemasaran (opsional)</label>
+        <select id="pd-campaign" v-model="form.campaignId" class="select" data-field="campaign"><option value="">— bukan biaya kampanye —</option><option v-for="k in campaigns" :key="k.id" :value="k.id">{{ k.code }} · {{ k.name }}</option></select></div>
       <div class="field form-grid-full"><label>Baris</label><PurchaseLinesEditor v-model="lines" :products="products" :accounts="accounts" :branch="form.branch" :services-only="kind === 'invoice'" /></div>
       <div v-if="errors.length" class="field form-grid-full"><div class="field-hint neg" role="alert"><div v-for="e in errors" :key="e">• {{ e }}</div></div></div>
     </div>

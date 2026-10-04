@@ -336,6 +336,46 @@ pemasok & PO-nya.
   `sales.order.create`). Migrasi `0019_crm.sql` mengisi peluang contoh di semua tahap dan
   penawaran terkirim.
 
+## CRM lengkap (`/crm`, `/prospek`, `/aktivitas`, `/penagihan`, `/tiket`, `/kampanye`)
+
+Menu **CRM** menyatukan hubungan pelanggan & pemasok dan terhubung ke penjualan, piutang,
+pembelian, dan buku besar:
+
+- **Dasbor CRM** — pipeline per tahap, perkiraan closing 6 bulan, PIC penjualan, lead per
+  status/sumber, pelanggan teratas, penjualan bulan & tahun berjalan (dari faktur terbit),
+  piutang jatuh tempo & janji bayar, penawaran akan kedaluwarsa, tiket per prioritas & SLA.
+- **Prospek & lead** — lead wajib bertelepon/email, deteksi duplikat, skor lead (kelengkapan,
+  sumber, kampanye, nilai, aktivitas). Status baru → dihubungi (otomatis saat aktivitas kontak
+  dicatat) → kualifikasi → **konversi**: pelanggan baru (perlu `sales.customer.manage`, plafon
+  bawaan 0) atau yang ada + kontak utama + peluang tahap kualifikasi; riwayat aktivitas ikut
+  pindah. Diskualifikasi wajib beralasan.
+- **Kampanye** — anggaran, lead, konversi, pipeline, nilai menang. **Biaya aktual = tagihan
+  pemasok langsung bertanda kampanye yang sudah diposting** (beban di buku besar), sehingga
+  biaya per lead dan ROI cocok dengan laba rugi.
+- **Kontak** pelanggan & pemasok (banyak per pihak; kontak utama menyinkronkan PIC/telepon/email
+  data induk).
+- **Aktivitas & tugas** — telepon, rapat, email, kunjungan, tugas, penagihan, catatan; wajib
+  tertaut ke pelanggan, pemasok, lead, peluang, faktur, atau tiket. Agenda “tugas saya”
+  (terlambat/hari ini/mendatang), selesaikan dengan hasil + tindak lanjut otomatis.
+- **Penagihan** — faktur jatuh tempo & ≤ 7 hari per tingkat (pengingat, teguran 1/2,
+  eskalasi > 90 hari), kontak terakhir, catat kontak + tindak lanjut, **janji bayar** (≤ sisa
+  tagihan; status menunggu/ditepati/diingkari dihitung dari penerimaan piutang yang dijurnal),
+  dan **tahan kredit** pelanggan (status ditahan → pesanan baru menunggu persetujuan manajer).
+- **Tiket layanan** — keluhan pelanggan (tertaut faktur/pesanan, divalidasi milik pelanggan)
+  dan klaim ke pemasok (tertaut PO pemasok tsb.). SLA menurut prioritas (kritis 4 jam, tinggi
+  24, sedang 72, rendah 120), alur baru → diproses/menunggu → selesai (resolusi wajib) →
+  ditutup (kepuasan 1–5).
+- **Profil 360** pelanggan (`/pelanggan/:id`): pendapatan YTD vs tahun lalu, piutang & umur
+  piutang (= Σ faktur terbuka), posisi plafon, rata-rata hari bayar, 12 bulan pendapatan,
+  peluang, penawaran, pesanan, faktur + tingkat penagihan, penerimaan (tautan jurnal), janji
+  bayar, tiket, aktivitas, kontak, proyek. Profil 360 **pemasok** (`/pemasok/:id`): pembelian
+  YTD, hutang terbuka/jatuh tempo, PO berjalan, ketepatan kirim, rata-rata waktu kirim, RFQ
+  (diundang/menawar/menang), klaim, dan skor pemasok.
+- Izin baru: `crm.collection` (staf keuangan, akuntan senior, manajer), `crm.ticket` (staf
+  keuangan, gudang, manajer), `crm.campaign` (manajer). Migrasi `0020_crm_full.sql` membuat
+  tabel kampanye, lead, kontak (diisi dari PIC pelanggan/pemasok), aktivitas, tiket, janji bayar
+  beserta RLS dan data contoh.
+
 ## Anggaran & proyek (`/anggaran`, `/proyek`)
 
 - **Anggaran** satu per cabang & tahun: baris per akun detail (beban, pendapatan, atau aset

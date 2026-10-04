@@ -184,6 +184,7 @@ const goOrder = (id: string) => router.push({ path: '/pesanan-pembelian', query:
       </template>
       <button v-if="canPropose" class="btn" data-action="propose-bank" @click="openBank"><Icon name="vault" /> {{ detail.bank ? 'Ubah rekening' : 'Tetapkan rekening' }}</button>
       <button v-if="canManage" class="btn" @click="openEdit(detail)"><Icon name="edit" /> Ubah</button>
+      <button v-if="session.can('crm.read|purchasing.invoice.read')" class="btn" data-action="supplier-360" @click="router.push(`/pemasok/${detail.id}`)"><Icon name="trending" /> Profil 360</button>
       <div class="toolbar-spacer"></div><button class="btn btn-ghost" @click="detail = null">Tutup</button>
     </template>
   </Drawer>

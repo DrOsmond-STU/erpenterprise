@@ -6,7 +6,9 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
+import { useSession } from '@/stores/session';
 import BranchTag from '@/components/BranchTag.vue';
+import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -14,6 +16,7 @@ import ReportHead from '@/components/ReportHead.vue';
 
 const router = useRouter();
 const ctx = useContext();
+const session = useSession();
 const { data, loading } = useLoader<any>(() => get('/sales/receivables'));
 const maxBucket = computed(() => Math.max(1, ...(data.value?.aging ?? []).map((b: any) => b.value)));
 const TONES = ['var(--ok)', 'var(--accent)', 'var(--warn)', '#e07a3a', 'var(--danger)'];
@@ -27,7 +30,9 @@ const goInvoice = (id: string) => router.push({ path: '/faktur', query: { id } }
 </script>
 
 <template>
-  <ReportHead title="Piutang Usaha" :sub="data ? `Posisi per ${F.date(data.asOf)} — sisa tagihan dari faktur terbit dikurangi penerimaan sampai tanggal tersebut, sama dengan saldo akun piutang usaha di buku besar.` : 'Memuat…'" />
+  <ReportHead title="Piutang Usaha" :sub="data ? `Posisi per ${F.date(data.asOf)} — sisa tagihan dari faktur terbit dikurangi penerimaan sampai tanggal tersebut, sama dengan saldo akun piutang usaha di buku besar.` : 'Memuat…'">
+    <button v-if="session.can('crm.collection|sales.invoice.read')" class="btn" data-action="open-collections" @click="router.push('/penagihan')"><Icon name="bell" /> Penagihan & janji bayar</button>
+  </ReportHead>
   <div v-if="loading && !data" class="loading">Memuat…</div>
   <template v-else-if="data">
     <div class="kpi-row" style="margin-bottom:var(--sp-4)">

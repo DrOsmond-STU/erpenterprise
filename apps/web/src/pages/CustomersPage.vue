@@ -144,7 +144,7 @@ const goOrder = (id: string) => router.push({ path: '/pesanan-penjualan', query:
         <tr v-if="!detail.orders.length" class="is-static"><td class="muted">Belum ada pesanan.</td></tr>
       </tbody></table></div>
     </div>
-    <template #foot><button v-if="canManage" class="btn" @click="openEdit(detail)"><Icon name="edit" /> Ubah</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" @click="detail = null">Tutup</button></template>
+    <template #foot><button v-if="session.can('crm.read|sales.invoice.read')" class="btn btn-primary" data-action="customer-360" @click="router.push(`/pelanggan/${detail.id}`)"><Icon name="users" /> Profil 360</button><button v-if="canManage" class="btn" @click="openEdit(detail)"><Icon name="edit" /> Ubah</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" @click="detail = null">Tutup</button></template>
   </Drawer>
 
   <Modal v-if="showForm" :title="editing ? `Ubah pelanggan ${editing.code}` : 'Pelanggan baru'" subtitle="Perubahan plafon, termin, atau status wajib beralasan dan tercatat di jejak audit." width="720px" @close="showForm = false">

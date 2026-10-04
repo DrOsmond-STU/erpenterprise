@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { get, post } from '@/lib/api';
 import { ACTIVITY_LABEL, STAGE_COLUMNS, STAGE_LABEL } from '@/lib/crm';
 import { errorList } from '@/lib/errors';
@@ -15,6 +16,7 @@ import Pill from './Pill.vue';
 const props = defineProps<{ id: string }>();
 const emit = defineEmits<{ close: []; changed: []; edit: [doc: any]; newQuote: [opp: any]; openQuote: [id: string] }>();
 const session = useSession();
+const router = useRouter();
 const toast = useToast();
 const o = ref<any>(null);
 const busy = ref(false);
@@ -65,7 +67,7 @@ async function addActivity() {
       <div class="section">
         <span class="section-title">Rincian</span>
         <dl class="deflist">
-          <dt>Pelanggan</dt><dd>{{ o.companyName }}<span v-if="!o.customerId" class="muted"> (prospek — belum terdaftar)</span></dd>
+          <dt>Pelanggan</dt><dd><a v-if="o.customerId" href="#" class="link-btn" data-link="customer-profile" @click.prevent="router.push(`/pelanggan/${o.customerId}`)">{{ o.companyName }}</a><template v-else>{{ o.companyName }}</template><span v-if="!o.customerId" class="muted"> (prospek — belum terdaftar)</span></dd>
           <dt v-if="o.contactName">Kontak</dt><dd v-if="o.contactName">{{ o.contactName }}<template v-if="o.contactPhone"> · {{ o.contactPhone }}</template></dd>
           <dt>Nilai tertimbang</dt><dd class="num">{{ F.rp(o.weighted) }}</dd>
           <dt>Sumber</dt><dd>{{ o.source }}</dd>
