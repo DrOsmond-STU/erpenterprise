@@ -114,7 +114,7 @@
         <button data-rtab="neraca" aria-pressed="${name === 'neraca'}">Neraca</button><button data-rtab="laba-rugi" aria-pressed="${name === 'laba-rugi'}">Laba rugi</button></div>` : '';
     const title = forcedMode === 'branch' ? `Laporan Cabang — ${meta.title}` : forcedMode === 'consolidated' ? `Laporan Konsolidasi — ${meta.title}` : meta.title;
     root.innerHTML = pageHead(title, `${companyName()}${rs.mode === 'single' ? ` · ${branchName()}` : rs.mode === 'branch' ? ' · seluruh cabang' : ' beserta entitas anak'} — sumber: buku besar terposting.`,
-      `<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button><button class="btn" data-print>${icon('print')} Cetak</button>`) +
+      `<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button><button class="btn" data-print-report>${icon('print')} Cetak</button>`) +
       `<article class="card report-card">
         <div class="toolbar report-toolbar">
           ${forcedTabs}${modeSwitch}

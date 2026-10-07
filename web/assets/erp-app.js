@@ -16,13 +16,13 @@
     { label: 'Ikhtisar', items: [{ id: 'dasbor', label: 'Dasbor', icon: 'grid', perm: 'dashboard', view: 'dashboard' }, { id: 'persetujuan', label: 'Kotak Persetujuan', icon: 'inbox', view: 'approvals', perm: 'dashboard' }] },
     { label: 'Data Master', items: [E('produk', 'products', 'database', 'Produk & Layanan'), E('gudang', 'warehouses', 'building'), E('bom', 'boms', 'tree', 'Bill of Materials')] },
     { label: 'CRM', items: [{ id: 'lead', entity: 'leads', icon: 'target', label: 'Lead & Peluang', view: 'crm' }] },
-    { label: 'Penjualan', items: [E('penawaran', 'quotations', 'quote'), E('pesanan-penjualan', 'sales_orders', 'cart'), E('faktur', 'sales_invoices', 'invoice'), E('penerimaan', 'customer_receipts', 'wallet'), E('pelanggan', 'customers', 'building'), { id: 'umur-piutang', label: 'Umur Piutang', icon: 'clock', view: 'report', report: 'umur-piutang', perm: 'sales' }] },
-    { label: 'POS / Kasir', items: [{ id: 'kasir', entity: 'pos_sales', icon: 'barcode', label: 'Kasir', view: 'pos' }] },
-    { label: 'Pembelian', items: [E('permintaan-pembelian', 'purchase_requests', 'clipboard'), E('rfq', 'rfqs', 'scale'), E('pesanan-pembelian', 'purchase_orders', 'truck'), E('tagihan', 'purchase_bills', 'invoice'), E('pembayaran', 'supplier_payments', 'credit-card'), E('pemasok', 'suppliers', 'handshake'), { id: 'umur-hutang', label: 'Umur Hutang', icon: 'clock', view: 'report', report: 'umur-hutang', perm: 'purchasing' }] },
-    { label: 'Inventaris', items: [{ id: 'stok', label: 'Stok & Valuasi', icon: 'boxes', view: 'report', report: 'persediaan', perm: 'inventory' }, E('mutasi', 'stock_moves', 'transfer'), E('penyesuaian', 'stock_adjustments', 'edit'), E('transfer-stok', 'stock_transfers', 'transfer'), E('rantai-pasok', 'shipments', 'link')] },
-    { label: 'Produksi', items: [{ id: 'perintah-kerja', entity: 'work_orders', icon: 'factory', label: 'Perintah Kerja', view: 'wo' }] },
+    { label: 'Penjualan', items: [E('penawaran', 'quotations', 'quote'), E('pesanan-penjualan', 'sales_orders', 'cart'), E('faktur', 'sales_invoices', 'invoice'), E('penerimaan', 'customer_receipts', 'wallet'), E('retur-penjualan', 'sales_returns', 'transfer'), E('pelanggan', 'customers', 'building'), { id: 'kartu-piutang', label: 'Kartu Piutang', icon: 'ledger', view: 'partner-customer', perm: 'sales' }, { id: 'umur-piutang', label: 'Umur Piutang', icon: 'clock', view: 'report', report: 'umur-piutang', perm: 'sales' }] },
+    { label: 'POS / Kasir', items: [{ id: 'kasir', entity: 'pos_sales', icon: 'barcode', label: 'Kasir', view: 'pos' }, E('shift-kasir', 'pos_shifts', 'clock', 'Shift Kasir')] },
+    { label: 'Pembelian', items: [E('permintaan-pembelian', 'purchase_requests', 'clipboard'), E('rfq', 'rfqs', 'scale'), E('pesanan-pembelian', 'purchase_orders', 'truck'), E('tagihan', 'purchase_bills', 'invoice'), E('pembayaran', 'supplier_payments', 'credit-card'), E('retur-pembelian', 'purchase_returns', 'transfer'), E('pemasok', 'suppliers', 'handshake'), { id: 'kartu-hutang', label: 'Kartu Hutang', icon: 'ledger', view: 'partner-supplier', perm: 'purchasing' }, { id: 'umur-hutang', label: 'Umur Hutang', icon: 'clock', view: 'report', report: 'umur-hutang', perm: 'purchasing' }] },
+    { label: 'Inventaris', items: [{ id: 'stok', label: 'Stok & Valuasi', icon: 'boxes', view: 'report', report: 'persediaan', perm: 'inventory' }, E('mutasi', 'stock_moves', 'transfer'), E('penyesuaian', 'stock_adjustments', 'edit'), E('transfer-stok', 'stock_transfers', 'transfer'), E('lokasi-rak', 'warehouse_bins', 'boxes', 'Lokasi Rak'), E('penempatan', 'product_locations', 'link', 'Penempatan Barang'), E('rantai-pasok', 'shipments', 'link')] },
+    { label: 'Produksi', items: [{ id: 'perintah-kerja', entity: 'work_orders', icon: 'factory', label: 'Perintah Kerja', view: 'wo' }, { id: 'mrp', label: 'Perencanaan Bahan (MRP)', icon: 'clipboard', view: 'mrp', perm: 'inventory' }] },
     { label: 'Proyek', items: [E('proyek', 'projects', 'gantt'), E('tugas-proyek', 'project_tasks', 'calendar')] },
-    { label: 'Keuangan', items: [{ id: 'bagan-akun', entity: 'accounts', icon: 'tree', label: 'Bagan Akun', view: 'coa' }, E('jurnal', 'journals', 'ledger'), E('kas-bank', 'bank_accounts', 'vault'), E('kas-transaksi', 'cash_transactions', 'banknote'), E('transfer-bank', 'bank_transfers', 'transfer'), E('anggaran', 'budgets', 'piechart'), E('pusat-biaya', 'cost_centers', 'target'), E('periode', 'fiscal_periods', 'calendar')] },
+    { label: 'Keuangan', items: [{ id: 'bagan-akun', entity: 'accounts', icon: 'tree', label: 'Bagan Akun', view: 'coa' }, E('jurnal', 'journals', 'ledger'), E('kas-bank', 'bank_accounts', 'vault'), E('kas-transaksi', 'cash_transactions', 'banknote'), E('transfer-bank', 'bank_transfers', 'transfer'), { id: 'rekonsiliasi', entity: 'bank_reconciliations', icon: 'file-check', label: 'Rekonsiliasi Bank', view: 'recon' }, E('mata-uang', 'currencies', 'banknote', 'Mata Uang'), E('kurs', 'exchange_rates', 'transfer', 'Kurs Valuta'), E('anggaran', 'budgets', 'piechart'), E('pusat-biaya', 'cost_centers', 'target'), E('periode', 'fiscal_periods', 'calendar')] },
     { label: 'Laporan Keuangan', items: [
       { id: 'lap-neraca', label: 'Neraca', icon: 'scale', view: 'report', report: 'neraca', perm: 'reports' },
       { id: 'lap-laba-rugi', label: 'Laba Rugi', icon: 'bar-chart', view: 'report', report: 'laba-rugi', perm: 'reports' },
@@ -32,7 +32,9 @@
       { id: 'lap-cabang', label: 'Laporan Cabang', icon: 'building', view: 'branch', perm: 'reports' },
       { id: 'lap-konsolidasi', label: 'Konsolidasi Grup', icon: 'link', view: 'consolidated', perm: 'reports', minLevel: 3, consolidate: true },
       { id: 'lap-anggaran', label: 'Anggaran vs Realisasi', icon: 'piechart', view: 'report', report: 'anggaran', perm: 'reports' },
+      { id: 'lap-pajak', label: 'Rekap Pajak', icon: 'file-check', view: 'tax', perm: 'reports' },
     ] },
+    { label: 'Analitik', items: [{ id: 'analitik', label: 'BI & Analitik', icon: 'bar-chart', view: 'analytics', perm: 'reports' }, { id: 'bsc', label: 'Balanced Scorecard', icon: 'target', view: 'bsc', perm: 'reports' }, E('sasaran-bsc', 'bsc_metrics', 'edit', 'Sasaran BSC')] },
     { label: 'SDM', items: [E('karyawan', 'employees', 'users'), E('kehadiran', 'attendance', 'calendar'), E('cuti', 'leave_requests', 'clock', 'Cuti & Izin'), E('penggajian', 'payroll_runs', 'banknote')] },
     { label: 'Aset', items: [E('aset', 'fixed_assets', 'landmark'), E('penyusutan', 'depreciation_runs', 'piechart'), E('pemeliharaan', 'maintenance_orders', 'wrench')] },
     { label: 'Dokumen & Alur Kerja', items: [E('dokumen', 'documents', 'folder'), E('alur-kerja', 'workflows', 'workflow')] },
@@ -121,6 +123,7 @@
     state.csrf = me.csrf;
     if (me.mfaPending) return renderLogin('mfa');
     if (me.mustChangePassword) return renderLogin('change');
+    if (me.user.portal) { state.meta = await api('GET', '/api/meta').catch(() => ({ status: {}, companies: [], branches: [], today: new Date().toISOString().slice(0, 10) })); startIdleTimer(); return ERP.more.renderPortal(); }
     try {
       state.meta = await api('GET', '/api/meta');
     } catch (err) {
@@ -161,7 +164,9 @@
     return `<header class="topbar">
       <div class="crumbs">${group ? `<span class="crumbs-trail">${esc(group)}</span><span class="crumbs-sep crumbs-trail">/</span>` : ''}<b>${esc(it?.label || state.meta.entities[it?.entity]?.label || '')}</b></div>
       <div class="topbar-spacer"></div>
-      <button class="omni" data-open-palette aria-label="Cari menu">${icon('search')}<span class="omni-text">Cari menu…</span><span class="kbd">Ctrl K</span></button>
+      <button class="omni" data-open-palette aria-label="Cari menu dan dokumen">${icon('search')}<span class="omni-text">Cari menu, dokumen, pelanggan…</span><span class="kbd">Ctrl K</span></button>
+      <button class="btn btn-icon btn-ghost" data-open-assistant aria-label="Asisten data" title="Asisten data">${icon('sparkle')}</button>
+      <button class="btn btn-icon btn-ghost has-badge" data-open-notif aria-label="Notifikasi" title="Notifikasi">${icon('bell')}<i class="notif-count" data-notif-count hidden></i></button>
       <button class="btn btn-icon btn-ghost" data-open-user aria-label="Menu pengguna"><span class="avatar">${esc(state.me.user.initials)}</span></button>
     </header>`;
   }
@@ -187,6 +192,7 @@
     app.innerHTML = `${renderRail()}<div class="main">${renderTopbar()}${renderContextBar()}<main class="content" id="content"><div class="content-inner" data-view-root></div></main></div>`;
     if (location.hash !== `#/${state.view}`) history.replaceState(null, '', `#/${state.view}`);
     renderView();
+    ERP.more.loadNotifications();
   }
 
   async function renderView() {
@@ -197,7 +203,14 @@
     const it = findItem(state.view) || findItem('dasbor');
     try {
       switch (it.view) {
-        case 'dashboard': return await V().dashboard(root);
+        case 'dashboard': return await ERP.more.dashboard(root);
+        case 'analytics': return await ERP.more.analytics(root);
+        case 'bsc': return await ERP.more.bsc(root);
+        case 'mrp': return await ERP.more.mrp(root);
+        case 'recon': return await ERP.more.recon(root);
+        case 'tax': return await ERP.more.taxReport(root);
+        case 'partner-customer': return await ERP.more.partnerReport(root, 'customer');
+        case 'partner-supplier': return await ERP.more.partnerReport(root, 'supplier');
         case 'approvals': return await V().approvals(root);
         case 'report': return await V().report(root, it.report);
         case 'branch': return await V().report(root, state.branchTab || 'laba-rugi', 'branch');
@@ -220,6 +233,7 @@
 
   function setView(id) {
     if (!findItem(id)) id = 'dasbor';
+    if (id !== 'rekonsiliasi') state.reconId = null;
     state.view = id;
     closeOverlay();
     render();
@@ -236,15 +250,24 @@
   /* --- Palet perintah sederhana --------------------------------------------- */
   function openPalette() {
     const items = navItems().flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })));
-    const m = openModal({ title: 'Cari menu', body: `<input class="input" type="search" data-palette-input placeholder="Ketik nama menu…" aria-label="Cari menu"><div class="worklist palette-list" data-palette-list></div>`, foot: '<span class="field-hint">Enter untuk membuka · Esc untuk menutup</span>' });
-    const draw = (q = '') => {
-      $('[data-palette-list]', m).innerHTML = items.filter((i) => `${i.label} ${i.group}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12)
+    const m = openModal({ title: 'Cari', body: `<input class="input" type="search" data-palette-input placeholder="Ketik nama menu, nomor dokumen, pelanggan, barang…" aria-label="Cari menu dan dokumen"><div class="worklist palette-list" data-palette-list></div>`, foot: '<span class="field-hint">Enter untuk membuka · Esc untuk menutup</span>' });
+    let seq = 0;
+    const draw = async (q = '') => {
+      const my = ++seq;
+      const menus = items.filter((i) => `${i.label} ${i.group}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
         .map((i) => `<button class="worklist-item" data-nav="${i.id}"><span class="wl-icon">${icon(i.icon)}</span><span class="worklist-body"><span class="worklist-title">${esc(i.label)}</span><span class="worklist-meta">${esc(i.group)}</span></span></button>`).join('');
+      $('[data-palette-list]', m).innerHTML = (menus ? `<div class="palette-group-label">Menu</div>${menus}` : '') + (q.length >= 2 ? '<div class="palette-group-label" data-rec-head>Dokumen & data · mencari…</div>' : '');
+      if (q.length < 2) return;
+      const recs = await ERP.more.searchRecords(q);
+      if (my !== seq || !$('[data-palette-list]', m)) return;
+      const head = $('[data-rec-head]', m);
+      if (head) head.outerHTML = `<div class="palette-group-label">Dokumen & data (${recs.length})</div>` + recs.map((r) => `<button class="worklist-item" data-open="${esc(r.entity)}:${r.id}"><span class="wl-icon">${icon('file-check')}</span><span class="worklist-body"><span class="worklist-title">${esc(r.label || '')}</span><span class="worklist-meta">${esc(r.entityLabel)}${r.sub ? ` · ${esc(r.sub)}` : ''}</span></span></button>`).join('');
     };
     draw();
     const inp = $('[data-palette-input]', m);
-    inp.addEventListener('input', () => draw(inp.value));
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('[data-nav]', m)?.click(); });
+    let tmr = null;
+    inp.addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(() => draw(inp.value), 220); });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('[data-nav], [data-open]', m)?.click(); });
   }
 
   function openUserMenu(anchor) {
@@ -333,6 +356,7 @@
     if ((el = q('[data-delete]'))) { const [k, id] = el.dataset.delete.split(':'); R().removeRecord(k, Number(id)); return; }
     if ((el = q('[data-action-run]'))) { const [k, id, a] = el.dataset.actionRun.split(':'); R().runAction(k, Number(id), a); return; }
     if ((el = q('[data-export]'))) { R().exportCsv(el.dataset.export); return; }
+    if (q('[data-stop]')) return;
     if ((el = q('[data-open]'))) { const [k, id] = el.dataset.open.split(':'); R().openRecord(k, Number(id)); return; }
     if ((el = q('[data-gl]'))) {
       state.reportState = state.reportState || {};
@@ -440,7 +464,8 @@
 
   ERP.onUnauthorized = () => { if (state.me) { state.me = null; stopIdleTimer(); closeOverlay(); renderLogin('password', 'Sesi Anda berakhir. Silakan masuk kembali.'); } };
   ERP.onMustChange = () => renderLogin('change');
-  ERP.app = { render, renderView, setView, refreshView, boot, viewForEntity };
+  const canSee = (id) => { const it = findItem(id); return !!it && allowed(it); };
+  ERP.app = { render, renderView, setView, refreshView, boot, viewForEntity, canSee };
 
   applyTheme();
   boot();

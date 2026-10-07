@@ -37,6 +37,7 @@
         </div>
         <div class="page-actions">
           ${extraTools}
+          ${state.meta.importable?.includes(key) ? `<button class="btn" data-import="${key}">${icon('arrow-up')} Impor CSV</button>` : ''}
           <button class="btn" data-export="${key}">${icon('download')} Ekspor CSV</button>
           ${e.canWrite ? `<button class="btn btn-primary" data-new="${key}">${icon('plus')} ${esc(e.one ? e.one[0].toUpperCase() + e.one.slice(1) : 'Data')} baru</button>` : ''}
         </div>
@@ -79,9 +80,11 @@
     }
     const pages = Math.max(1, Math.ceil(data.total / size));
     const sortKey = st.sort || e.sort, dir = st.dir || e.sortDir;
-    $('thead', card).innerHTML = `<tr>${cols.map((c) => `<th class="${isNum(c) ? 'ta-r' : ''}"><button class="th-sort" data-sort="${esc(c.name)}" data-active="${sortKey === c.name}">${esc(c.label)}<span class="sort-caret">${icon(sortKey === c.name && dir === 'desc' ? 'chevron-down' : 'chevron-up')}</span></button></th>`).join('')}</tr>`;
-    $('tbody', card).innerHTML = data.rows.length ? data.rows.map((r) => `<tr data-open="${key}:${r.id}" tabindex="0">${cols.map((c) => `<td class="${isNum(c) ? 'ta-r ' : ''}${c.cls || ''}">${c.computed && c.type === 'money' ? money(r[c.name]) : c.computed ? esc(num(r[c.name])) : fieldHtml(c, r)}</td>`).join('')}</tr>`).join('')
-      : `<tr><td colspan="${cols.length}"><div class="empty"><div class="empty-card"><span class="empty-title">Belum ada data</span><span class="empty-note">${st.q || st.status !== 'semua' ? 'Ubah kata kunci atau lepas saringan.' : 'Tambahkan data pertama dengan tombol di kanan atas.'}</span></div></div></td></tr>`;
+    const selectable = !!e.number || ERP.more.bulkActions(key).length > 0;
+    st.selected = st.selected || new Set();
+    $('thead', card).innerHTML = `<tr>${selectable ? `<th class="col-check"><input type="checkbox" data-check-all aria-label="Pilih semua baris di halaman ini" ${data.rows.length && data.rows.every((r) => st.selected.has(r.id)) ? 'checked' : ''}></th>` : ''}${cols.map((c) => `<th class="${isNum(c) ? 'ta-r' : ''}"><button class="th-sort" data-sort="${esc(c.name)}" data-active="${sortKey === c.name}">${esc(c.label)}<span class="sort-caret">${icon(sortKey === c.name && dir === 'desc' ? 'chevron-down' : 'chevron-up')}</span></button></th>`).join('')}</tr>`;
+    $('tbody', card).innerHTML = data.rows.length ? data.rows.map((r) => `<tr data-open="${key}:${r.id}" tabindex="0" ${st.selected.has(r.id) ? 'aria-selected="true"' : ''}>${selectable ? `<td class="col-check" data-stop><input type="checkbox" data-row-check="${r.id}" aria-label="Pilih ${esc(r.number || r.code || r.id)}" ${st.selected.has(r.id) ? 'checked' : ''}></td>` : ''}${cols.map((c) => `<td class="${isNum(c) ? 'ta-r ' : ''}${c.cls || ''}">${c.computed && c.type === 'money' ? money(r[c.name]) : c.computed ? esc(num(r[c.name])) : fieldHtml(c, r)}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${cols.length + 1}"><div class="empty"><div class="empty-card"><span class="empty-title">Belum ada data</span><span class="empty-note">${st.q || st.status !== 'semua' ? 'Ubah kata kunci atau lepas saringan.' : 'Tambahkan data pertama dengan tombol di kanan atas.'}</span></div></div></td></tr>`;
     if (e.statusField) {
       const opts = e.fields.find((f) => f.name === e.statusField).options || [];
       const total = Object.values(data.statusCounts).reduce((a, b) => a + b, 0);
@@ -92,6 +95,7 @@
     $('[data-pageinfo]', card).textContent = `Halaman ${st.page} dari ${pages}`;
     $('[data-page="prev"]', card).disabled = st.page <= 1;
     $('[data-page="next"]', card).disabled = st.page >= pages;
+    ERP.more.renderBulkbar(key);
   }
 
   /* --- Laci rekaman ------------------------------------------------------------- */
@@ -127,18 +131,20 @@
     let extra = '';
     if (key === 'projects') extra = await projectGantt(r.id);
     if (key === 'roles') extra = `<div class="section"><button class="btn" data-nav="peran">${icon('shield')} Buka matriks izin</button></div>`;
+    if (key === 'bank_reconciliations') extra = `<div class="section"><button class="btn btn-primary" data-recon-open="${r.id}">${icon('check')} Cocokkan mutasi dengan rekening koran</button></div>`;
 
     const actions = (r.__actions || []).map((a) => `<button class="btn ${/approve|post|pay|complete|activate/.test(a.name) ? 'btn-primary' : /void|reject|cancel|reverse|dispose/.test(a.name) ? 'btn-danger-ghost' : ''}" data-action-run="${key}:${r.id}:${a.name}" ${a.sodBlocked ? 'disabled title="Pemisahan tugas: pembuat dokumen tidak dapat menyetujui sendiri"' : ''}>${esc(a.label)}</button>`).join('');
     openDrawer({
       eyebrow: `<span class="code">${esc(r.number || r.code || `#${r.id}`)}</span>${e.statusField ? pill(r[e.statusField]) : ''}${r.__masked ? ' <span class="pill" data-tone="warn"><i class="pill-dot"></i>Data sensitif disamarkan</span>' : ''}`,
       title: String(title), subtitle: e.label,
       body: `${r.approval_note ? `<div class="section"><div class="notice" data-tone="${r.status === 'menunggu' ? 'warn' : 'info'}">${icon('alert')} ${esc(r.approval_note)}</div></div>` : ''}
-        <div class="section"><span class="section-title">Rincian</span><dl class="deflist">${details}</dl></div>${linesHtml}${extra}${journals}${auditHtml}`,
+        <div class="section"><span class="section-title">Rincian</span><dl class="deflist">${details}</dl></div>${linesHtml}${extra}${journals}<div class="section" data-attachments="${key}:${r.id}"></div>${auditHtml}`,
       foot: `${actions}<div class="toolbar-spacer"></div>
         ${r.__editable && e.canWrite ? `<button class="btn" data-edit="${key}:${r.id}">${icon('edit')} Ubah</button><button class="btn btn-ghost btn-danger-ghost" data-delete="${key}:${r.id}" aria-label="Hapus">Hapus</button>` : ''}
-        <button class="btn btn-ghost" data-print>${icon('print')} Cetak</button>`,
+        <button class="btn btn-ghost" data-print-record="${key}:${r.id}">${icon('print')} Cetak</button>`,
     });
     state.drawerRecord = { key, id: r.id, row: r };
+    ERP.more.loadAttachments(key, r.id);
   }
 
   function actionLabel(e, action) {
@@ -185,6 +191,7 @@
     $$('select[data-ref]', form).forEach((s) => { const f = e.fields.find((x) => x.name === s.name); if (f && row[`${f.name}__label`]) s.dataset.label = row[`${f.name}__label`]; });
     if (e.lines) $$('[data-lines] tr[data-line]', form).forEach((tr, i) => $$('select[data-ref]', tr).forEach((s) => { const l = row.lines?.[i]; if (l?.[`${s.name}__label`]) s.dataset.label = l[`${s.name}__label`]; }));
     await F().hydrateRefs(form, row);
+    ERP.more.bindFx(form);
     if (e.lines) F().bindLines(form, e);
     // Rujukan bergantung (mis. faktur milik pelanggan terpilih).
     form.addEventListener('change', async (ev) => {
