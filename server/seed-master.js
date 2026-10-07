@@ -1,7 +1,7 @@
 /* Data induk awal: peran, perusahaan, cabang, bagan akun, pengguna. */
 
 /* Tingkat izin: 0 tanpa akses, 1 lihat, 2 ubah, 3 setujui/posting, 4 admin penuh. */
-const ALL = (lvl) => Object.fromEntries(['dashboard', 'master', 'crm', 'sales', 'pos', 'purchasing', 'inventory', 'production', 'projects', 'finance', 'reports', 'hr', 'assets', 'documents', 'compliance', 'pii', 'admin'].map((m) => [m, lvl]));
+const ALL = (lvl) => Object.fromEntries(['dashboard', 'master', 'crm', 'sales', 'pos', 'purchasing', 'inventory', 'production', 'projects', 'finance', 'reports', 'hr', 'assets', 'documents', 'compliance', 'pii', 'admin', 'portal'].map((m) => [m, lvl]));
 
 export const ROLES = [
   { code: 'ADMIN', name: 'Administrator Sistem', description: 'Akses penuh termasuk konfigurasi keamanan, pengguna, dan izin.', perms: ALL(4) },
@@ -12,7 +12,9 @@ export const ROLES = [
   { code: 'GUDANG', name: 'Staf Gudang & Produksi', description: 'Mutasi stok, transfer, perintah kerja.', perms: { dashboard: 1, master: 1, inventory: 2, production: 2, purchasing: 2, documents: 1 } },
   { code: 'HR', name: 'Staf SDM', description: 'Data karyawan, kehadiran, penggajian, data pribadi.', perms: { dashboard: 1, hr: 3, pii: 1, documents: 2 } },
   { code: 'KASIR', name: 'Kasir Toko', description: 'Transaksi POS di cabang sendiri.', perms: { dashboard: 1, pos: 2, master: 1, inventory: 1 } },
-  { code: 'AUDITOR', name: 'Auditor Internal', description: 'Hanya baca seluruh modul, jejak audit & kepatuhan.', perms: { ...ALL(1), pii: 0 } },
+  { code: 'AUDITOR', name: 'Auditor Internal', description: 'Hanya baca seluruh modul, jejak audit & kepatuhan.', perms: { ...ALL(1), pii: 0, portal: 0 } },
+  { code: 'PORTAL_PELANGGAN', name: 'Portal Pelanggan', description: 'Akses eksternal: faktur, pesanan, dan kartu piutang milik pelanggan sendiri.', perms: { portal: 1 } },
+  { code: 'PORTAL_PEMASOK', name: 'Portal Pemasok', description: 'Akses eksternal: PO, tagihan, dan pembayaran milik pemasok sendiri.', perms: { portal: 1 } },
 ];
 
 export const COMPANIES = [
@@ -38,6 +40,7 @@ export const COA = [
   ['1-1130', 'Bank BCA — Operasional', 'asset', '1-1100', 0, 'cash'],
   ['1-1140', 'Bank Mandiri — Penggajian', 'asset', '1-1100', 0, 'cash'],
   ['1-1150', 'Bank BRI — Cabang', 'asset', '1-1100', 0, 'cash'],
+  ['1-1160', 'Bank BCA — Valas (USD)', 'asset', '1-1100', 0, 'cash'],
   ['1-1200', 'Piutang Usaha', 'asset', '1-1000', 0, 'ar'],
   ['1-1300', 'Persediaan', 'asset', '1-1000', 1],
   ['1-1310', 'Persediaan Bahan Baku', 'asset', '1-1300', 0, 'inventory'],
@@ -98,12 +101,15 @@ export const COA = [
   ['6-2700', 'Beban Selisih Persediaan', 'expense', '6', 0],
   ['6-2800', 'Beban Jasa Logistik Antar Perusahaan', 'expense', '6', 0, null, 'operating', 1],
   ['6-2900', 'Beban Operasional Lain-lain', 'expense', '6', 0],
+  ['6-2950', 'Beban Selisih Kas Kasir', 'expense', '6', 0],
   ['7', 'PENDAPATAN & BEBAN LAIN', 'other_income', null, 1],
   ['7-1000', 'Pendapatan Bunga', 'other_income', '7', 0],
   ['7-1100', 'Laba Pelepasan Aset', 'other_income', '7', 0],
+  ['7-1200', 'Laba Selisih Kurs', 'other_income', '7', 0],
   ['7-2000', 'Beban Bunga', 'other_expense', '7', 0],
   ['7-2100', 'Beban Administrasi Bank', 'other_expense', '7', 0],
   ['7-2200', 'Rugi Pelepasan Aset', 'other_expense', '7', 0],
+  ['7-2300', 'Rugi Selisih Kurs', 'other_expense', '7', 0],
   ['8', 'PAJAK PENGHASILAN', 'tax', null, 1],
   ['8-1000', 'Beban Pajak Penghasilan', 'tax', '8', 0],
 ];
@@ -131,4 +137,9 @@ export const BOMS = [
   ['BOM-101', 'BOM Panel kontrol PK-200', 'FG-101', [['RM-001', 4], ['RM-003', 1], ['RM-004', 1.5], ['RM-005', 1]]],
   ['BOM-102', 'BOM Rak besi RB-5', 'FG-102', [['RM-001', 3], ['RM-003', 2], ['RM-004', 1], ['RM-005', 1]]],
   ['BOM-103', 'BOM Housing HP-30', 'FG-103', [['RM-002', 2], ['RM-005', 1]]],
+];
+
+export const CURRENCIES = [
+  ['IDR', 'Rupiah Indonesia', 'Rp', 1], ['USD', 'Dolar Amerika Serikat', 'US$', 0], ['SGD', 'Dolar Singapura', 'S$', 0],
+  ['EUR', 'Euro', '€', 0], ['CNY', 'Yuan Tiongkok', '¥', 0], ['JPY', 'Yen Jepang', '¥', 0],
 ];

@@ -8,8 +8,8 @@ import * as db from '../db.js';
 import { acct } from './posting.js';
 import { bad, round2, isDate, today } from '../lib/util.js';
 
-const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
-const PL_TYPES = ['revenue', 'cogs', 'expense', 'other_income', 'other_expense', 'tax'];
+export const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
+export const PL_TYPES = ['revenue', 'cogs', 'expense', 'other_income', 'other_expense', 'tax'];
 const EPS = 0.005;
 
 export const TYPE_LABEL = {
@@ -43,8 +43,8 @@ export function balances({ companyIds, branchId = null, from = null, to = null }
   return new Map(rows.map((r) => [r.a, { d: r.d, c: r.c, net: round2(r.d - r.c) }]));
 }
 
-const netOf = (m, id) => m.get(id)?.net || 0;
-const signFor = (type) => (DEBIT_NORMAL.has(type) ? 1 : -1);
+export const netOf = (m, id) => m.get(id)?.net || 0;
+export const signFor = (type) => (DEBIT_NORMAL.has(type) ? 1 : -1);
 
 /* --- Pembentuk pohon akun -------------------------------------------------- */
 function buildSection(accs, types, valueFn, colKeys) {
@@ -313,7 +313,7 @@ function aging(table, partyTable, partyField, ctx, { companyId, branchId, asOf }
   const where = [`d.company_id = ?`, `d.status IN ('terbit','sebagian')`, 'd.date <= ?'];
   const params = [companyId, asOf];
   if (branchId) { where.push('d.branch_id = ?'); params.push(branchId); }
-  const docs = db.all(`SELECT d.id, d.number, d.date, d.due_date, ROUND(d.total - d.paid,2) open, p.name party, p.id party_id, b.name branch
+  const docs = db.all(`SELECT d.id, d.number, d.date, d.due_date, ROUND((d.total - d.paid) * COALESCE(d.exchange_rate, 1),2) open, ROUND(d.total - d.paid,2) open_doc, d.exchange_rate, p.name party, p.id party_id, b.name branch
     FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id WHERE ${where.join(' AND ')} ORDER BY d.due_date`, ...params);
   const B = [['current', 'Belum jatuh tempo'], ['d30', '1–30 hari'], ['d60', '31–60 hari'], ['d90', '61–90 hari'], ['over', '> 90 hari']];
   const bucket = (days) => (days <= 0 ? 'current' : days <= 30 ? 'd30' : days <= 60 ? 'd60' : days <= 90 ? 'd90' : 'over');
@@ -410,14 +410,14 @@ export function dashboard(ctx, { companyId, branchId }) {
   const byBranch = db.all(`SELECT b.name, ROUND(SUM(jl.credit - jl.debit),2) revenue FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id JOIN branches b ON b.id = jl.branch_id
     WHERE j.status='diposting' AND jl.company_id = ? AND a.type = 'revenue' AND j.date BETWEEN ? AND ?${bf} GROUP BY b.id ORDER BY revenue DESC`, companyId, yStart, asOf, ...(branchId ? [branchId] : []));
   const sf = branchId ? ' AND i.branch_id = ?' : '';
-  const topCustomers = db.all(`SELECT c.name, ROUND(SUM(i.subtotal),2) revenue FROM sales_invoices i JOIN customers c ON c.id = i.customer_id WHERE i.company_id = ? AND i.status IN ('terbit','sebagian','lunas') AND i.date >= ?${sf} GROUP BY c.id ORDER BY revenue DESC LIMIT 5`, companyId, yStart, ...(branchId ? [branchId] : []));
+  const topCustomers = db.all(`SELECT c.name, ROUND(SUM(i.subtotal * COALESCE(i.exchange_rate,1)),2) revenue FROM sales_invoices i JOIN customers c ON c.id = i.customer_id WHERE i.company_id = ? AND i.status IN ('terbit','sebagian','lunas') AND i.date >= ?${sf} GROUP BY c.id ORDER BY revenue DESC LIMIT 5`, companyId, yStart, ...(branchId ? [branchId] : []));
   const pending = [
     ['sales_orders', 'menunggu', 'Pesanan penjualan'], ['purchase_orders', 'menunggu', 'Pesanan pembelian'], ['purchase_requests', 'menunggu', 'Permintaan pembelian'],
     ['journals', 'diajukan', 'Jurnal manual'], ['supplier_payments', 'menunggu', 'Pembayaran pemasok'], ['leave_requests', 'menunggu', 'Cuti'], ['payroll_runs', 'draf', 'Penggajian (draf)'],
   ].map(([t, s, label]) => ({ entity: t, label, count: db.get(`SELECT COUNT(*) n FROM ${t} WHERE company_id = ? AND status = ?${branchId ? ' AND branch_id = ?' : ''}`, companyId, s, ...(branchId ? [branchId] : [])).n })).filter((x) => x.count);
   const lowStock = inventoryValuation(ctx, { companyId, branchId }).rows.filter((r) => r.state === 'kritis' || r.state === 'habis').slice(0, 6);
-  const arOpen = db.get(`SELECT ROUND(COALESCE(SUM(total - paid),0),2) v, COALESCE(SUM(CASE WHEN due_date < ? THEN total - paid END),0) overdue FROM sales_invoices WHERE company_id = ? AND status IN ('terbit','sebagian')${branchId ? ' AND branch_id = ?' : ''}`, asOf, companyId, ...(branchId ? [branchId] : []));
-  const apOpen = db.get(`SELECT ROUND(COALESCE(SUM(total - paid),0),2) v FROM purchase_bills WHERE company_id = ? AND status IN ('terbit','sebagian')${branchId ? ' AND branch_id = ?' : ''}`, companyId, ...(branchId ? [branchId] : []));
+  const arOpen = db.get(`SELECT ROUND(COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0),2) v, COALESCE(SUM(CASE WHEN due_date < ? THEN (total - paid) * COALESCE(exchange_rate,1) END),0) overdue FROM sales_invoices WHERE company_id = ? AND status IN ('terbit','sebagian')${branchId ? ' AND branch_id = ?' : ''}`, asOf, companyId, ...(branchId ? [branchId] : []));
+  const apOpen = db.get(`SELECT ROUND(COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0),2) v FROM purchase_bills WHERE company_id = ? AND status IN ('terbit','sebagian')${branchId ? ' AND branch_id = ?' : ''}`, companyId, ...(branchId ? [branchId] : []));
   return {
     asOf,
     kpis: {
@@ -427,4 +427,44 @@ export function dashboard(ctx, { companyId, branchId }) {
     },
     trend, byBranch, topCustomers, pending, lowStock,
   };
+}
+
+/* --- Laporan pajak (PPN & PPh 21) ------------------------------------------------ */
+export function taxReport(ctx, { companyId, branchId, to }) {
+  const year = to.slice(0, 4);
+  const bf = branchId ? ' AND jl.branch_id = ?' : '';
+  const bp = branchId ? [branchId] : [];
+  const q = (accountKey, sources, side) => db.all(`SELECT substr(j.date, 1, 7) m, ROUND(SUM(${side}), 2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
+    WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ? AND j.date BETWEEN ? AND ? AND j.source_type IN (${sources.map(() => '?').join(',')})${bf} GROUP BY 1`,
+  companyId, acct(accountKey), `${year}-01-01`, `${year}-12-31`, ...sources, ...bp);
+  const toMap = (rows) => new Map(rows.map((r) => [r.m, r.v]));
+  const out = toMap(q('vat_out', ['sales_invoices', 'pos_sales', 'sales_returns'], 'jl.credit - jl.debit'));
+  const inp = toMap(q('vat_in', ['purchase_bills', 'purchase_returns'], 'jl.debit - jl.credit'));
+  const pph = toMap(q('pph21_payable', ['payroll_runs'], 'jl.credit - jl.debit'));
+  const paid = toMap(q('pph21_payable', ['cash_transactions', 'manual'], 'jl.debit - jl.credit'));
+  const vatPaid = toMap(q('vat_out', ['cash_transactions'], 'jl.debit - jl.credit'));
+  const rows = [];
+  for (let m = 1; m <= 12; m++) {
+    const k = `${year}-${String(m).padStart(2, '0')}`;
+    if (k > to.slice(0, 7)) break;
+    const o = out.get(k) || 0, i = inp.get(k) || 0;
+    rows.push({ month: k, vatOut: o, vatIn: i, vatNet: round2(o - i), vatPaid: vatPaid.get(k) || 0, pph21: pph.get(k) || 0, pph21Paid: paid.get(k) || 0 });
+  }
+  const t = (k) => round2(rows.reduce((s, r) => s + r[k], 0));
+  return { title: `Rekap Pajak ${year}`, period: { from: `${year}-01-01`, to }, rows, totals: { vatOut: t('vatOut'), vatIn: t('vatIn'), vatNet: t('vatNet'), vatPaid: t('vatPaid'), pph21: t('pph21'), pph21Paid: t('pph21Paid') } };
+}
+
+/* --- Kartu piutang / hutang per mitra (dari buku besar) --------------------------- */
+export function partnerStatement(ctx, { companyId, from, to, partnerType, partnerId }) {
+  const isCust = partnerType === 'customer';
+  const party = db.get(`SELECT id, code, name, company_id FROM ${isCust ? 'customers' : 'suppliers'} WHERE id = ?`, Number(partnerId));
+  if (!party || party.company_id !== companyId) throw bad('Pilih pelanggan/pemasok.');
+  const accts = isCust ? [acct('ar'), acct('ic_receivable')] : [acct('ap'), acct('ic_payable')];
+  const sign = isCust ? 1 : -1; // piutang: debit menambah; hutang: kredit menambah
+  const base = `FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.partner_type = ? AND jl.partner_id = ? AND jl.account_id IN (?, ?)`;
+  const opening = round2(sign * db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v ${base} AND j.date < ?`, companyId, partnerType, party.id, ...accts, from).v);
+  let bal = opening;
+  const lines = db.all(`SELECT j.id journal_id, j.date, j.number, j.source_type, j.source_id, j.source_no, j.description, jl.debit, jl.credit ${base} AND j.date BETWEEN ? AND ? ORDER BY j.date, j.id`, companyId, partnerType, party.id, ...accts, from, to)
+    .map((l) => { bal = round2(bal + sign * (l.debit - l.credit)); return { ...l, balance: bal }; });
+  return { title: `Kartu ${isCust ? 'Piutang' : 'Hutang'} — ${party.name}`, party, period: { from, to }, opening, closing: bal, lines };
 }

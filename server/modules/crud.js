@@ -407,7 +407,7 @@ export async function runAction(ctx, key, id, actionName, params = {}) {
 
 /* --- Pencarian rujukan ------------------------------------------------------ */
 /* Data induk yang dirujuk lintas modul (mis. produk di penjualan & pembelian). */
-const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles']);
+const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles', 'currencies', 'warehouse_bins']);
 
 export function lookup(ctx, key, q = {}) {
   const e = mustEntity(key);
@@ -446,7 +446,7 @@ export function metaFor(ctx) {
         ({ name, label, type, options, ref, required, readonly, list, search, max, min, help, sensitive, createOnly, refFilter, refParent, refScope, default: d, hidden, pattern, unique })),
       computed: Object.fromEntries(Object.entries(e.computed).map(([n, c]) => [n, { label: c.label, type: c.type, list: c.list }])),
       lines: e.lines ? { fields: e.lines.fields } : null,
-      actions: e.actions.map((a) => ({ name: a.name, label: a.label, from: a.from })),
+      actions: e.actions.map((a) => ({ name: a.name, label: a.label, from: a.from, params: !!a.params, level: a.level, sod: !!a.sod })),
     };
   }
   return out;

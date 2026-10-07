@@ -40,6 +40,23 @@ CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
   BEGIN SELECT RAISE(ABORT, 'Jejak audit bersifat append-only'); END;
 
+CREATE TABLE IF NOT EXISTS attachments (
+  id INTEGER PRIMARY KEY, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, company_id INTEGER,
+  filename TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+  data BLOB NOT NULL, created_at TEXT NOT NULL, created_by INTEGER
+);
+CREATE INDEX IF NOT EXISTS ix_attachments_entity ON attachments(entity, entity_id);
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, key TEXT NOT NULL, value TEXT NOT NULL,
+  updated_at TEXT, PRIMARY KEY (user_id, key)
+);
+CREATE TABLE IF NOT EXISTS reconciliation_items (
+  recon_id INTEGER NOT NULL REFERENCES bank_reconciliations(id) ON DELETE CASCADE,
+  journal_line_id INTEGER NOT NULL REFERENCES journal_lines(id),
+  PRIMARY KEY (recon_id, journal_line_id)
+);
+CREATE INDEX IF NOT EXISTS ix_recon_items_line ON reconciliation_items(journal_line_id);
+
 CREATE TABLE IF NOT EXISTS stock_balances (
   product_id INTEGER NOT NULL REFERENCES products(id),
   warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
@@ -83,6 +100,8 @@ const LINE_EXTRA = {
   journal_lines: ['company_id INTEGER', 'partner_type TEXT', 'partner_id INTEGER', 'is_system INTEGER NOT NULL DEFAULT 0'],
   sales_invoice_lines: ['unit_cost REAL'],
   pos_sale_lines: ['unit_cost REAL'],
+  sales_return_lines: ['unit_cost REAL'],
+  purchase_return_lines: ['unit_cost REAL'],
 };
 
 function colDef(f) {
@@ -127,7 +146,23 @@ function entityDDL(e) {
   return out.join('\n');
 }
 
+/** Tambahkan kolom baru ke tabel yang sudah ada (migrasi aditif tanpa kehilangan data). */
+function addMissingColumns(table, defs) {
+  const existing = db.all(`PRAGMA table_info("${table}")`);
+  if (!existing.length) return;
+  const have = new Set(existing.map((c) => c.name));
+  for (const d of defs) {
+    const name = d.match(/^"?([a-z_0-9]+)"?/)[1];
+    if (have.has(name)) continue;
+    db.exec(`ALTER TABLE "${table}" ADD COLUMN ${d.replace(/ NOT NULL DEFAULT/, ' DEFAULT').replace(/ PRIMARY KEY/, '')}`);
+  }
+}
+
 export function migrate() {
+  for (const e of Object.values(ENTITIES)) {
+    addMissingColumns(e.table, [...e.fields.filter((f) => !f.virtual).map(colDef), ...(EXTRA[e.table] || [])]);
+    if (e.lines) addMissingColumns(e.lines.table, [...e.lines.fields.map(colDef), ...(LINE_EXTRA[e.lines.table] || [])]);
+  }
   const ddl = Object.values(ENTITIES).map(entityDDL).join('\n\n');
   db.exec(ddl);
   db.exec(CORE);
@@ -135,7 +170,7 @@ export function migrate() {
   db.exec(`CREATE INDEX IF NOT EXISTS ix_journal_lines_acct ON journal_lines(account_id, branch_id);
            CREATE INDEX IF NOT EXISTS ix_journals_date ON journals(company_id, date, status);
            CREATE INDEX IF NOT EXISTS ix_stock_moves_pw ON stock_moves(product_id, warehouse_id);`);
-  db.run(`INSERT INTO meta(key, value) VALUES ('schema_version', '1') ON CONFLICT(key) DO NOTHING`);
+  db.run(`INSERT INTO meta(key, value) VALUES ('schema_version', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
 }
 
 export { entityDDL };

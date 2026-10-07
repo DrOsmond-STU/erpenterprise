@@ -29,6 +29,12 @@ const docTotals = () => [
   F.money('total', 'Total', { readonly: true, list: true }),
 ];
 
+/* Mata uang dokumen: kosong = IDR (kurs 1). Kurs kosong = kurs terbaru dari tabel kurs. */
+const fx = () => [
+  F.ref('currency_id', 'Mata uang', 'currencies', { help: 'Kosong = IDR (mata uang dasar).' }),
+  F.num('exchange_rate', 'Kurs ke IDR', { min: 0.000001, help: 'Kosong = kurs terbaru dari tabel Kurs Valuta.' }),
+];
+
 const tradeLines = (table, extra = []) => ({
   table,
   fields: [
@@ -41,6 +47,13 @@ const tradeLines = (table, extra = []) => ({
     F.money('amount', 'Jumlah', { readonly: true }),
   ],
 });
+
+/* Baris retur: harga & diskon diambil dari dokumen asal bila dikosongkan. */
+const returnLines = (table) => {
+  const t = tradeLines(table);
+  t.fields = t.fields.map((f) => (f.name === 'price' ? { ...f, required: false, help: 'Kosong = harga dokumen asal' } : f));
+  return t;
+};
 
 /* Status dokumen: label + nada warna untuk pil di klien. */
 export const STATUS = {
@@ -61,6 +74,7 @@ export const STATUS = {
   izin: ['Izin', 'neutral'], alpa: ['Alpa', 'danger'], berlaku: ['Berlaku', 'ok'], kedaluwarsa: ['Kedaluwarsa', 'danger'],
   patuh: ['Patuh', 'ok'], peninjauan: ['Peninjauan', 'warn'], 'tidak-patuh': ['Tidak patuh', 'danger'],
   dilaporkan: ['Dilaporkan', 'warn'], investigasi: ['Investigasi', 'accent'], ditangani: ['Ditangani', 'ok'],
+  buka: ['Buka', 'accent'],
   diterapkan: ['Diterapkan', 'ok'], direncanakan: ['Direncanakan', 'warn'], diterima_risiko: ['Risiko diterima', 'neutral'],
 };
 
@@ -71,6 +85,7 @@ export const MODULES = [
   ['production', 'Produksi'], ['projects', 'Proyek'], ['finance', 'Keuangan'],
   ['reports', 'Laporan Keuangan'], ['hr', 'SDM'], ['assets', 'Aset'], ['documents', 'Dokumen'],
   ['compliance', 'Kepatuhan & Keamanan'], ['pii', 'Data Pribadi (tanpa samaran)'], ['admin', 'Administrasi Sistem'],
+  ['portal', 'Portal Pelanggan/Pemasok'],
 ];
 
 const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
@@ -109,6 +124,8 @@ export const ENTITIES = {
       F.ref('role_id', 'Peran', 'roles', { required: true, list: true }),
       F.ref('company_id', 'Batas perusahaan', 'companies', { list: true, help: 'Kosongkan untuk seluruh perusahaan grup.' }),
       F.ref('branch_id', 'Batas cabang', 'branches', { list: true, help: 'Kosongkan untuk seluruh cabang.' }),
+      F.ref('customer_id', 'Akun portal pelanggan', 'customers', { help: 'Isi hanya untuk pengguna portal pelanggan.' }),
+      F.ref('supplier_id', 'Akun portal pemasok', 'suppliers', { help: 'Isi hanya untuk pengguna portal pemasok.' }),
       { name: 'password', label: 'Kata sandi awal', type: 'password', virtual: true, createOnly: true, required: true },
       F.bool('mfa_enabled', 'MFA aktif', { readonly: true, list: true }),
       F.text('last_login_at', 'Masuk terakhir', { readonly: true, list: true }),
@@ -153,7 +170,11 @@ export const ENTITIES = {
       F.date('end_date', 'Selesai', { required: true, list: true }),
       F.status(['terbuka', 'tutup'], 'terbuka'),
     ],
-    actions: [act('close', 'Tutup periode', { from: ['terbuka'], confirm: 'Periode yang ditutup tidak dapat menerima jurnal.' }), act('reopen', 'Buka kembali', { from: ['tutup'], level: 4 })],
+    actions: [
+      act('close', 'Tutup periode', { from: ['terbuka'], confirm: 'Periode yang ditutup tidak dapat menerima jurnal.' }),
+      act('reopen', 'Buka kembali', { from: ['tutup'], level: 4 }),
+      act('close_year', 'Tutup buku tahunan', { from: ['terbuka', 'tutup'], confirm: 'Saldo akun laba rugi tahun ini dipindahkan ke Saldo Laba dengan jurnal penutup per cabang.' }),
+    ],
   },
   cost_centers: {
     label: 'Pusat Biaya', one: 'pusat biaya', module: 'finance', scope: 'company', title: 'name', sort: 'code',
@@ -368,10 +389,11 @@ export const ENTITIES = {
       F.money('credit_limit', 'Plafon kredit', { list: true }),
       F.int('terms_days', 'Termin (hari)', { default: 30, min: 0, max: 365 }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
+      F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM(i.total - i.paid),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((i.total - i.paid) * COALESCE(i.exchange_rate,1)),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian'))` },
     },
   },
   quotations: {
@@ -381,6 +403,7 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }), F.date('valid_until', 'Berlaku sampai', { list: true }),
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.ref('lead_id', 'Peluang CRM', 'leads'), F.area('notes', 'Catatan'),
+      ...fx(),
       ...docTotals(),
       F.status(['draf', 'terkirim', 'diterima', 'ditolak'], 'draf'),
     ],
@@ -401,6 +424,7 @@ export const ENTITIES = {
       F.ref('warehouse_id', 'Gudang kirim', 'warehouses', { required: true }),
       F.ref('quotation_id', 'Penawaran', 'quotations', { readonly: true }),
       F.text('customer_po', 'No. PO pelanggan', { max: 40, search: true }), F.area('notes', 'Catatan'),
+      ...fx(),
       ...docTotals(),
       F.text('approval_note', 'Catatan persetujuan', { readonly: true }),
       F.status(['draf', 'menunggu', 'disetujui', 'selesai', 'batal'], 'draf'),
@@ -423,6 +447,7 @@ export const ENTITIES = {
       F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true }),
       F.ref('sales_order_id', 'Pesanan penjualan', 'sales_orders', { readonly: true }),
       F.area('notes', 'Catatan'),
+      ...fx(),
       ...docTotals(),
       F.money('paid', 'Terbayar', { readonly: true, list: true }),
       F.status(['draf', 'terbit', 'sebagian', 'lunas', 'batal'], 'draf'),
@@ -440,6 +465,7 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { required: true, list: true }),
+      ...fx(),
       F.text('reference', 'Referensi', { max: 60 }),
       F.money('total', 'Total', { readonly: true, list: true }),
       F.status(['draf', 'diposting', 'batal'], 'draf'),
@@ -479,10 +505,11 @@ export const ENTITIES = {
       F.text('bank_account_no', 'Rekening bank', { max: 60, sensitive: true }),
       F.int('terms_days', 'Termin (hari)', { default: 30 }), F.int('lead_time_days', 'Waktu tunggu (hari)', { default: 7, list: true }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
+      F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM(b.total - b.paid),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian'))` },
     },
   },
   purchase_requests: {
@@ -535,6 +562,7 @@ export const ENTITIES = {
       F.ref('warehouse_id', 'Gudang tujuan', 'warehouses', { required: true }),
       F.ref('purchase_request_id', 'Permintaan', 'purchase_requests', { readonly: true }),
       F.text('buyer', 'Pembeli', { list: true }), F.area('notes', 'Catatan'),
+      ...fx(),
       ...docTotals(),
       F.status(['draf', 'menunggu', 'disetujui', 'diterima', 'batal'], 'draf'),
     ],
@@ -557,6 +585,7 @@ export const ENTITIES = {
       F.ref('warehouse_id', 'Gudang penerima', 'warehouses'),
       F.ref('purchase_order_id', 'Pesanan pembelian', 'purchase_orders', { readonly: true }),
       F.area('notes', 'Catatan'),
+      ...fx(),
       ...docTotals(),
       F.money('paid', 'Terbayar', { readonly: true, list: true }),
       F.status(['draf', 'terbit', 'sebagian', 'lunas', 'batal'], 'draf'),
@@ -584,6 +613,7 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
       F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { required: true, list: true }),
+      ...fx(),
       F.text('reference', 'Referensi', { max: 60 }),
       F.money('total', 'Total', { readonly: true, list: true }),
       F.status(['draf', 'menunggu', 'diposting', 'batal'], 'draf'),
@@ -812,6 +842,122 @@ export const ENTITIES = {
       F.sel('category', 'Kategori', ['Akses tidak sah', 'Malware', 'Kebocoran data', 'Phishing', 'Gangguan layanan', 'Kehilangan perangkat', 'Lainnya'], { list: true }),
       F.text('reporter', 'Pelapor'), F.area('description', 'Kronologi', { required: true }), F.area('actions_taken', 'Tindakan'), F.area('lessons', 'Pelajaran'),
       F.status(['dilaporkan', 'investigasi', 'ditangani', 'tutup'], 'dilaporkan'),
+    ],
+  },
+  /* ------------------------------------------------------------ Fase 2 */
+  currencies: {
+    label: 'Mata Uang', one: 'mata uang', module: 'finance', scope: 'global', title: 'name', sort: 'code',
+    fields: [
+      F.code({ max: 3, pattern: '^[A-Z]{3}$', help: 'Kode ISO 4217, mis. USD' }), F.name(),
+      F.text('symbol', 'Simbol', { max: 5, list: true }),
+      F.bool('is_base', 'Mata uang dasar', { readonly: true, list: true }),
+      F.status(['aktif', 'nonaktif'], 'aktif'),
+    ],
+    computed: { latest_rate: { label: 'Kurs terakhir', type: 'number', list: true, sql: `(SELECT r.rate FROM exchange_rates r WHERE r.currency_id = t.id ORDER BY r.date DESC, r.id DESC LIMIT 1)` } },
+  },
+  exchange_rates: {
+    label: 'Kurs Valuta', one: 'kurs', module: 'finance', scope: 'global', title: 'date', sort: 'date', sortDir: 'desc',
+    fields: [
+      F.ref('currency_id', 'Mata uang', 'currencies', { required: true, list: true }),
+      F.date('date', 'Tanggal berlaku', { required: true, list: true }),
+      F.num('rate', 'Kurs (IDR per unit)', { required: true, min: 0.000001, list: true }),
+      F.text('source', 'Sumber', { list: true, default: 'Kurs tengah Bank Indonesia' }),
+    ],
+  },
+  sales_returns: {
+    label: 'Retur Penjualan', one: 'retur penjualan', module: 'sales', scope: 'branch', title: 'number', number: 'SR', sort: 'date', sortDir: 'desc',
+    editable: ['draf'],
+    fields: [
+      F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
+      F.ref('sales_invoice_id', 'Faktur asal', 'sales_invoices', { required: true, list: true, search: true, refFilter: { status: ['terbit', 'sebagian'] } }),
+      F.ref('customer_id', 'Pelanggan', 'customers', { readonly: true, list: true }),
+      F.ref('warehouse_id', 'Gudang penerima', 'warehouses', { required: true }),
+      F.text('reason', 'Alasan retur', { required: true, search: true, list: true }),
+      F.ref('currency_id', 'Mata uang', 'currencies', { readonly: true }), F.num('exchange_rate', 'Kurs', { readonly: true }),
+      ...docTotals(),
+      F.status(['draf', 'diposting', 'batal'], 'draf'),
+    ],
+    lines: returnLines('sales_return_lines'),
+    actions: [act('post', 'Posting nota retur', { from: ['draf'] }), act('void', 'Batalkan (jurnal balik)', { from: ['diposting'] })],
+  },
+  purchase_returns: {
+    label: 'Retur Pembelian', one: 'retur pembelian', module: 'purchasing', scope: 'branch', title: 'number', number: 'PRT', sort: 'date', sortDir: 'desc',
+    editable: ['draf'],
+    fields: [
+      F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
+      F.ref('purchase_bill_id', 'Tagihan asal', 'purchase_bills', { required: true, list: true, search: true, refFilter: { status: ['terbit', 'sebagian'] } }),
+      F.ref('supplier_id', 'Pemasok', 'suppliers', { readonly: true, list: true }),
+      F.ref('warehouse_id', 'Gudang asal barang', 'warehouses', { required: true }),
+      F.text('reason', 'Alasan retur', { required: true, search: true, list: true }),
+      F.ref('currency_id', 'Mata uang', 'currencies', { readonly: true }), F.num('exchange_rate', 'Kurs', { readonly: true }),
+      ...docTotals(),
+      F.status(['draf', 'diposting', 'batal'], 'draf'),
+    ],
+    lines: returnLines('purchase_return_lines'),
+    actions: [act('post', 'Posting retur', { from: ['draf'] }), act('void', 'Batalkan (jurnal balik)', { from: ['diposting'] })],
+  },
+  bank_reconciliations: {
+    label: 'Rekonsiliasi Bank', one: 'rekonsiliasi', module: 'finance', scope: 'branch', title: 'number', number: 'REK', sort: 'statement_date', sortDir: 'desc',
+    editable: ['draf'],
+    fields: [
+      F.number(), F.ref('bank_account_id', 'Rekening', 'bank_accounts', { required: true, list: true }),
+      F.date('statement_date', 'Tanggal rekening koran', { required: true, list: true }),
+      F.money('statement_balance', 'Saldo rekening koran', { required: true, list: true, min: undefined }),
+      F.money('gl_balance', 'Saldo buku besar', { readonly: true, list: true, min: undefined }),
+      F.money('cleared_balance', 'Saldo terekonsiliasi', { readonly: true, min: undefined }),
+      F.money('difference', 'Selisih', { readonly: true, list: true, min: undefined }),
+      F.area('notes', 'Catatan'),
+      F.status(['draf', 'selesai'], 'draf'),
+    ],
+    actions: [act('finalize', 'Selesaikan rekonsiliasi', { from: ['draf'], sod: true, confirm: 'Selisih harus nol. Baris yang dicentang dikunci sebagai terekonsiliasi.' })],
+  },
+  pos_shifts: {
+    label: 'Shift Kasir', one: 'shift', module: 'pos', scope: 'branch', title: 'number', number: 'SHF', sort: 'date', sortDir: 'desc',
+    editable: ['buka'],
+    fields: [
+      F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
+      F.text('cashier', 'Kasir', { readonly: true, list: true }),
+      F.ref('bank_account_id', 'Laci kas', 'bank_accounts', { required: true, list: true, refFilter: { currency: 'IDR' } }),
+      F.money('opening_cash', 'Modal awal', { required: true, list: true }),
+      F.money('sales_total', 'Penjualan tunai', { readonly: true, list: true }),
+      F.int('transactions', 'Transaksi', { readonly: true, list: true }),
+      F.money('expected_cash', 'Kas seharusnya', { readonly: true }),
+      F.money('closing_cash', 'Kas dihitung', { readonly: true, list: true }),
+      F.money('difference', 'Selisih', { readonly: true, list: true, min: undefined }),
+      F.status(['buka', 'tutup'], 'buka'),
+    ],
+    actions: [act('close', 'Tutup shift', { from: ['buka'], level: 2, params: [{ name: 'closing_cash', label: 'Uang tunai dihitung di laci', type: 'money', required: true }] })],
+  },
+  warehouse_bins: {
+    label: 'Lokasi Rak', one: 'lokasi rak', module: 'inventory', scope: 'branch', title: 'code', sort: 'code',
+    fields: [
+      F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true, list: true }),
+      F.code({ help: 'Mis. A-01-03 (lorong-rak-tingkat)' }),
+      F.text('zone', 'Zona', { list: true, search: true }), F.text('description', 'Keterangan'),
+      F.num('capacity', 'Kapasitas (unit)', { list: true }),
+      F.status(['aktif', 'nonaktif'], 'aktif'),
+    ],
+  },
+  product_locations: {
+    label: 'Penempatan Barang', one: 'penempatan', module: 'inventory', scope: 'branch', title: 'product_id', sort: 'id',
+    fields: [
+      F.ref('product_id', 'Barang', 'products', { required: true, list: true, search: true }),
+      F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true, list: true }),
+      F.ref('bin_id', 'Lokasi rak', 'warehouse_bins', { required: true, list: true, refParent: 'warehouse_id' }),
+      F.text('notes', 'Catatan'),
+    ],
+  },
+  bsc_metrics: {
+    label: 'Sasaran Balanced Scorecard', one: 'sasaran BSC', module: 'reports', scope: 'company', title: 'name', sort: 'perspective',
+    fields: [
+      F.sel('perspective', 'Perspektif', [['keuangan', 'Keuangan'], ['pelanggan', 'Pelanggan'], ['proses', 'Proses internal'], ['pembelajaran', 'Pembelajaran & pertumbuhan']], { required: true, list: true }),
+      F.name({ label: 'Sasaran / ukuran' }),
+      F.sel('source', 'Sumber nilai', [['manual', 'Input manual'], ['revenue_growth', 'Pertumbuhan pendapatan (%)'], ['gross_margin', 'Margin laba kotor (%)'], ['net_margin', 'Margin laba bersih (%)'], ['roe', 'ROE disetahunkan (%)'], ['current_ratio', 'Rasio lancar (x)'], ['dso', 'DSO (hari)'], ['collection_rate', 'Tingkat penagihan (%)'], ['customer_count', 'Pelanggan aktif bertransaksi'], ['repeat_customers', 'Pelanggan berulang (%)'], ['inventory_turnover', 'Perputaran persediaan (x/tahun)'], ['wo_completion', 'Perintah kerja selesai (%)'], ['po_on_time', 'Persetujuan dokumen tertunda (jumlah)'], ['headcount', 'Jumlah karyawan aktif'], ['attendance_rate', 'Tingkat kehadiran (%)'], ['compliance_rate', 'Butir kepatuhan patuh (%)']], { default: 'manual', list: true }),
+      F.text('unit', 'Satuan', { max: 20, list: true, default: '%' }),
+      F.num('target', 'Target', { required: true, list: true, min: undefined }),
+      F.sel('direction', 'Arah baik', [['naik', 'Semakin tinggi semakin baik'], ['turun', 'Semakin rendah semakin baik']], { default: 'naik' }),
+      F.num('actual_manual', 'Realisasi (manual)', { min: undefined }),
+      F.area('notes', 'Inisiatif / catatan'),
     ],
   },
 };

@@ -70,7 +70,7 @@ export function sessionCookie(value, maxAgeSec) {
   return parts.join('; ');
 }
 
-export async function readJson(req) {
+export async function readJson(req, maxBytes = config.maxBodyBytes) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'DELETE') return {};
   const type = String(req.headers['content-type'] || '');
   if (!type.startsWith('application/json')) throw new HttpError(415, 'Content-Type harus application/json.');
@@ -78,7 +78,7 @@ export async function readJson(req) {
   const chunks = [];
   for await (const c of req) {
     size += c.length;
-    if (size > config.maxBodyBytes) throw new HttpError(413, 'Ukuran permintaan terlalu besar.');
+    if (size > maxBytes) throw new HttpError(413, 'Ukuran permintaan terlalu besar.');
     chunks.push(c);
   }
   if (!size) return {};

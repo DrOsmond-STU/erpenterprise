@@ -4,6 +4,7 @@ import { URL } from 'node:url';
 import { config } from './config.js';
 import * as db from './db.js';
 import { migrate } from './schema.js';
+import { upgrade } from './upgrade.js';
 import { match } from './routes.js';
 import * as auth from './security/auth.js';
 import { permissionsFor } from './security/rbac.js';
@@ -17,6 +18,7 @@ import { securityPolicy } from './lib/settings.js';
 export function initDb(file = config.dbFile) {
   db.open(file);
   migrate();
+  upgrade();
 }
 
 export async function handle(req, res) {
@@ -73,7 +75,7 @@ export async function handle(req, res) {
       }
     }
 
-    const body = await readJson(req);
+    const body = await readJson(req, r.opts.maxBody);
     const query = Object.fromEntries(url.searchParams);
     const out = await r.handler(ctx, body, r.params, query);
     const headers = cookieOut ? { 'Set-Cookie': cookieOut } : {};

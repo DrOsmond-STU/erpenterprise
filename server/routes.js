@@ -11,6 +11,7 @@ import { getSetting, setSetting, securityPolicy, accountMap, approvalPolicy, cle
 import { clearAccountCache } from './ledger/posting.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
+import * as extras from './modules/extras.js';
 import { HttpError, bad, forbidden, notFound, today, isDate, nowIso } from './lib/util.js';
 import { DEFAULT_SECURITY_POLICY } from './config.js';
 
@@ -42,6 +43,7 @@ function userView(u) {
     companyId: u.company_id, branchId: u.branch_id, mfaEnabled: !!u.mfa_enabled,
     initials: String(u.full_name || u.username).split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase(),
     passwordChangedAt: u.password_changed_at, lastLoginAt: u.last_login_at,
+    portal: u.customer_id ? 'customer' : u.supplier_id ? 'supplier' : null,
   };
 }
 
@@ -133,6 +135,8 @@ route('GET', '/api/meta', (ctx, _b, _p, q) => {
     entities: crud.metaFor(ctx), modules: MODULES, status: STATUS, permissions: ctx.perms,
     companies: ctx.companies, branches: ctx.branches, companyId: ctx.companyId, branchId: ctx.branchId,
     today: today(), canConsolidate: !ctx.user.company_id && !ctx.user.branch_id,
+    company: db.get('SELECT id, code, name, legal_name, address, npwp FROM companies WHERE id = ?', ctx.companyId),
+    importable: extras.IMPORTABLE.filter((k) => can(ctx, ENTITIES[k].module, LEVEL.write)),
   };
 });
 
@@ -182,13 +186,15 @@ const REPORTS = {
   'umur-hutang': (ctx, r) => reports.apAging(ctx, r),
   persediaan: (ctx, r) => reports.inventoryValuation(ctx, r),
   anggaran: (ctx, r, q) => reports.budgetVsActual(ctx, { ...r, year: Number(q.year) || Number(r.to.slice(0, 4)) }),
+  pajak: (ctx, r) => reports.taxReport(ctx, r),
+  'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
 };
 
 route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = ['umur-piutang'].includes(p.name) ? 'sales' : ['umur-hutang'].includes(p.name) ? 'purchasing' : p.name === 'persediaan' ? 'inventory' : 'reports';
+  const needs = ['umur-piutang'].includes(p.name) || (p.name === 'kartu-mitra' && q.partner_type !== 'supplier') ? 'sales' : ['umur-hutang'].includes(p.name) || p.name === 'kartu-mitra' ? 'purchasing' : p.name === 'persediaan' ? 'inventory' : 'reports';
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
   if (r.mode === 'consolidated') requirePerm(ctx, 'reports', LEVEL.approve);
   if (r.mode !== 'single') r.branchId = null;
@@ -336,5 +342,37 @@ route('POST', '/api/admin/backup', async (ctx) => {
   return b;
 });
 route('GET', '/api/admin/backups', (ctx) => { requirePerm(ctx, 'admin', LEVEL.admin); return listBackups(); });
+
+/* --- Fitur lanjutan --------------------------------------------------------------- */
+route('GET', '/api/notifications', (ctx, _b, _p, q) => extras.notifications(scoped(ctx, q)));
+route('GET', '/api/search', (ctx, _b, _p, q) => extras.search(scoped(ctx, q), q.q));
+route('GET', '/api/analytics', (ctx, _b, _p, q) => {
+  const r = reportQuery(ctx, q);
+  requirePerm(ctx, 'reports', LEVEL.read);
+  return extras.analytics(ctx, r);
+});
+route('GET', '/api/bsc', (ctx, _b, _p, q) => extras.balancedScorecard(ctx, reportQuery(ctx, q)));
+route('POST', '/api/assistant', (ctx, b, _p, q) => {
+  scoped(ctx, q);
+  const out = extras.assistant(ctx, b.q);
+  audit.log(ctx, 'assistant.query', { companyId: ctx.companyId, detail: { q: String(b.q || '').slice(0, 120) } });
+  return out;
+});
+route('GET', '/api/mrp', (ctx, _b, _p, q) => extras.mrp(scoped(ctx, q)));
+route('POST', '/api/mrp/request', (ctx, b, _p, q) => extras.mrpCreateRequest(scoped(ctx, q), b.items, b.branch_id));
+route('POST', '/api/import/:entity', (ctx, b, p, q) => extras.importRows(scoped(ctx, q), p.entity, b.rows), { maxBody: 4 * 1024 * 1024 });
+route('GET', '/api/attachments/:entity/:id', (ctx, _b, p, q) => extras.listAttachments(scoped(ctx, q), p.entity, p.id));
+route('POST', '/api/attachments/:entity/:id', (ctx, b, p, q) => extras.addAttachment(scoped(ctx, q), p.entity, p.id, b), { maxBody: 8 * 1024 * 1024 });
+route('GET', '/api/attachment/:id', (ctx, _b, p, q) => extras.downloadAttachment(scoped(ctx, q), p.id));
+route('DELETE', '/api/attachment/:id', (ctx, _b, p, q) => extras.deleteAttachment(scoped(ctx, q), p.id));
+route('GET', '/api/prefs/:key', (ctx, _b, p) => ({ value: extras.getPref(ctx, p.key) }));
+route('PUT', '/api/prefs/:key', (ctx, b, p) => ({ value: extras.setPref(ctx, p.key, b.value) }));
+route('GET', '/api/bank-recon/:id', (ctx, _b, p, q) => extras.reconDetail(scoped(ctx, q), p.id));
+route('PUT', '/api/bank-recon/:id/items', (ctx, b, p, q) => extras.reconSetItems(scoped(ctx, q), p.id, b.lineIds));
+route('GET', '/api/fx-rate', (ctx, _b, _p, q) => extras.fxRate(q.currency_id, q.date));
+route('GET', '/api/portal/summary', (ctx) => extras.portalSummary(ctx));
+route('GET', '/api/portal/docs/:type', (ctx, _b, p) => extras.portalDocuments(ctx, p.type));
+route('GET', '/api/portal/docs/:type/:id', (ctx, _b, p) => extras.portalDocument(ctx, p.type, p.id));
+route('GET', '/api/portal/statement', (ctx, _b, _p, q) => extras.portalStatement(ctx, q));
 
 export { HttpError };

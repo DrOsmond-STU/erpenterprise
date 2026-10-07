@@ -12,7 +12,8 @@ import { resolveScope, permissionsFor } from './security/rbac.js';
 import { setPassword } from './security/auth.js';
 import { setSetting } from './lib/settings.js';
 import { nowIso, setToday, round2, monthEnd } from './lib/util.js';
-import { ROLES, COMPANIES, BRANCHES, COA, PRODUCTS, BOMS } from './seed-master.js';
+import { COMPANIES, BRANCHES, PRODUCTS, BOMS } from './seed-master.js';
+import { upgrade } from './upgrade.js';
 import { DEFAULT_SECURITY_POLICY } from './config.js';
 
 export const DEMO_PASSWORD = 'Erp#Demo2026!';
@@ -21,14 +22,7 @@ const id = (table, field, value) => db.get(`SELECT id FROM "${table}" WHERE "${f
 const A = (code) => id('accounts', 'code', code);
 
 function seedCore() {
-  for (const r of ROLES) {
-    const rid = db.insert('roles', { code: r.code, name: r.name, description: r.description, created_at: nowIso() });
-    for (const [m, lvl] of Object.entries(r.perms)) db.run('INSERT INTO role_permissions(role_id, module, level) VALUES (?, ?, ?)', rid, m, lvl);
-  }
-  const ids = {};
-  for (const [code, name, type, parent, header, subtype = null, cf = 'operating', ic = 0] of COA) {
-    ids[code] = db.insert('accounts', { code, name, type, parent_id: parent ? ids[parent] : null, is_header: header, subtype, cash_flow: cf, is_intercompany: ic, status: 'aktif', created_at: nowIso() });
-  }
+  upgrade(); // peran, bagan akun, dan mata uang dasar
   setSetting('security_policy', DEFAULT_SECURITY_POLICY);
 }
 
@@ -415,6 +409,8 @@ async function seedDemo() {
     if (m % 3 === 0) await transfer('KNM', 'JKT', 'BCA-JKT', 'BRI-MDN', 150_000_000, d(m, 6), `Dropping dana cabang Medan ${period}`);
     if (m % 2 === 0) await transfer('KNM', 'MDN', 'KAS-MDN', 'BRI-MDN', 35_000_000, d(m, 28), `Setor kas toko ke bank ${period}`);
     await transfer('KNM', 'JKT', 'BCA-JKT', 'KAS-JKT', 7_000_000, d(m, 2), `Pengisian kas kecil ${period}`);
+    await transfer('KNM', 'JKT', 'BCA-JKT', 'BCA-CKR', 500_000_000, d(m, 1), `Pendanaan operasional pabrik ${period}`);
+    await transfer('KNM', 'SBY', 'BCA-SBY', 'BCA-CKR', 450_000_000, d(m, 1), `Pendanaan operasional pabrik ${period}`);
     await transfer('KNMT', 'TJK', 'TRD-KAS', 'TRD-BCA', 40_000_000, d(m, 28), `Setor kas showroom ke bank ${period}`);
 
     // Penggajian
@@ -592,6 +588,114 @@ async function seedDemo() {
   await run(maker, 'KNM', 'work_orders', wo, 'start');
   await mk(maker, 'KNM', 'CKR', 'work_orders', { date: '2026-10-06', bom_id: BOM['FG-103'], qty: 2500, warehouse_id: WH['WH-CKR'], line: 'Lini C', due_date: '2026-10-12', pic: 'Budi Santoso' });
   await mk(maker, 'KNM', 'JKT', 'payroll_runs', { period: '2026-10', pay_date: '2026-10-25', bank_account_id: BA['MDR-PAY'] });
+
+  /* --- Fase 2: valas, retur, rekonsiliasi, shift kasir, lokasi rak, BSC, portal ---- */
+  const CUR = Object.fromEntries(db.all('SELECT id, code FROM currencies').map((c) => [c.code, c.id]));
+  const usdRate = { 1: 15850, 2: 15920, 3: 16010, 4: 16180, 5: 16240, 6: 16330, 7: 16290, 8: 16410, 9: 16520, 10: 16480 };
+  for (const [m, r] of Object.entries(usdRate)) {
+    const date = `2026-${String(m).padStart(2, '0')}-01`;
+    await mk(maker, 'KNM', null, 'exchange_rates', { currency_id: CUR.USD, date, rate: r, source: 'Kurs tengah Bank Indonesia' });
+    await mk(maker, 'KNM', null, 'exchange_rates', { currency_id: CUR.SGD, date, rate: Math.round(r * 0.742), source: 'Kurs tengah Bank Indonesia' });
+    await mk(maker, 'KNM', null, 'exchange_rates', { currency_id: CUR.EUR, date, rate: Math.round(r * 1.085), source: 'Kurs tengah Bank Indonesia' });
+  }
+  BA['BCA-USD'] = await mk(maker, 'KNM', 'JKT', 'bank_accounts', { code: 'BCA-USD', name: 'BCA Valas USD', bank_name: 'BCA', account_no: '5270 9900 77', account_id: A('1-1160'), currency: 'USD', status: 'aktif' });
+  CU.C009 = await mk(maker, 'KNM', null, 'customers', { code: 'C009', name: 'Pacific Industrial Supply Pte Ltd', segment: 'Korporasi', city: 'Singapura', credit_limit: 3_000_000_000, terms_days: 45, currency_id: CUR.USD, status: 'aktif', email: 'ap@pacific-industrial.example.sg' });
+  SU.S009 = await mk(maker, 'KNM', null, 'suppliers', { code: 'S009', name: 'Shenzhen Electric Components Co., Ltd', category: 'Kelistrikan (impor)', city: 'Shenzhen', terms_days: 30, lead_time_days: 21, currency_id: CUR.USD, status: 'aktif' });
+  // Ekspor USD: kurs faktur ≠ kurs pelunasan → laba/rugi selisih kurs terealisasi.
+  const exportInv = [];
+  for (const [m, qty] of [[7, 30], [8, 36], [9, 40]]) {
+    const date = d(m, 18);
+    setToday(date);
+    const id = await mk(maker, 'KNM', 'JKT', 'sales_invoices', { date, customer_id: CU.C009, warehouse_id: WH['WH-JKT'], tax_rate: 0, notes: 'Ekspor — PPN 0%', lines: [{ product_id: P['FG-101'], qty, price: 315, discount_pct: 0 }] });
+    await run(checker, 'KNM', 'sales_invoices', id, 'post');
+    exportInv.push(id);
+  }
+  for (const [i, m] of [[0, 8], [1, 9]]) {
+    setToday(d(m, 30));
+    const inv = db.get('SELECT total FROM sales_invoices WHERE id = ?', exportInv[i]);
+    const rc = await mk(maker, 'KNM', 'JKT', 'customer_receipts', { date: d(m, 30), customer_id: CU.C009, bank_account_id: BA['BCA-USD'], exchange_rate: usdRate[m] + (i ? -35 : 60), reference: `SWIFT ${m}`, lines: [{ invoice_id: exportInv[i], amount: inv.total }] });
+    await run(checker, 'KNM', 'customer_receipts', rc, 'post');
+  }
+  // Impor USD dari pemasok Tiongkok, dibayar dari rekening valas.
+  setToday('2026-08-12');
+  const impBill = await mk(maker, 'KNM', 'SBY', 'purchase_bills', { date: '2026-08-12', supplier_id: SU.S009, warehouse_id: WH['WH-SBY'], supplier_invoice_no: 'SZ-INV-8812', tax_rate: 11, lines: [{ product_id: P['TG-202'], qty: 600, price: 3.05, discount_pct: 0 }, { product_id: P['TG-203'], qty: 1000, price: 1.6, discount_pct: 0 }] });
+  await run(checker, 'KNM', 'purchase_bills', impBill, 'post');
+  setToday('2026-09-11');
+  const impTotal = db.get('SELECT total FROM purchase_bills WHERE id = ?', impBill).total;
+  const impPay = await mk(maker, 'KNM', 'SBY', 'supplier_payments', { date: '2026-09-11', supplier_id: SU.S009, bank_account_id: BA['BCA-USD'], exchange_rate: 16530, reference: 'TT 0911', lines: [{ bill_id: impBill, amount: impTotal }] });
+  await run(maker, 'KNM', 'supplier_payments', impPay, 'submit');
+  await run(checker, 'KNM', 'supplier_payments', impPay, 'post');
+
+  // Retur penjualan & pembelian.
+  setToday('2026-09-29');
+  const retInv = db.get("SELECT i.id FROM sales_invoices i JOIN customers c ON c.id = i.customer_id WHERE c.code = 'C004' AND i.status = 'terbit' ORDER BY i.date DESC LIMIT 1");
+  if (retInv) {
+    const sr = await mk(maker, 'KNM', 'JKT', 'sales_returns', { date: '2026-09-29', sales_invoice_id: retInv.id, warehouse_id: WH['WH-JKT'], reason: 'Rak penyok saat pengiriman', lines: [{ product_id: P['FG-102'], qty: 2 }] });
+    await run(checker, 'KNM', 'sales_returns', sr, 'post');
+  }
+  const retBill = db.get("SELECT b.id FROM purchase_bills b JOIN suppliers s ON s.id = b.supplier_id WHERE s.code = 'S004' AND b.status = 'terbit' ORDER BY b.date DESC LIMIT 1");
+  if (retBill) {
+    const pr2 = await mk(maker, 'KNM', 'CKR', 'purchase_returns', { date: '2026-09-29', purchase_bill_id: retBill.id, warehouse_id: WH['WH-CKR'], reason: 'Cat menggumpal (lot cacat)', lines: [{ product_id: P['RM-004'], qty: 12 }] });
+    await run(checker, 'KNM', 'purchase_returns', pr2, 'post');
+  }
+
+  // Rekonsiliasi bank Agustus (selesai) — seluruh mutasi s.d. 31 Agu dicocokkan.
+  setToday('2026-09-03');
+  const bcaJkt = db.get('SELECT account_id, branch_id FROM bank_accounts WHERE id = ?', BA['BCA-JKT']);
+  const glAug = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.account_id = ? AND jl.branch_id = ? AND j.date <= '2026-08-31'`, bcaJkt.account_id, bcaJkt.branch_id).v);
+  const recAug = await mk(maker, 'KNM', 'JKT', 'bank_reconciliations', { bank_account_id: BA['BCA-JKT'], statement_date: '2026-08-31', statement_balance: glAug, notes: 'Rekening koran BCA Agustus 2026' });
+  for (const l of db.all(`SELECT jl.id FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.account_id = ? AND jl.branch_id = ? AND j.date <= '2026-08-31'`, bcaJkt.account_id, bcaJkt.branch_id)) {
+    db.run('INSERT INTO reconciliation_items(recon_id, journal_line_id) VALUES (?, ?)', recAug, l.id);
+  }
+  await run(checker, 'KNM', 'bank_reconciliations', recAug, 'finalize');
+  const glSep = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.account_id = ? AND jl.branch_id = ? AND j.date <= '2026-09-30'`, bcaJkt.account_id, bcaJkt.branch_id).v);
+  await mk(maker, 'KNM', 'JKT', 'bank_reconciliations', { bank_account_id: BA['BCA-JKT'], statement_date: '2026-09-30', statement_balance: glSep, notes: 'Rekening koran BCA September 2026 (dalam proses — centang mutasi lalu selesaikan)' });
+
+  // Shift kasir Medan.
+  setToday('2026-10-06');
+  const kasir = makeCtx('yoga.kasir');
+  const sh = await mk(kasir, 'KNM', 'MDN', 'pos_shifts', { date: '2026-10-06', bank_account_id: BA['KAS-MDN'], opening_cash: 2_000_000 });
+  let cashSales = 0;
+  for (const qty of [6, 10]) {
+    const ps = await mk(kasir, 'KNM', 'MDN', 'pos_sales', { date: '2026-10-06', warehouse_id: WH['WH-MDN'], bank_account_id: BA['KAS-MDN'], payment_method: 'Tunai', tax_rate: 11, lines: [tradeLine('TG-203', qty), tradeLine('TG-204', qty)] });
+    await run(kasir, 'KNM', 'pos_sales', ps, 'pay');
+    cashSales += db.get('SELECT total FROM pos_sales WHERE id = ?', ps).total;
+  }
+  await run(kasir, 'KNM', 'pos_shifts', sh, 'close', { closing_cash: round2(2_000_000 + cashSales - 5_000) });
+  await mk(kasir, 'KNM', 'MDN', 'pos_shifts', { date: '2026-10-07', bank_account_id: BA['KAS-MDN'], opening_cash: 2_000_000 });
+
+  // Lokasi rak & penempatan barang.
+  const BIN = {};
+  for (const [wh, br, code, zone, cap] of [
+    ['WH-CKR', 'CKR', 'CKR-A-01', 'Bahan baku logam', 2000], ['WH-CKR', 'CKR', 'CKR-A-02', 'Bahan baku plastik', 8000], ['WH-CKR', 'CKR', 'CKR-A-03', 'Komponen & finishing', 1500],
+    ['WH-CKR', 'CKR', 'CKR-B-01', 'Barang jadi', 600], ['WH-CKR', 'CKR', 'CKR-B-02', 'Barang jadi', 4000],
+    ['WH-JKT', 'JKT', 'JKT-R-01', 'Panel', 200], ['WH-JKT', 'JKT', 'JKT-R-02', 'Rak', 300], ['WH-JKT', 'JKT', 'JKT-R-03', 'Komponen plastik', 3000],
+    ['WH-SBY', 'SBY', 'SBY-K-01', 'Kelistrikan', 3000], ['WH-MDN', 'MDN', 'MDN-T-01', 'Etalase toko', 1500],
+  ]) BIN[code] = await mk(maker, 'KNM', br, 'warehouse_bins', { warehouse_id: WH[wh], code, zone, capacity: cap, status: 'aktif' });
+  for (const [prod, wh, br, bin] of [
+    ['RM-001', 'WH-CKR', 'CKR', 'CKR-A-01'], ['RM-002', 'WH-CKR', 'CKR', 'CKR-A-02'], ['RM-003', 'WH-CKR', 'CKR', 'CKR-A-03'], ['RM-004', 'WH-CKR', 'CKR', 'CKR-A-03'], ['RM-005', 'WH-CKR', 'CKR', 'CKR-A-03'],
+    ['FG-101', 'WH-CKR', 'CKR', 'CKR-B-01'], ['FG-102', 'WH-CKR', 'CKR', 'CKR-B-01'], ['FG-103', 'WH-CKR', 'CKR', 'CKR-B-02'],
+    ['FG-101', 'WH-JKT', 'JKT', 'JKT-R-01'], ['FG-102', 'WH-JKT', 'JKT', 'JKT-R-02'], ['FG-103', 'WH-JKT', 'JKT', 'JKT-R-03'],
+    ['TG-202', 'WH-SBY', 'SBY', 'SBY-K-01'], ['TG-203', 'WH-SBY', 'SBY', 'SBY-K-01'], ['TG-203', 'WH-MDN', 'MDN', 'MDN-T-01'],
+  ]) await mk(maker, 'KNM', br, 'product_locations', { product_id: P[prod], warehouse_id: WH[wh], bin_id: BIN[bin] });
+
+  // Sasaran Balanced Scorecard.
+  for (const [persp, name, source, unit, target, dir, manual] of [
+    ['keuangan', 'Pertumbuhan pendapatan bulanan', 'revenue_growth', '%', 2, 'naik'], ['keuangan', 'Margin laba kotor', 'gross_margin', '%', 55, 'naik'],
+    ['keuangan', 'Margin laba bersih', 'net_margin', '%', 10, 'naik'], ['keuangan', 'Rasio lancar', 'current_ratio', 'x', 1.5, 'naik'],
+    ['pelanggan', 'Rata-rata umur piutang (DSO)', 'dso', 'hari', 40, 'turun'], ['pelanggan', 'Tingkat penagihan', 'collection_rate', '%', 85, 'naik'],
+    ['pelanggan', 'Pelanggan aktif bertransaksi', 'customer_count', 'pelanggan', 8, 'naik'], ['pelanggan', 'Kepuasan pelanggan (survei)', 'manual', 'skor', 4.5, 'naik', 4.3],
+    ['proses', 'Perputaran persediaan', 'inventory_turnover', 'x/tahun', 6, 'naik'], ['proses', 'Perintah kerja selesai', 'wo_completion', '%', 90, 'naik'],
+    ['proses', 'Dokumen menunggu persetujuan', 'po_on_time', 'dokumen', 5, 'turun'], ['proses', 'Tingkat cacat produksi', 'manual', '%', 1.5, 'turun', 1.8],
+    ['pembelajaran', 'Kepatuhan ISO 27001 & regulasi', 'compliance_rate', '%', 90, 'naik'], ['pembelajaran', 'Tingkat kehadiran', 'attendance_rate', '%', 95, 'naik'],
+    ['pembelajaran', 'Jam pelatihan per karyawan', 'manual', 'jam', 24, 'naik', 18], ['pembelajaran', 'Jumlah karyawan aktif', 'headcount', 'orang', 18, 'naik'],
+  ]) await mk(maker, 'KNM', null, 'bsc_metrics', { perspective: persp, name, source, unit, target, direction: dir, actual_manual: manual ?? null });
+
+  // Akun portal eksternal (hak minimum, terikat ke satu pelanggan/pemasok).
+  await createUser({ username: 'portal.astra', full_name: 'Hendra (PT Astra Komponen)', email: 'hendra@astra-komponen.example.co.id', role: 'PORTAL_PELANGGAN', company: 'KNM', password: DEMO_PASSWORD });
+  db.run('UPDATE users SET customer_id = ? WHERE username = ?', CU.C001, 'portal.astra');
+  await createUser({ username: 'portal.krakatau', full_name: 'Lina (PT Krakatau Baja Niaga)', email: 'lina@krakatau-baja.example.co.id', role: 'PORTAL_PEMASOK', company: 'KNM', password: DEMO_PASSWORD });
+  db.run('UPDATE users SET supplier_id = ? WHERE username = ?', SU.S001, 'portal.krakatau');
 
   setToday(null);
 }

@@ -35,6 +35,7 @@ export const DEFAULT_ACCOUNT_MAP = {
   sales: '4-1100', ic_sales: '4-1400', cogs: '5-1100',
   salary_expense: '6-1000', maintenance_expense: '6-2200', stock_adjustment: '6-2700',
   gain_disposal: '7-1100', loss_disposal: '7-2200', wip: '1-1320',
+  fx_gain: '7-1200', fx_loss: '7-2300', sales_returns: '4-1900', purchase_variance: '6-2700', cash_over_short: '6-2950',
 };
 
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });
