@@ -232,11 +232,35 @@ async function seedDemo() {
   const openInvoices = { KNM: [], NLP: [], KNMT: [] };
   const openBills = { KNM: [], NLP: [], KNMT: [] };
 
+  /* Penawaran → (persetujuan harga) → kirim → diterima pelanggan → pesanan penjualan. stage: 'draf' | 'ajukan' | 'kirim' | 'terima' | 'so'. */
+  const quote = async (ctx, co, br, cust, lines, date, { stage = 'so', wh = null, salesperson = 'Sari Wulandari', notes = null, approver = checker, po = null } = {}) => {
+    // Penawaran dibuat ±6 hari sebelum pesanan dan diterima pelanggan 2 hari sebelumnya.
+    const shift = (n) => { const x = new Date(date + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - n); const v = x.toISOString().slice(0, 10); return v < `${date.slice(0, 4)}-01-01` ? `${date.slice(0, 4)}-01-01` : v; };
+    const qd = stage === 'so' ? shift(6) : date;
+    setToday(qd);
+    const qid = await mk(ctx, co, br, 'quotations', { date: qd, customer_id: CU[cust], salesperson, tax_rate: 11, notes, lead_time_days: 7, delivery_terms: 'Franco gudang pelanggan', lines });
+    if (stage === 'draf') return { qid };
+    await run(ctx, co, 'quotations', qid, 'submit');
+    if (db.get('SELECT status FROM quotations WHERE id = ?', qid).status === 'menunggu') {
+      if (stage === 'ajukan') return { qid };
+      await run(approver, co, 'quotations', qid, 'approve');
+    }
+    if (stage === 'ajukan') return { qid };
+    await run(ctx, co, 'quotations', qid, 'send');
+    if (stage === 'kirim') return { qid };
+    if (stage === 'so') setToday(shift(2));
+    await run(ctx, co, 'quotations', qid, 'accept', { accepted_by: db.get('SELECT pic FROM customers WHERE id = ?', CU[cust]).pic || 'Bagian Pengadaan', customer_po: po || `PO-${cust}-${date.replace(/-/g, '')}` });
+    if (stage === 'terima') return { qid };
+    setToday(date);
+    const r = await run(ctx, co, 'quotations', qid, 'to_order', wh ? { warehouse_id: WH[wh], delivery_date: date } : {});
+    return { qid, so: r.redirect.id };
+  };
+
   const invoice = async (co, br, wh, cust, lines, date, viaSO = false) => {
     setToday(date);
     let invId;
     if (viaSO) {
-      const so = await mk(maker, co, br, 'sales_orders', { date, delivery_date: date, customer_id: CU[cust], warehouse_id: WH[wh], tax_rate: 11, lines });
+      const { so } = await quote(maker, co, br, cust, lines, date, { wh });
       await run(maker, co, 'sales_orders', so, 'submit');
       if (db.get('SELECT status FROM sales_orders WHERE id = ?', so).status === 'menunggu') await run(checker, co, 'sales_orders', so, 'approve');
       const r = await run(maker, co, 'sales_orders', so, 'to_invoice');
@@ -617,11 +641,12 @@ async function seedDemo() {
 
   /* --- Dokumen menunggu (untuk Kotak Persetujuan) & Oktober berjalan ------- */
   setToday('2026-10-05');
-  const soPending = await mk(makeCtx('sari.sales'), 'KNM', 'JKT', 'sales_orders', { date: '2026-10-05', delivery_date: '2026-10-12', customer_id: CU.C008, warehouse_id: WH['WH-JKT'], customer_po: 'PO-GE-2210', tax_rate: 11, lines: [tradeLine('FG-101', 80), tradeLine('FG-102', 40)] });
-  await run(makeCtx('sari.sales'), 'KNM', 'sales_orders', soPending, 'submit');
-  const soHeld = await mk(makeCtx('sari.sales'), 'KNM', 'JKT', 'sales_orders', { date: '2026-10-06', customer_id: CU.C007, warehouse_id: WH['WH-JKT'], tax_rate: 11, lines: [tradeLine('FG-103', 300)] });
-  await run(makeCtx('sari.sales'), 'KNM', 'sales_orders', soHeld, 'submit');
-  await mk(makeCtx('sari.sales'), 'KNM', 'JKT', 'sales_orders', { date: '2026-10-06', customer_id: CU.C002, warehouse_id: WH['WH-JKT'], tax_rate: 11, lines: [tradeLine('FG-102', 25), tradeLine('SV-301', 16)] });
+  const sari = makeCtx('sari.sales');
+  const soPending = (await quote(sari, 'KNM', 'JKT', 'C008', [tradeLine('FG-101', 80), tradeLine('FG-102', 40)], '2026-10-05', { wh: 'WH-JKT', po: 'PO-GE-2210' })).so;
+  await run(sari, 'KNM', 'sales_orders', soPending, 'submit');
+  const soHeld = (await quote(sari, 'KNM', 'JKT', 'C007', [tradeLine('FG-103', 300)], '2026-10-06', { wh: 'WH-JKT' })).so;
+  await run(sari, 'KNM', 'sales_orders', soHeld, 'submit');
+  await quote(sari, 'KNM', 'JKT', 'C002', [tradeLine('FG-102', 25), tradeLine('SV-301', 16)], '2026-10-06', { wh: 'WH-JKT' });
   const poPending = await mk(maker, 'KNM', 'CKR', 'purchase_orders', { date: '2026-10-02', eta: '2026-10-09', supplier_id: SU.S001, warehouse_id: WH['WH-CKR'], buyer: 'Agus Setiawan', tax_rate: 11, lines: [tradeLine('RM-001', 1700, 287500)] });
   await run(maker, 'KNM', 'purchase_orders', poPending, 'submit');
   const pr = await mk(makeCtx('agus.gudang'), 'KNM', 'CKR', 'purchase_requests', { date: '2026-10-03', requester: 'Agus Setiawan', cost_center_id: CC['CC-310'], priority: 'tinggi', needed_by: '2026-10-20', notes: 'Cetakan (mold) baru untuk lini C', lines: [{ product_id: P['RM-002'], description: 'Resin ABS grade injeksi', qty: 2000, price: 38500 }] });
@@ -629,9 +654,19 @@ async function seedDemo() {
   await mk(maker, 'KNM', 'CKR', 'rfqs', { date: '2026-10-04', title: 'Pengadaan resin ABS Q4', purchase_request_id: pr, deadline: '2026-10-10', lines: [{ supplier_id: SU.S002, amount: 77_000_000, lead_time_days: 10 }, { supplier_id: SU.S005, amount: 79_500_000, lead_time_days: 7 }] });
   const accrual = await mk(makeCtx('rina.akuntan'), 'KNM', 'JKT', 'journals', { date: '2026-09-30', description: 'Akrual biaya audit eksternal Q3', reference: 'ACR-2026-09', lines: [{ account_id: A('6-2900'), debit: 45_000_000, cost_center_id: CC['CC-500'] }, { account_id: A('2-1400'), credit: 45_000_000 }] });
   await run(makeCtx('rina.akuntan'), 'KNM', 'journals', accrual, 'submit');
-  await mk(maker, 'KNM', 'JKT', 'quotations', { date: '2026-10-01', valid_until: '2026-10-31', customer_id: CU.C004, tax_rate: 11, notes: 'Instalasi pabrik baru', lines: [tradeLine('FG-101', 120), tradeLine('SV-301', 200)] });
-  const sentQt = await mk(maker, 'KNM', 'JKT', 'quotations', { date: '2026-09-25', valid_until: '2026-10-25', customer_id: CU.C001, tax_rate: 11, lines: [tradeLine('SV-303', 12)] });
-  await run(maker, 'KNM', 'quotations', sentQt, 'send');
+  // Penawaran di berbagai tahap: draf, menunggu persetujuan harga (diskon besar), terkirim (dapat ditanggapi via portal), diterima, ditolak, kedaluwarsa.
+  await quote(sari, 'KNM', 'JKT', 'C004', [tradeLine('FG-101', 120), tradeLine('SV-301', 200)], '2026-10-01', { stage: 'draf', notes: 'Instalasi pabrik baru' });
+  await quote(sari, 'KNM', 'JKT', 'C002', [{ ...tradeLine('FG-102', 60), discount_pct: 18 }, tradeLine('SV-302', 4)], '2026-10-04', { stage: 'ajukan', notes: 'Harga khusus volume kuartal IV' });
+  await quote(sari, 'KNM', 'JKT', 'C001', [tradeLine('SV-303', 12)], '2026-09-25', { stage: 'kirim', notes: 'Kontrak pemeliharaan panel 12 bulan' });
+  await quote(sari, 'KNM', 'JKT', 'C001', [tradeLine('FG-102', 20), tradeLine('SV-301', 40)], '2026-10-03', { stage: 'kirim', notes: 'Panel tambahan gedung B' });
+  await quote(sari, 'KNM', 'JKT', 'C006', [tradeLine('FG-103', 900)], '2026-10-02', { stage: 'terima', po: 'SPK-PUJATIM-118' });
+  for (const [cust, lines, date, reason] of [
+    ['C004', [tradeLine('FG-101', 60)], '2026-06-10', 'harga'], ['C008', [tradeLine('FG-102', 45)], '2026-07-14', 'pesaing'], ['C002', [tradeLine('FG-103', 1200)], '2026-08-05', 'waktu'],
+  ]) {
+    const { qid } = await quote(sari, 'KNM', 'JKT', cust, lines, date, { stage: 'kirim' });
+    await run(sari, 'KNM', 'quotations', qid, 'reject', { lost_reason: reason, note: reason === 'pesaing' ? 'Pesaing menawarkan harga 6% lebih rendah' : '' });
+  }
+  await quote(sari, 'KNM', 'SBY', 'C003', [tradeLine('FG-103', 500)], '2026-08-20', { stage: 'kirim' });  // lewat masa berlaku → kedaluwarsa
   // Penjualan & pembelian awal Oktober (belum jatuh tempo)
   await invoice('KNM', 'JKT', 'WH-JKT', 'C001', [tradeLine('FG-101', 40), tradeLine('FG-102', 30)], '2026-10-02');
   await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('FG-103', 400), tradeLine('TG-203', 200)], '2026-10-03');

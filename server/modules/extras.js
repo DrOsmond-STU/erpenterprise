@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto';
 import * as db from '../db.js';
 import * as crud from './crud.js';
+import { expireQuotations } from '../ledger/quotation.js';
 import * as reports from '../ledger/reports.js';
 import { acct } from '../ledger/posting.js';
 import { reconState } from '../ledger/documents.js';
@@ -39,6 +40,7 @@ export function notifications(ctx) {
     ['sales_orders', 'menunggu', 'pesanan penjualan', 'pesanan-penjualan'], ['purchase_orders', 'menunggu', 'pesanan pembelian', 'pesanan-pembelian'],
     ['purchase_requests', 'menunggu', 'permintaan pembelian', 'permintaan-pembelian'], ['journals', 'diajukan', 'jurnal manual', 'jurnal'],
     ['supplier_payments', 'menunggu', 'pembayaran pemasok', 'pembayaran'], ['leave_requests', 'menunggu', 'pengajuan cuti', 'cuti'],
+    ['quotations', 'menunggu', 'penawaran (harga)', 'penawaran'], ['budgets', 'diajukan', 'anggaran', 'anggaran'],
   ];
   for (const [table, status, label, view] of pend) {
     const e = ENTITIES[table];
@@ -49,6 +51,13 @@ export function notifications(ctx) {
   if (can(ctx, 'sales', LEVEL.read)) {
     const r = db.get(`SELECT COUNT(*) n, COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0) v FROM sales_invoices WHERE company_id = ? AND status IN ('terbit','sebagian') AND due_date < ?${b.sql}`, ctx.companyId, t, ...b.p);
     if (r.n) push('danger', `${r.n} faktur lewat jatuh tempo`, `Total ${fmt(r.v)} perlu ditagih.`, { view: 'umur-piutang' });
+  }
+  if (can(ctx, 'sales', LEVEL.read)) {
+    expireQuotations();
+    const acc = count(`SELECT COUNT(*) n FROM quotations WHERE company_id = ? AND status = 'diterima'${b.sql}`, ctx.companyId, ...b.p);
+    if (acc) push('ok', `${acc} penawaran diterima pelanggan`, 'Buat pesanan penjualan dari penawaran tersebut.', { view: 'penawaran' });
+    const exp = count(`SELECT COUNT(*) n FROM quotations WHERE company_id = ? AND status IN ('disetujui','terkirim') AND valid_until BETWEEN ? AND ?${b.sql}`, ctx.companyId, t, addDays(t, 7), ...b.p);
+    if (exp) push('warn', `${exp} penawaran berakhir ≤ 7 hari`, 'Tindak lanjuti pelanggan atau buat revisi.', { view: 'analisis-penawaran' });
   }
   if (can(ctx, 'purchasing', LEVEL.read)) {
     const r = db.get(`SELECT COUNT(*) n, COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0) v FROM purchase_bills WHERE company_id = ? AND status IN ('terbit','sebagian') AND due_date BETWEEN ? AND ?${b.sql}`, ctx.companyId, t, addDays(t, 7), ...b.p);
@@ -572,7 +581,7 @@ const PORTAL_DOCS = {
   customer: { invoices: ['sales_invoices', 'customer_id'], orders: ['sales_orders', 'customer_id'], quotations: ['quotations', 'customer_id'], payments: ['customer_receipts', 'customer_id'], returns: ['sales_returns', 'customer_id'] },
   supplier: { orders: ['purchase_orders', 'supplier_id'], bills: ['purchase_bills', 'supplier_id'], payments: ['supplier_payments', 'supplier_id'], returns: ['purchase_returns', 'supplier_id'] },
 };
-const PORTAL_HIDDEN_STATUS = { sales_orders: ['draf'], quotations: ['draf'], purchase_orders: ['draf', 'menunggu'], sales_invoices: ['draf'], purchase_bills: ['draf'], customer_receipts: ['draf'], supplier_payments: ['draf', 'menunggu'], sales_returns: ['draf'], purchase_returns: ['draf'] };
+const PORTAL_HIDDEN_STATUS = { sales_orders: ['draf'], quotations: ['draf', 'menunggu', 'disetujui', 'batal'], purchase_orders: ['draf', 'menunggu'], sales_invoices: ['draf'], purchase_bills: ['draf'], customer_receipts: ['draf'], supplier_payments: ['draf', 'menunggu'], sales_returns: ['draf'], purchase_returns: ['draf'] };
 
 export function portalSummary(ctx) {
   const pc = portalContext(ctx);
@@ -602,11 +611,18 @@ export function portalDocument(ctx, type, id) {
   if (!def) throw notFound();
   const [table, field] = def;
   const e = ENTITIES[table];
+  if (table === 'quotations') expireQuotations();
   const row = db.get(`SELECT * FROM "${table}" WHERE id = ? AND "${field}" = ?`, Number(id), pc.party.id);
   if (!row || (PORTAL_HIDDEN_STATUS[table] || []).includes(row.status)) throw notFound();
-  const lines = e.lines ? crud.getLines(e, row.id).map((l) => ({ product: l.product_id__label || l.invoice_id__label || l.bill_id__label, description: l.description, qty: l.qty, price: l.price, amount: l.amount })) : [];
+  const lines = e.lines ? crud.getLines(e, row.id).map((l) => ({ product: l.product_id__label || l.invoice_id__label || l.bill_id__label, description: l.description, qty: l.qty, price: l.price, discount_pct: l.discount_pct, amount: l.amount })) : [];
   audit.log(ctx, 'portal.view', { entity: table, entityId: row.id, companyId: row.company_id });
-  return { type, number: row.number, date: row.date, due_date: row.due_date, subtotal: row.subtotal, tax: row.tax, tax_rate: row.tax_rate, total: row.total, paid: row.paid, status: row.status, lines, party: pc.party.name, company: db.get('SELECT name, address, npwp FROM companies WHERE id = ?', row.company_id) };
+  // Penawaran: syarat komersial untuk pelanggan (tanpa margin/HPP/catatan persetujuan internal).
+  const quote = table === 'quotations' ? {
+    valid_until: row.valid_until, revision: row.revision, attention: row.attention, salesperson: row.salesperson, terms_days: row.terms_days, lead_time_days: row.lead_time_days,
+    delivery_terms: row.delivery_terms, notes: row.notes, sent_at: row.sent_at, responded_at: row.responded_at, accepted_by: row.accepted_by, customer_po: row.customer_po,
+    canRespond: row.status === 'terkirim',
+  } : {};
+  return { id: row.id, type, number: row.number, date: row.date, due_date: row.due_date, subtotal: row.subtotal, tax: row.tax, tax_rate: row.tax_rate, total: row.total, paid: row.paid, status: row.status, lines, party: pc.party.name, company: db.get('SELECT name, address, npwp FROM companies WHERE id = ?', row.company_id), ...quote };
 }
 
 export function portalStatement(ctx, { from, to }) {

@@ -76,6 +76,20 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 3. Tutup periode Desember. Tutup buku tidak dapat dijalankan dua kali untuk
    tahun yang sama; koreksi dilakukan dengan membalik jurnal penutup.
 
+## Penawaran ke pelanggan
+
+1. **Pengaturan → Kebijakan persetujuan**: atur diskon maksimum, margin minimum,
+   ambang nilai penawaran, masa berlaku bawaan, dan *Pesanan penjualan wajib dari
+   penawaran* (bawaan aktif).
+2. Tenaga penjual membuat **Penjualan → Penawaran** (atau dari Lead CRM), lalu
+   *Ajukan*. Penawaran di luar kebijakan disetujui atasan di Kotak Persetujuan.
+3. *Kirim ke pelanggan* — cetak/PDF dari tombol Cetak; pelanggan dengan akun portal
+   dapat menerima (nama + no. PO) atau menolak langsung di portal.
+4. Penawaran *diterima* → *Buat pesanan penjualan* → ajukan SO (cek plafon kredit
+   & kesesuaian dengan penawaran) → kirim & faktur.
+5. Pantau **Penjualan → Analisis Penawaran** mingguan: penawaran yang segera
+   berakhir, tingkat menang, dan alasan kalah. Penawaran kedaluwarsa dapat direvisi.
+
 ## Siklus anggaran tahunan
 
 1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun
@@ -121,6 +135,6 @@ dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 ## Pengujian
 
 ```bash
-npm test            # 119 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, CRUD 55 entitas)
+npm test            # 128 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, CRUD 55 entitas)
 npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```

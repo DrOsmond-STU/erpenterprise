@@ -7,6 +7,7 @@ import { hashPassword } from '../security/crypto.js';
 import { clearPermCache, can, LEVEL } from '../security/rbac.js';
 import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
+import { approvalPolicy } from '../lib/settings.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -29,6 +30,27 @@ function defaultDue(row, partyTable, partyField) {
   const d = new Date(row.date + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + (p?.terms_days ?? 30));
   row.due_date = d.toISOString().slice(0, 10);
+}
+
+/** Penawaran: total, masa berlaku & termin bawaan, serta indikator harga internal (diskon tertinggi, estimasi HPP & margin). */
+function quotationCompute(ctx, row, lines) {
+  applyFx(row, 'customers', 'customer_id');
+  tradeTotals(ctx, row, lines);
+  row.revision = row.revision ?? 0;
+  if (!row.valid_until && row.date) {
+    const d = new Date(row.date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (Number(approvalPolicy().quoteValidityDays) || 30));
+    row.valid_until = d.toISOString().slice(0, 10);
+  }
+  if (row.valid_until && row.date && row.valid_until < row.date) throw bad('Tanggal berlaku penawaran tidak boleh sebelum tanggal penawaran.');
+  const cust = row.customer_id ? db.get('SELECT terms_days, email, pic FROM customers WHERE id = ?', row.customer_id) : null;
+  if (row.terms_days == null && cust) row.terms_days = cust.terms_days ?? 30;
+  if (!row.email && cust?.email) row.email = cust.email;
+  if (!row.attention && cust?.pic) row.attention = cust.pic;
+  if (!lines) return;
+  row.max_discount = lines.reduce((m, l) => Math.max(m, Number(l.discount_pct) || 0), 0);
+  row.est_cost = round2(lines.reduce((s, l) => s + (Number(l.qty) || 0) * (db.get('SELECT standard_cost FROM products WHERE id = ?', l.product_id)?.standard_cost || 0), 0));
+  const revenue = round2((row.subtotal || 0) * (Number(row.exchange_rate) || 1));
+  row.est_margin = revenue > 0 ? round2((revenue - row.est_cost) / revenue * 100) : 0;
 }
 
 /** Mata uang dokumen: kosong → IDR (kurs 1); valas tanpa kurs → kurs terbaru ≤ tanggal dokumen. */
@@ -67,8 +89,7 @@ function returnFrom(srcTable, srcField, srcLines, partyField) {
 const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75, menang: 100, kalah: 0 };
 
 export const HOOKS = {
-  quotations: { compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(c, row, lines); } },
-  sales_orders: { compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(c, row, lines); } },
+  quotations: { compute: quotationCompute },
   purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
   sales_invoices: { compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; } },
   sales_returns: { compute: returnFrom('sales_invoices', 'sales_invoice_id', 'sales_invoice_lines', 'customer_id') },
@@ -148,6 +169,11 @@ export const HOOKS = {
   },
   leave_requests: { compute: (_c, row) => { if (row.end_date < row.start_date) throw bad('Tanggal selesai harus setelah tanggal mulai.'); } },
   budgets: { compute: (_c, row) => phaseBudget(row) },
+  // Pesanan draf dari penawaran dihapus → penawaran kembali "diterima" agar dapat dibuatkan pesanan lagi.
+  sales_orders: {
+    compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(c, row, lines); },
+    beforeDelete: (_c, so) => { if (so.quotation_id) db.run("UPDATE quotations SET status = 'diterima', sales_order_id = NULL WHERE id = ? AND sales_order_id = ?", so.quotation_id, so.id); },
+  },
   projects: {
     compute: (_c, row, lines) => {
       if (lines?.length) row.budget = sum(lines, (l) => l.amount);

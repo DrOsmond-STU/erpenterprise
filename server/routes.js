@@ -10,6 +10,7 @@ import { LEVEL, can, requirePerm, resolveScope, permissionsFor, clearPermCache }
 import { getSetting, setSetting, securityPolicy, accountMap, approvalPolicy, clearSettingsCache } from './lib/settings.js';
 import { clearAccountCache } from './ledger/posting.js';
 import { copyBudgets } from './ledger/budget.js';
+import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -142,12 +143,14 @@ route('GET', '/api/meta', (ctx, _b, _p, q) => {
 });
 
 /* --- CRUD generik -------------------------------------------------------------------- */
-route('GET', '/api/e/:entity', (ctx, _b, p, q) => crud.list(scoped(ctx, q), p.entity, q));
-route('GET', '/api/e/:entity/:id', (ctx, _b, p, q) => crud.read(scoped(ctx, q), p.entity, p.id));
+/* Penawaran lewat masa berlaku ditandai kedaluwarsa sebelum dibaca/ditindaklanjuti. */
+const sweep = (entity) => { if (entity === 'quotations') expireQuotations(); };
+route('GET', '/api/e/:entity', (ctx, _b, p, q) => { sweep(p.entity); return crud.list(scoped(ctx, q), p.entity, q); });
+route('GET', '/api/e/:entity/:id', (ctx, _b, p, q) => { sweep(p.entity); return crud.read(scoped(ctx, q), p.entity, p.id); });
 route('POST', '/api/e/:entity', (ctx, b, p, q) => crud.create(scoped(ctx, q), p.entity, b));
 route('PUT', '/api/e/:entity/:id', (ctx, b, p, q) => crud.update(scoped(ctx, q), p.entity, p.id, b));
 route('DELETE', '/api/e/:entity/:id', (ctx, _b, p, q) => crud.remove(scoped(ctx, q), p.entity, p.id));
-route('POST', '/api/e/:entity/:id/actions/:action', (ctx, b, p, q) => crud.runAction(scoped(ctx, q), p.entity, p.id, p.action, b));
+route('POST', '/api/e/:entity/:id/actions/:action', (ctx, b, p, q) => { sweep(p.entity); return crud.runAction(scoped(ctx, q), p.entity, p.id, p.action, b); });
 route('GET', '/api/lookup/:entity', (ctx, _b, p, q) => crud.lookup(scoped(ctx, q), p.entity, q));
 
 /* Ekspor CSV — dicatat di jejak audit; sel diawali =,+,-,@ dinetralkan (CSV injection). */
@@ -190,6 +193,7 @@ const REPORTS = {
   'anggaran-akun': (ctx, r, q) => reports.budgetByAccount(ctx, { ...r, year: Number(q.year) || Number(r.to.slice(0, 4)) }),
   proyek: (ctx, r) => reports.projectSummary(ctx, r),
   'proyek-detail': (ctx, r, q) => reports.projectDetail(ctx, { ...r, projectId: Number(q.project) }),
+  penawaran: (ctx, r) => quotationReport(ctx, r),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
   'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
 };
@@ -198,7 +202,7 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects' }[p.name]
+  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales' }[p.name]
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
   if (r.mode === 'consolidated') requirePerm(ctx, 'reports', LEVEL.approve);
@@ -229,7 +233,7 @@ route('GET', '/api/dashboard', (ctx, _b, _p, q) => {
 /* Kotak persetujuan lintas modul. */
 const APPROVAL_SOURCES = [
   ['sales_orders', 'menunggu', 'approve'], ['purchase_orders', 'menunggu', 'approve'], ['purchase_requests', 'menunggu', 'approve'],
-  ['journals', 'diajukan', 'approve'], ['supplier_payments', 'menunggu', 'post'], ['leave_requests', 'menunggu', 'approve'], ['payroll_runs', 'draf', 'approve'], ['budgets', 'diajukan', 'approve'],
+  ['journals', 'diajukan', 'approve'], ['supplier_payments', 'menunggu', 'post'], ['leave_requests', 'menunggu', 'approve'], ['payroll_runs', 'draf', 'approve'], ['budgets', 'diajukan', 'approve'], ['quotations', 'menunggu', 'approve'],
 ];
 route('GET', '/api/approvals', (ctx, _b, _p, q) => {
   scoped(ctx, q);
@@ -392,5 +396,6 @@ route('GET', '/api/portal/summary', (ctx) => extras.portalSummary(ctx));
 route('GET', '/api/portal/docs/:type', (ctx, _b, p) => extras.portalDocuments(ctx, p.type));
 route('GET', '/api/portal/docs/:type/:id', (ctx, _b, p) => extras.portalDocument(ctx, p.type, p.id));
 route('GET', '/api/portal/statement', (ctx, _b, _p, q) => extras.portalStatement(ctx, q));
+route('POST', '/api/portal/quotations/:id/respond', (ctx, b, p) => { const pc = extras.portalContext(ctx); if (pc.type !== 'customer') throw forbidden(); return portalRespond(ctx, pc.party, p.id, b); });
 
 export { HttpError };

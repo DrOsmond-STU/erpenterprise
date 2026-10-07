@@ -245,3 +245,16 @@ details.pad summary { cursor: pointer; font-size: var(--fs-sm); color: var(--acc
   body.printing .print-sheet { box-shadow: none; width: auto; min-height: auto; padding: 0; page-break-after: always; break-after: page; }
   @page { size: A4; margin: 12mm; }
 }
+
+/* Penawaran: syarat pada cetakan & panel tanggapan pelanggan di portal */
+.ps-terms { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.quote-respond { flex-wrap: wrap; background: var(--accent-soft); }
+.quote-respond-text { display: flex; flex-direction: column; flex: 1 1 260px; font-size: var(--fs-sm); }
+.quote-respond .input { flex: 1 1 180px; max-width: 260px; }
+.quote-respond .select { flex: 0 1 170px; }
+.funnel-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) 3fr auto; gap: var(--sp-2); align-items: center; padding: 6px var(--sp-4); font-size: var(--fs-sm); }
+.funnel-bar { height: 10px; border-radius: 5px; background: var(--accent); min-width: 2px; }
+.funnel-bar[data-tone="ok"] { background: var(--ok); }
+.funnel-bar[data-tone="danger"] { background: var(--danger); }
+.funnel-bar[data-tone="neutral"] { background: var(--ink-3, #999); }
+@media (max-width: 640px) { .funnel-row { grid-template-columns: 1fr; } }

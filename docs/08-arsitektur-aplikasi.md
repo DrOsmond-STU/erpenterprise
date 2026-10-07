@@ -249,3 +249,30 @@ peringatan; `block` menolak transaksi (dibatalkan seluruhnya).
 | `GET /api/reports/proyek?to=` | Ringkasan proyek |
 | `GET /api/reports/proyek-detail?project=&to=` | Rincian satu proyek |
 | `POST /api/budgets/copy` | Salin anggaran (draf) |
+
+## Penawaran ke pelanggan sebelum pesanan penjualan (`server/ledger/quotation.js`)
+
+Alur: **draf → (menunggu persetujuan harga) → disetujui → terkirim → diterima →
+selesai (menjadi SO)**; cabang lain: ditolak, kedaluwarsa, direvisi, batal.
+
+| Langkah | Aturan |
+| --- | --- |
+| Buat | Masa berlaku bawaan `quoteValidityDays` (30 hari), termin & UP/surel dari pelanggan; sistem menghitung diskon tertinggi, estimasi HPP (biaya standar) dan margin kotor — **data internal**, tidak tampil di cetakan maupun portal. |
+| Ajukan | Dibandingkan kebijakan `quoteDiscountLimit` (10 %), `quoteMinMargin` (15 %), `quoteApprovalThreshold` (Rp 500 jt). Sesuai kebijakan → disetujui otomatis; melanggar → *menunggu* di Kotak Persetujuan, disetujui oleh orang lain (pemisahan tugas) atau dikembalikan ke draf. |
+| Kirim | Hanya penawaran disetujui & masih berlaku; tanggal kirim & penerima dicatat; penawaran muncul di portal pelanggan dan dapat dicetak/PDF dengan syarat & ketentuan. |
+| Tanggapan | Pelanggan menerima (nama penanggung jawab + no. PO) atau menolak (alasan) **langsung di portal** (`POST /api/portal/quotations/:id/respond`, teraudit), atau dicatat tenaga penjual. |
+| Kedaluwarsa | Penawaran disetujui/terkirim yang lewat masa berlaku otomatis *kedaluwarsa* (teraudit) dan tidak dapat diterima. |
+| Revisi | Membuat draf baru `QT-…-R1`, `-R2` dst. yang menaut ke versi sebelumnya; versi lama *direvisi*. |
+| Buat SO | Dari penawaran *diterima*: SO membawa pelanggan, barang, harga, diskon, valas, proyek, no. PO pelanggan, tanggal kirim (+ waktu penyerahan); penawaran menjadi *selesai*. Menghapus SO draf mengembalikan penawaran ke *diterima*. |
+
+**Kebijakan `soRequiresQuotation`** (bawaan aktif): pesanan penjualan hanya dapat
+diajukan bila berasal dari penawaran yang diterima (pelanggan antar perusahaan
+dikecualikan). Bila harga lebih rendah, diskon lebih besar, qty melebihi, atau
+barang tidak ada di penawaran, SO masuk *menunggu persetujuan* — di samping
+pemeriksaan plafon kredit yang sudah ada.
+
+**Analisis Penawaran** (`GET /api/reports/penawaran`): corong per status, tingkat
+menang (jumlah & nilai), konversi ke SO, rata-rata waktu tanggapan pelanggan,
+margin rata-rata, kinerja tenaga penjual, alasan kalah, dan penawaran yang
+berakhir ≤ 7 hari. Notifikasi: penawaran diterima (perlu dibuatkan SO) dan
+penawaran yang segera berakhir.

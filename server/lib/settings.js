@@ -41,5 +41,10 @@ export const DEFAULT_ACCOUNT_MAP = {
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });
 
 /* budgetControl: none = tanpa kontrol, warn = peringatan saat posting, block = transaksi melebihi anggaran ditolak. */
-export const DEFAULT_APPROVAL = { poThreshold: 150_000_000, paymentThreshold: 0, requireJournalApproval: true, budgetControl: 'warn' };
+/* Penawaran: di luar diskon/margin/nilai ini harga harus disetujui sebelum dikirim ke pelanggan.
+   soRequiresQuotation: pesanan penjualan (selain antar perusahaan) wajib berasal dari penawaran yang diterima. */
+export const DEFAULT_APPROVAL = {
+  poThreshold: 150_000_000, paymentThreshold: 0, requireJournalApproval: true, budgetControl: 'warn',
+  soRequiresQuotation: true, quoteValidityDays: 30, quoteDiscountLimit: 10, quoteMinMargin: 15, quoteApprovalThreshold: 500_000_000,
+};
 export const approvalPolicy = () => ({ ...DEFAULT_APPROVAL, ...(getSetting('approval_policy', {}) || {}) });

@@ -3,7 +3,7 @@
    anggaran proyek (RAB), komitmen PO, dan laporan proyek. */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, stop, as, db } from './helpers.mjs';
+import { start, stop, as, db, soViaQuotation } from './helpers.mjs';
 
 let admin, osmond, rina;
 const id = (table, code, field = 'code') => db.get(`SELECT id FROM ${table} WHERE ${field} = ?`, code).id;
@@ -186,7 +186,8 @@ test('anggaran proyek (RAB): total dari rincian, realisasi dari tagihan & kas be
 test('proyek terbawa dari PR → PO → tagihan dan SO → faktur', async () => {
   const c = KNM();
   const pid = id('projects', 'PRJ-02');
-  const so = await admin.post(`/api/e/sales_orders?company=${c}`, { branch_id: JKT(), date: '2026-10-06', customer_id: id('customers', 'C006'), warehouse_id: id('warehouses', 'WH-JKT'), project_id: pid, tax_rate: 11, lines: [{ product_id: id('products', 'SV-301'), qty: 10, price: 350_000 }] });
+  const so = { body: await soViaQuotation(admin, osmond, { branch_id: JKT(), date: '2026-10-06', customer_id: id('customers', 'C006'), warehouse_id: id('warehouses', 'WH-JKT'), project_id: pid, tax_rate: 11, lines: [{ product_id: id('products', 'SV-301'), qty: 10, price: 350_000 }] }, `company=${c}`) };
+  assert.equal(so.body.project_id, pid, 'proyek terbawa dari penawaran ke SO');
   await admin.post(`/api/e/sales_orders/${so.body.id}/actions/submit?company=${c}`);
   if ((await admin.get(`/api/e/sales_orders/${so.body.id}?company=${c}`)).body.status === 'menunggu') await osmond.post(`/api/e/sales_orders/${so.body.id}/actions/approve?company=${c}`);
   const inv = await admin.post(`/api/e/sales_orders/${so.body.id}/actions/to_invoice?company=${c}`);

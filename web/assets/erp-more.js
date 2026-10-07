@@ -45,7 +45,7 @@
   };
   const SIGN = {
     sales_invoices: ['Hormat kami', 'Penerima'], customer_receipts: ['Penerima kas', 'Penyetor'], supplier_payments: ['Dibuat oleh', 'Disetujui oleh', 'Penerima'],
-    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
+    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
   };
 
   function companyHeader() {
@@ -54,12 +54,12 @@
       <span>${esc(c.address || '')}</span>${c.npwp && !String(c.npwp).startsWith('••') ? `<span>NPWP ${esc(c.npwp)}</span>` : ''}</div></div>`;
   }
 
-  function openPrint(html, title) {
+  function openPrint(html, title, extra = '') {
     state.lastFocus = document.activeElement;
     state.overlay = { kind: 'print' };
     ERP.overlays().innerHTML = `<div class="scrim" data-close></div><div class="print-wrap" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <div class="print-toolbar"><b>${esc(title)}</b><div class="toolbar-spacer"></div><button class="btn btn-primary" data-print-now>${icon('print')} Cetak / simpan PDF</button><button class="btn btn-ghost" data-close>Tutup</button></div>
-      <div class="print-pages">${html}</div></div>`;
+      ${extra}<div class="print-pages">${html}</div></div>`;
     $('[data-print-now]', ERP.overlays()).focus();
   }
 
@@ -72,7 +72,7 @@
     if (key === 'payroll_runs') return printPayslips(e, r);
     const title = PRINT_TITLES[key] || e.label.toUpperCase();
     const curCode = r.currency_id__label ? String(r.currency_id__label).split(' · ')[0] : 'IDR';
-    const headFields = e.fields.filter((f) => !f.hidden && !['number', 'status', 'subtotal', 'tax', 'tax_rate', 'total', 'paid', 'notes', 'description', 'reason'].includes(f.name) && f.type !== 'password' && r[f.name] != null && r[f.name] !== '' && !f.sensitive && f.type !== 'textarea' && !(f.name === 'exchange_rate' && Number(r[f.name]) === 1));
+    const headFields = e.fields.filter((f) => !f.hidden && !['number', 'status', 'subtotal', 'tax', 'tax_rate', 'total', 'paid', 'notes', 'description', 'reason'].includes(f.name) && f.type !== 'password' && r[f.name] != null && r[f.name] !== '' && !f.sensitive && !f.internal && f.type !== 'textarea' && !(f.name === 'exchange_rate' && Number(r[f.name]) === 1) && !(key === 'quotations' && ['revision', 'sales_order_id', 'revised_from'].includes(f.name) && !r[f.name]));
     const left = headFields.slice(0, Math.ceil(headFields.length / 2)), right = headFields.slice(Math.ceil(headFields.length / 2));
     const dl = (fs) => `<dl class="ps-dl">${fs.map((f) => `<dt>${esc(f.label)}</dt><dd>${fieldHtml(f, r)}</dd>`).join('')}</dl>`;
     let linesHtml = '';
@@ -86,10 +86,22 @@
       ? `<div class="ps-totals"><div><span>Subtotal</span><b>${esc(curCode)} ${esc(num(r.subtotal))}</b></div><div><span>PPN ${esc(num(r.tax_rate))}%</span><b>${esc(curCode)} ${esc(num(r.tax))}</b></div><div class="ps-grand"><span>Total</span><b>${esc(curCode)} ${esc(num(r.total))}</b></div>${r.paid ? `<div><span>Terbayar / dikreditkan</span><b>${esc(curCode)} ${esc(num(r.paid))}</b></div><div><span>Sisa</span><b>${esc(curCode)} ${esc(num(r.total - r.paid))}</b></div>` : ''}</div>`
       : total != null ? `<div class="ps-totals"><div class="ps-grand"><span>Jumlah</span><b>${esc(curCode)} ${esc(num(total))}</b></div></div>` : '';
     const words = total != null && curCode === 'IDR' ? `<p class="ps-words"><span>Terbilang:</span> <i>${esc(terbilangRupiah(total))}</i></p>` : total != null && r.exchange_rate > 1 ? `<p class="ps-words"><span>Setara IDR (kurs ${esc(num(r.exchange_rate))}):</span> <b>${esc(FMT.rp(total * r.exchange_rate))}</b></p>` : '';
-    const notes = r.notes || r.description || r.reason ? `<p class="ps-notes"><span>Keterangan:</span> ${esc(r.notes || r.description || r.reason)}</p>` : '';
+    const notes = (r.notes || r.description || r.reason ? `<p class="ps-notes"><span>Keterangan:</span> ${esc(r.notes || r.description || r.reason)}</p>` : '') + (key === 'quotations' ? quoteTerms(r) : '');
     const signs = (SIGN[key] || ['Dibuat oleh', 'Disetujui oleh']).map((s) => `<div class="ps-sign"><span>${esc(s)}</span><i></i><span>(&nbsp;${'&nbsp;'.repeat(30)}&nbsp;)</span></div>`).join('');
     openPrint(sheet(`<header class="ps-head">${companyHeader()}<div class="ps-title"><h1>${esc(title)}</h1><b class="code">${esc(r.number || r.code || `#${r.id}`)}</b>${e.statusField ? pill(r[e.statusField]) : ''}</div></header>
       <div class="ps-meta">${dl(left)}${dl(right)}</div>${linesHtml}${totals}${words}${notes}<div class="ps-signs">${signs}</div>`), `${title} ${r.number || ''}`);
+  }
+
+  /** Syarat penawaran pada cetakan & portal. */
+  function quoteTerms(r) {
+    const items = [
+      r.valid_until && `Penawaran berlaku sampai <b>${esc(ERP.date(r.valid_until))}</b>.`,
+      r.terms_days != null && `Pembayaran ${Number(r.terms_days) ? `${esc(r.terms_days)} hari setelah tanggal faktur` : 'tunai / di muka'}.`,
+      r.lead_time_days && `Waktu penyerahan ${esc(r.lead_time_days)} hari setelah PO diterima.`,
+      r.delivery_terms && `Penyerahan: ${esc(r.delivery_terms)}.`,
+      'Harga belum termasuk PPN kecuali dinyatakan lain; PPN dihitung sesuai tarif yang berlaku.',
+    ].filter(Boolean);
+    return `<div class="ps-notes"><span>Syarat & ketentuan:</span><ol class="ps-terms">${items.map((x) => `<li>${x}</li>`).join('')}</ol></div>`;
   }
 
   function printPayslips(e, r) {
@@ -585,9 +597,37 @@
     state.meta.company = d.company;
     openPrint(sheet(`<header class="ps-head">${companyHeader()}<div class="ps-title"><h1>${esc(titles[kind] || 'DOKUMEN')}</h1><b class="code">${esc(d.number)}</b>${pill(d.status)}</div></header>
       <div class="ps-meta"><dl class="ps-dl"><dt>Kepada / dari</dt><dd>${esc(d.party)}</dd><dt>Tanggal</dt><dd>${esc(ERP.date(d.date))}</dd>${d.due_date ? `<dt>Jatuh tempo</dt><dd>${esc(ERP.date(d.due_date))}</dd>` : ''}</dl></div>
-      ${d.lines.length ? `<table class="ps-table"><thead><tr><th>No</th><th>Barang / dokumen</th><th class="ta-r">Qty</th><th class="ta-r">Harga</th><th class="ta-r">Jumlah</th></tr></thead><tbody>${d.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.product || '')}${l.description ? `<span class="cell-sub">${esc(l.description)}</span>` : ''}</td><td class="ta-r">${l.qty != null ? esc(num(l.qty)) : ''}</td><td class="ta-r">${l.price != null ? esc(num(l.price)) : ''}</td><td class="ta-r">${esc(num(l.amount))}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${kind === 'quotations' ? `<div class="ps-meta"><dl class="ps-dl">${d.attention ? `<dt>Kepada (UP)</dt><dd>${esc(d.attention)}</dd>` : ''}${d.revision ? `<dt>Revisi</dt><dd>${esc(d.revision)}</dd>` : ''}<dt>Berlaku sampai</dt><dd>${esc(ERP.date(d.valid_until))}</dd></dl><dl class="ps-dl">${d.salesperson ? `<dt>Tenaga penjual</dt><dd>${esc(d.salesperson)}</dd>` : ''}${d.terms_days != null ? `<dt>Termin</dt><dd>${esc(d.terms_days)} hari</dd>` : ''}</dl></div>` : ''}
+      ${d.lines.length ? `<table class="ps-table"><thead><tr><th>No</th><th>Barang / dokumen</th><th class="ta-r">Qty</th><th class="ta-r">Harga</th>${d.lines.some((l) => l.discount_pct) ? '<th class="ta-r">Diskon</th>' : ''}<th class="ta-r">Jumlah</th></tr></thead><tbody>${d.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.product || '')}${l.description ? `<span class="cell-sub">${esc(l.description)}</span>` : ''}</td><td class="ta-r">${l.qty != null ? esc(num(l.qty)) : ''}</td><td class="ta-r">${l.price != null ? esc(num(l.price)) : ''}</td>${d.lines.some((x) => x.discount_pct) ? `<td class="ta-r">${l.discount_pct ? `${esc(num(l.discount_pct))}%` : ''}</td>` : ''}<td class="ta-r">${esc(num(l.amount))}</td></tr>`).join('')}</tbody></table>` : ''}
       <div class="ps-totals">${d.subtotal != null ? `<div><span>Subtotal</span><b>${esc(num(d.subtotal))}</b></div><div><span>PPN ${esc(num(d.tax_rate))}%</span><b>${esc(num(d.tax))}</b></div>` : ''}<div class="ps-grand"><span>Total</span><b>${esc(num(d.total))}</b></div>${d.paid ? `<div><span>Terbayar</span><b>${esc(num(d.paid))}</b></div>` : ''}</div>
-      ${d.total ? `<p class="ps-words"><span>Terbilang:</span> <i>${esc(terbilangRupiah(d.total))}</i></p>` : ''}`), `${titles[kind] || 'Dokumen'} ${d.number}`);
+      ${d.total ? `<p class="ps-words"><span>Terbilang:</span> <i>${esc(terbilangRupiah(d.total))}</i></p>` : ''}
+      ${kind === 'quotations' ? `${d.notes ? `<p class="ps-notes"><span>Catatan:</span> ${esc(d.notes)}</p>` : ''}${quoteTerms(d)}${d.accepted_by ? `<p class="ps-notes"><span>Disetujui pelanggan:</span> ${esc(d.accepted_by)}${d.customer_po ? ` · PO ${esc(d.customer_po)}` : ''} · ${esc(ERP.date(d.responded_at))}</p>` : ''}` : ''}`),
+    `${titles[kind] || 'Dokumen'} ${d.number}`, kind === 'quotations' && d.canRespond ? quoteRespondPanel(d) : '');
+  }
+
+  /** Panel tanggapan penawaran untuk pelanggan (tidak ikut tercetak). */
+  function quoteRespondPanel(d) {
+    return `<form class="print-toolbar quote-respond" data-quote-respond="${d.id}" novalidate>
+      <div class="quote-respond-text"><b>Tanggapi penawaran ${esc(d.number)}</b><span class="muted">Berlaku sampai ${esc(ERP.date(d.valid_until))}. Keputusan Anda tercatat dan diteruskan ke tenaga penjual kami.</span></div>
+      <input class="input" name="name" placeholder="Nama & jabatan penanggung jawab" maxlength="120" aria-label="Nama penanggung jawab" required>
+      <input class="input" name="customer_po" placeholder="No. PO (opsional)" maxlength="60" aria-label="Nomor PO">
+      <button class="btn btn-primary" type="button" data-quote-decide="accept">${icon('check')} Terima penawaran</button>
+      <select class="select" name="lost_reason" aria-label="Alasan menolak"><option value="harga">Harga</option><option value="waktu">Waktu penyerahan</option><option value="spesifikasi">Spesifikasi</option><option value="pesaing">Memilih penyedia lain</option><option value="anggaran">Anggaran</option><option value="ditunda">Ditunda</option><option value="lainnya">Lainnya</option></select>
+      <button class="btn btn-danger-ghost" type="button" data-quote-decide="reject">Tolak</button>
+    </form>`;
+  }
+  async function quoteDecide(btn) {
+    const f = btn.closest('[data-quote-respond]');
+    const name = f.name.value.trim();
+    if (!name) { f.name.focus(); return toast('Isi nama penanggung jawab', '', 'warn'); }
+    const decision = btn.dataset.quoteDecide;
+    if (decision === 'reject' && !(await ERP.confirmBox('Tolak penawaran', 'Penawaran akan ditandai ditolak. Lanjutkan?', { danger: true, ok: 'Tolak' }))) return;
+    try {
+      await api('POST', `/api/portal/quotations/${f.dataset.quoteRespond}/respond`, { decision, name, customer_po: f.customer_po.value.trim(), lost_reason: f.lost_reason.value });
+      closeOverlay();
+      toast(decision === 'accept' ? 'Penawaran diterima' : 'Penawaran ditolak', decision === 'accept' ? 'Terima kasih — kami akan segera memproses pesanan Anda.' : 'Terima kasih atas tanggapan Anda.');
+      renderPortal();
+    } catch (e) { fail(e); }
   }
 
   /* ======================================================================== */
@@ -623,7 +663,8 @@
     if (q('[data-recon-none]')) { $$('[data-recon-line]').forEach((c) => { c.checked = false; }); reconRecalc(); return; }
     if (q('[data-recon-save]')) { await reconSave().catch(() => {}); ERP.app.renderView(); return; }
     if ((el = q('[data-portal-tab]'))) { state.portalTab = el.dataset.portalTab; renderPortal(); return; }
-    if ((el = q('[data-portal-doc]'))) { const [k, id] = el.dataset.portalDoc.split(':'); portalDoc(k, id); }
+    if ((el = q('[data-portal-doc]'))) { const [k, id] = el.dataset.portalDoc.split(':'); portalDoc(k, id); return; }
+    if ((el = q('[data-quote-decide]'))) { quoteDecide(el); }
   }, true);
 
   document.addEventListener('change', (ev) => {

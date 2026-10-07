@@ -220,6 +220,21 @@ try {
   check(/RAB/.test(await page.textContent('.view-root')), 'laporan proyek: rincian RAB, kurva-S, transaksi');
   await page.screenshot({ path: join(shots, 'laporan-proyek-rinci.png'), fullPage: true });
 
+  // Penawaran → pesanan penjualan: analisis, cetak penawaran tanpa data internal.
+  await page.evaluate(() => { location.hash = '#/analisis-penawaran'; });
+  await page.waitForSelector('.funnel-row', { timeout: 8000 });
+  check((await page.$$('.funnel-row')).length >= 8, 'analisis penawaran: corong status tampil');
+  await page.screenshot({ path: join(shots, 'analisis-penawaran.png'), fullPage: true });
+  await page.evaluate(() => { location.hash = '#/penawaran'; });
+  await page.waitForSelector('tr[data-open^="quotations:"]');
+  await page.click('tr[data-open^="quotations:"]');
+  await page.waitForSelector('[data-print-record]');
+  await page.click('[data-print-record]');
+  await page.waitForSelector('.print-sheet');
+  const sheetText = await page.textContent('.print-sheet');
+  check(/Syarat & ketentuan/.test(sheetText) && !/margin|HPP|persetujuan/i.test(sheetText), 'cetak penawaran: syarat tampil, data internal tersembunyi');
+  await page.click('.print-toolbar [data-close]');
+
   // Tampilan sempit (ponsel).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });
@@ -244,6 +259,24 @@ try {
   await pp.fill('#lg-pass', 'Erp#Demo2026!');
   await pp.click('button[type=submit]');
   await pp.waitForSelector('.portal-shell');
+  // Pelanggan menerima penawaran dari portal.
+  await pp.click('[data-portal-tab="quotations"]');
+  await pp.waitForTimeout(700);
+  let responded = false;
+  for (const b of await pp.$$('[data-portal-doc]')) {
+    await b.click();
+    await pp.waitForSelector('.print-sheet');
+    if (await pp.$('[data-quote-respond]')) {
+      await pp.fill('[data-quote-respond] [name=name]', 'Budi Hartono, Manajer Pengadaan');
+      await pp.fill('[data-quote-respond] [name=customer_po]', 'PO-E2E-1');
+      await pp.click('[data-quote-decide="accept"]');
+      await pp.waitForTimeout(1200);
+      responded = /Diterima/.test(await pp.textContent('[data-portal-root]'));
+      break;
+    }
+    await pp.click('.print-toolbar [data-close]');
+  }
+  check(responded, 'portal: pelanggan menerima penawaran (nama & PO)');
   await pp.click('[data-portal-tab="invoices"]');
   await pp.waitForTimeout(700);
   await pp.click('[data-portal-doc]');

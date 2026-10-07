@@ -44,6 +44,41 @@ function fxLine(diff, branchId, memo) {
   return d > 0 ? { account_id: acct('fx_gain'), branch_id: branchId, credit: d, memo } : { account_id: acct('fx_loss'), branch_id: branchId, debit: -d, memo };
 }
 
+/* --- Penawaran ------------------------------------------------------------------ */
+const quoteExpired = (q) => !!q.valid_until && q.valid_until < today();
+
+/** Pelanggaran kebijakan harga penawaran → perlu persetujuan sebelum dikirim. */
+function quotePolicyIssues(q) {
+  const pol = approvalPolicy();
+  const out = [];
+  if ((q.max_discount || 0) > pol.quoteDiscountLimit) out.push(`diskon ${q.max_discount}% > batas ${pol.quoteDiscountLimit}%`);
+  if (q.est_margin != null && q.est_cost > 0 && q.est_margin < pol.quoteMinMargin) out.push(`estimasi margin ${q.est_margin}% < minimum ${pol.quoteMinMargin}%`);
+  const idr = round2((q.total || 0) * (Number(q.exchange_rate) || 1));
+  if (pol.quoteApprovalThreshold > 0 && idr > pol.quoteApprovalThreshold) out.push(`nilai Rp ${Math.round(idr).toLocaleString('id-ID')} > ambang Rp ${Math.round(pol.quoteApprovalThreshold).toLocaleString('id-ID')}`);
+  return out;
+}
+
+/** Pesanan penjualan wajib dari penawaran diterima; penyimpangan harga/qty dari penawaran perlu persetujuan. */
+function soQuotationCheck(so, cust, soLines) {
+  if (!so.quotation_id) {
+    if (approvalPolicy().soRequiresQuotation && !cust.related_company_id) throw bad('Kebijakan penjualan: pesanan penjualan harus dibuat dari penawaran yang sudah diterima pelanggan (Penjualan → Penawaran → Buat pesanan penjualan).');
+    return null;
+  }
+  const q = db.get('SELECT id, number, customer_id, status FROM quotations WHERE id = ?', so.quotation_id);
+  if (!q || q.customer_id !== so.customer_id) throw bad('Pelanggan pesanan harus sama dengan pelanggan pada penawaran.');
+  const ql = lines('quotation_lines', q.id);
+  const diffs = [];
+  for (const l of soLines) {
+    const m = ql.find((x) => x.product_id === l.product_id);
+    const qty = soLines.filter((x) => x.product_id === l.product_id).reduce((a, x) => a + x.qty, 0);
+    const qQty = ql.filter((x) => x.product_id === l.product_id).reduce((a, x) => a + x.qty, 0);
+    if (!m) diffs.push(`barang ${product(l.product_id).code} tidak ada di penawaran`);
+    else if (l.price < m.price - 0.005 || (l.discount_pct || 0) > (m.discount_pct || 0) + 1e-9) diffs.push(`harga ${product(l.product_id).code} di bawah penawaran`);
+    else if (qty > qQty + 1e-9) diffs.push(`qty ${product(l.product_id).code} melebihi penawaran`);
+  }
+  return diffs.length ? `Berbeda dari penawaran ${q.number}: ${[...new Set(diffs)].join(', ')}` : null;
+}
+
 const tradeCopy = (ls) => ls.map((l) => ({ product_id: l.product_id, description: l.description, qty: l.qty, price: l.price, discount_pct: l.discount_pct, amount: l.amount }));
 
 /* --- Penjualan -------------------------------------------------------------- */
@@ -662,24 +697,62 @@ export const ACTIONS = {
   maintenance_orders: { start: to('maintenance_orders', 'berjalan'), complete: completeMaintenance, cancel: to('maintenance_orders', 'batal') },
 
   quotations: {
-    send: to('quotations', 'terkirim'), accept: to('quotations', 'diterima'), reject: to('quotations', 'ditolak'),
-    to_order: (ctx, q) => {
-      const wh = db.get("SELECT id FROM warehouses WHERE branch_id = ? AND status = 'aktif' ORDER BY id LIMIT 1", q.branch_id) || db.get("SELECT id FROM warehouses WHERE company_id = ? ORDER BY id LIMIT 1", q.company_id);
-      if (!wh) throw bad('Belum ada gudang di perusahaan ini.');
-      const { id, number } = createDoc(ctx, 'sales_orders', 'SO', {
-        company_id: q.company_id, branch_id: q.branch_id, date: today(), customer_id: q.customer_id, warehouse_id: wh.id, quotation_id: q.id, ...fxCopy(q),
-        subtotal: q.subtotal, tax_rate: q.tax_rate, tax: q.tax, total: q.total, status: 'draf', notes: `Dari penawaran ${q.number}`,
-      }, tradeCopy(lines('quotation_lines', q.id)), 'sales_order_lines');
-      return { redirect: { entity: 'sales_orders', id }, message: `Pesanan ${number} dibuat.` };
+    submit: (_c, q) => {
+      needLines(lines('quotation_lines', q.id), 'penawaran');
+      if (quoteExpired(q)) throw bad(`Masa berlaku penawaran berakhir ${q.valid_until}. Ubah tanggal berlaku terlebih dahulu.`);
+      const reasons = quotePolicyIssues(q);
+      setStatus('quotations', q.id, reasons.length ? 'menunggu' : 'disetujui', { approval_note: reasons.length ? reasons.join('; ') : 'Sesuai kebijakan harga — disetujui otomatis' });
+      return { message: reasons.length ? `Perlu persetujuan harga: ${reasons.join('; ')}.` : 'Harga sesuai kebijakan — penawaran siap dikirim ke pelanggan.' };
     },
+    approve: (ctx, q) => setStatus('quotations', q.id, 'disetujui', { approval_note: `${q.approval_note ? `${q.approval_note} — ` : ''}disetujui ${ctx.user.full_name} ${today()}`.slice(0, 500) }),
+    return_draft: (_c, q, p) => setStatus('quotations', q.id, 'draf', { approval_note: `Dikembalikan: ${p.reason}`.slice(0, 500) }),
+    send: (_c, q, p) => {
+      if (quoteExpired(q)) throw bad(`Masa berlaku penawaran berakhir ${q.valid_until}. Buat revisi dengan tanggal berlaku baru.`);
+      const to2 = (p.sent_to || q.email || '').trim() || 'portal pelanggan';
+      setStatus('quotations', q.id, 'terkirim', { sent_at: today(), sent_to: to2.slice(0, 200) });
+      return { message: `Penawaran ${q.number} terkirim (${to2}) dan tersedia di portal pelanggan untuk diterima/ditolak.` };
+    },
+    accept: (_c, q, p) => {
+      if (quoteExpired(q)) throw conflict(`Penawaran kedaluwarsa sejak ${q.valid_until}; buat revisi sebelum diterima.`);
+      setStatus('quotations', q.id, 'diterima', { responded_at: today(), accepted_by: String(p.accepted_by).slice(0, 200), customer_po: p.customer_po ? String(p.customer_po).slice(0, 60) : null });
+      return { message: 'Penawaran diterima pelanggan — lanjutkan "Buat pesanan penjualan".' };
+    },
+    reject: (_c, q, p) => setStatus('quotations', q.id, 'ditolak', { responded_at: today(), lost_reason: p.lost_reason, notes: p.note ? `${q.notes ? `${q.notes}\n` : ''}Ditolak pelanggan: ${p.note}`.slice(0, 2000) : q.notes }),
+    revise: (ctx, q) => {
+      const base = String(q.number).replace(/-R\d+$/, '');
+      const rev = (db.get("SELECT MAX(revision) r FROM quotations WHERE company_id = ? AND (number = ? OR number LIKE ?)", q.company_id, base, `${base}-R%`).r || 0) + 1;
+      const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (Number(approvalPolicy().quoteValidityDays) || 30));
+      const copy = { ...q };
+      for (const k of ['id', 'number', 'status', 'approval_note', 'sent_at', 'sent_to', 'responded_at', 'accepted_by', 'customer_po', 'lost_reason', 'sales_order_id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'row_version']) delete copy[k];
+      const id = db.insert('quotations', { ...copy, number: `${base}-R${rev}`, revision: rev, revised_from: q.id, date: today(), valid_until: d.toISOString().slice(0, 10), status: 'draf', created_at: nowIso(), created_by: ctx.user.id, updated_at: nowIso(), updated_by: ctx.user.id });
+      lines('quotation_lines', q.id).forEach((l, i) => db.insert('quotation_lines', { parent_id: id, line_no: i + 1, product_id: l.product_id, description: l.description, qty: l.qty, price: l.price, discount_pct: l.discount_pct, amount: l.amount }));
+      setStatus('quotations', q.id, 'direvisi');
+      return { redirect: { entity: 'quotations', id }, message: `Revisi ${base}-R${rev} dibuat sebagai draf.` };
+    },
+    to_order: (ctx, q, p) => {
+      const wh = p.warehouse_id ? db.get('SELECT id, company_id FROM warehouses WHERE id = ?', p.warehouse_id)
+        : db.get("SELECT id, company_id FROM warehouses WHERE branch_id = ? AND status = 'aktif' ORDER BY id LIMIT 1", q.branch_id) || db.get("SELECT id, company_id FROM warehouses WHERE company_id = ? AND status = 'aktif' ORDER BY id LIMIT 1", q.company_id);
+      if (!wh || wh.company_id !== q.company_id) throw bad('Gudang kirim harus milik perusahaan penawaran.');
+      let delivery = p.delivery_date || null;
+      if (!delivery && q.lead_time_days) { const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + q.lead_time_days); delivery = d.toISOString().slice(0, 10); }
+      const { id, number } = createDoc(ctx, 'sales_orders', 'SO', {
+        company_id: q.company_id, branch_id: q.branch_id, date: today(), delivery_date: delivery, customer_id: q.customer_id, warehouse_id: wh.id, quotation_id: q.id, project_id: q.project_id ?? null,
+        customer_po: q.customer_po, ...fxCopy(q), subtotal: q.subtotal, tax_rate: q.tax_rate, tax: q.tax, total: q.total, status: 'draf', notes: `Dari penawaran ${q.number}`,
+      }, tradeCopy(lines('quotation_lines', q.id)), 'sales_order_lines');
+      setStatus('quotations', q.id, 'selesai', { sales_order_id: id });
+      return { redirect: { entity: 'sales_orders', id }, message: `Pesanan ${number} dibuat dari penawaran ${q.number}. Ajukan untuk pemeriksaan plafon kredit.` };
+    },
+    cancel: to('quotations', 'batal'),
   },
   sales_orders: {
     submit: (_ctx, so) => {
-      needLines(lines('sales_order_lines', so.id), 'pesanan');
+      const soLines = lines('sales_order_lines', so.id);
+      needLines(soLines, 'pesanan');
       const c = db.get('SELECT * FROM customers WHERE id = ?', so.customer_id);
+      const quoteNote = soQuotationCheck(so, c, soLines);
       const open = db.get("SELECT COALESCE(SUM(total - paid),0) v FROM sales_invoices WHERE customer_id = ? AND status IN ('terbit','sebagian')", c.id).v;
       const over = c.credit_limit > 0 && open + so.total > c.credit_limit;
-      const reason = c.status === 'ditahan' ? 'Pelanggan berstatus ditahan' : over ? `Melebihi plafon kredit (terbuka ${Math.round(open).toLocaleString('id-ID')} + pesanan ${Math.round(so.total).toLocaleString('id-ID')} > plafon ${Math.round(c.credit_limit).toLocaleString('id-ID')})` : null;
+      const reason = [c.status === 'ditahan' ? 'Pelanggan berstatus ditahan' : over ? `Melebihi plafon kredit (terbuka ${Math.round(open).toLocaleString('id-ID')} + pesanan ${Math.round(so.total).toLocaleString('id-ID')} > plafon ${Math.round(c.credit_limit).toLocaleString('id-ID')})` : null, quoteNote].filter(Boolean).join('; ') || null;
       setStatus('sales_orders', so.id, reason ? 'menunggu' : 'disetujui', { approval_note: reason || 'Dalam plafon kredit — disetujui otomatis' });
       return { message: reason ? `Butuh persetujuan: ${reason}.` : 'Pesanan disetujui otomatis (dalam plafon).' };
     },
@@ -773,7 +846,9 @@ export const ACTIONS = {
       }
       const subtotal = round2(lead.value || 0), tax = round2(subtotal * 0.11);
       const { id, number } = createDoc(ctx, 'quotations', 'QT', {
-        company_id: lead.company_id, branch_id: lead.branch_id, date: today(), customer_id: cust.id, lead_id: lead.id, subtotal, tax_rate: 11, tax, total: round2(subtotal + tax), status: 'draf', notes: lead.title,
+        company_id: lead.company_id, branch_id: lead.branch_id, date: today(), valid_until: (() => { const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (Number(approvalPolicy().quoteValidityDays) || 30)); return d.toISOString().slice(0, 10); })(),
+        customer_id: cust.id, lead_id: lead.id, attention: lead.contact, email: lead.email, salesperson: lead.owner, revision: 0, terms_days: db.get('SELECT terms_days FROM customers WHERE id = ?', cust.id)?.terms_days ?? 30,
+        subtotal, tax_rate: 11, tax, total: round2(subtotal + tax), status: 'draf', notes: lead.title,
       }, [], 'quotation_lines');
       db.update('leads', lead.id, { customer_id: cust.id });
       return { redirect: { entity: 'quotations', id }, message: `Penawaran ${number} dibuat. Lengkapi baris barangnya.` };

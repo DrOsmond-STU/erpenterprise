@@ -53,3 +53,22 @@ export class Client {
 }
 
 export const as = async (username) => new Client().login(username);
+
+/**
+ * Pesanan penjualan lewat alur penawaran (kebijakan: SO wajib dari penawaran diterima):
+ * buat penawaran → ajukan → (setujui harga bila perlu) → kirim → diterima pelanggan → buat pesanan.
+ */
+export async function soViaQuotation(maker, approver, body, query = '') {
+  const sep = query ? (query.startsWith('?') ? query : `?${query}`) : '';
+  const { warehouse_id, ...qbody } = body;
+  const q = await maker.post(`/api/e/quotations${sep}`, qbody);
+  if (q.status !== 200) throw new Error(`penawaran: ${JSON.stringify(q.body)}`);
+  const act = (who, a, params = {}) => who.post(`/api/e/quotations/${q.body.id}/actions/${a}${sep}`, params);
+  const sub = await act(maker, 'submit');
+  if (sub.body.record.status === 'menunggu') await act(approver, 'approve');
+  await act(maker, 'send');
+  await act(maker, 'accept', { accepted_by: 'Pelanggan uji', customer_po: 'PO-UJI' });
+  const so = await act(maker, 'to_order', { warehouse_id });
+  if (so.status !== 200) throw new Error(`to_order: ${JSON.stringify(so.body)}`);
+  return (await maker.get(`/api/e/sales_orders/${so.body.redirect.id}${sep}`)).body;
+}

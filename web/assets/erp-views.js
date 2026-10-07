@@ -454,6 +454,8 @@
     sessionAbsoluteHours: 'Batas sesi mutlak (jam)', mfaRequiredForAdmin: 'Wajibkan MFA untuk administrator', loginRateLimitPerMinute: 'Batas percobaan masuk per menit per IP',
     apiRateLimitPerMinute: 'Batas permintaan API per menit per IP', poThreshold: 'Ambang persetujuan PO (Rp)', paymentThreshold: 'Ambang persetujuan pembayaran (Rp)',
     requireJournalApproval: 'Jurnal manual wajib disetujui', budgetControl: 'Kontrol anggaran (COA & proyek)',
+    soRequiresQuotation: 'Pesanan penjualan wajib dari penawaran yang diterima pelanggan', quoteValidityDays: 'Masa berlaku penawaran bawaan (hari)',
+    quoteDiscountLimit: 'Diskon maksimum penawaran tanpa persetujuan (%)', quoteMinMargin: 'Margin kotor minimum penawaran (%)', quoteApprovalThreshold: 'Ambang persetujuan nilai penawaran (Rp)',
   };
   const SETTING_OPTIONS = { budgetControl: [['none', 'Tanpa kontrol'], ['warn', 'Peringatan saat posting'], ['block', 'Blokir transaksi melebihi anggaran']] };
   async function settings(root) {

@@ -443,11 +443,11 @@ export function metaFor(ctx) {
       key: k, label: e.label, one: e.one, module: e.module, scope: e.scope, title: e.title, number: !!e.number,
       statusField: e.statusField, editable: e.editable || null, readonly: !!e.readonlyEntity, sort: e.sort, sortDir: e.sortDir || 'asc',
       canWrite: can(ctx, e.module, LEVEL.write) && !e.readonlyEntity,
-      fields: e.fields.map(({ name, label, type, options, ref, required, readonly, list, search, max, min, help, sensitive, createOnly, refFilter, refParent, refScope, default: d, hidden, pattern, unique }) =>
-        ({ name, label, type, options, ref, required, readonly, list, search, max, min, help, sensitive, createOnly, refFilter, refParent, refScope, default: d, hidden, pattern, unique })),
+      fields: e.fields.map(({ name, label, type, options, ref, required, readonly, list, search, max, min, help, sensitive, createOnly, refFilter, refParent, refScope, default: d, hidden, pattern, unique, internal }) =>
+        ({ name, label, type, options, ref, required, readonly, list, search, max, min, help, sensitive, createOnly, refFilter, refParent, refScope, default: d, hidden, pattern, unique, internal })),
       computed: Object.fromEntries(Object.entries(e.computed).map(([n, c]) => [n, { label: c.label, type: c.type, list: c.list }])),
       lines: e.lines ? { fields: e.lines.fields } : null,
-      actions: e.actions.map((a) => ({ name: a.name, label: a.label, from: a.from, params: !!a.params, level: a.level, sod: !!a.sod })),
+      actions: e.actions.map((a) => ({ name: a.name, label: a.label, from: a.from, params: !!a.params, level: a.level, sod: !!a.sod, confirm: a.confirm || null })),
     };
   }
   return out;

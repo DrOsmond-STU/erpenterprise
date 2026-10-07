@@ -3,7 +3,7 @@
    konsolidasi) selalu konsisten. */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, stop, as, db } from './helpers.mjs';
+import { start, stop, as, db, soViaQuotation } from './helpers.mjs';
 
 let admin, osmond;
 const id = (table, code, field = 'code') => db.get(`SELECT id FROM ${table} WHERE ${field} = ?`, code).id;
@@ -82,11 +82,10 @@ test('laporan konsolidasi seimbang, eliminasi antar perusahaan & investasi, NCI'
 test('siklus penjualan: SO → faktur → posting (stok & HPP) → penerimaan → pembatalan', async () => {
   const jkt = id('branches', 'JKT');
   const stockBefore = db.get('SELECT qty FROM stock_balances WHERE product_id = ? AND warehouse_id = ?', id('products', 'FG-102'), id('warehouses', 'WH-JKT')).qty;
-  const so = await admin.post('/api/e/sales_orders', {
+  const so = { body: await soViaQuotation(admin, osmond, {
     branch_id: jkt, date: '2026-10-07', customer_id: id('customers', 'C004'), warehouse_id: id('warehouses', 'WH-JKT'), tax_rate: 11,
     lines: [{ product_id: id('products', 'FG-102'), qty: 2, price: 2_250_000 }],
-  });
-  assert.equal(so.status, 200);
+  }) };
   assert.equal(so.body.total, 4_995_000);
   const sub = await admin.post(`/api/e/sales_orders/${so.body.id}/actions/submit`);
   assert.equal(sub.body.record.status, 'disetujui');
@@ -122,7 +121,7 @@ test('siklus penjualan: SO → faktur → posting (stok & HPP) → penerimaan �
 
 test('plafon kredit: SO melebihi plafon menunggu persetujuan; pembuat tidak boleh menyetujui', async () => {
   const sales = await as('sari.sales');
-  const so = await sales.post('/api/e/sales_orders', { date: '2026-10-07', customer_id: id('customers', 'C008'), warehouse_id: id('warehouses', 'WH-JKT'), lines: [{ product_id: id('products', 'FG-101'), qty: 200, price: 4_850_000 }] });
+  const so = { body: await soViaQuotation(sales, await as('budi.ops'), { date: '2026-10-07', customer_id: id('customers', 'C008'), warehouse_id: id('warehouses', 'WH-JKT'), lines: [{ product_id: id('products', 'FG-101'), qty: 200, price: 4_850_000 }] }) };
   const s = await sales.post(`/api/e/sales_orders/${so.body.id}/actions/submit`);
   assert.equal(s.body.record.status, 'menunggu');
   assert.match(s.body.record.approval_note, /plafon/);

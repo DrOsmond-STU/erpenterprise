@@ -74,7 +74,7 @@ export const STATUS = {
   izin: ['Izin', 'neutral'], alpa: ['Alpa', 'danger'], berlaku: ['Berlaku', 'ok'], kedaluwarsa: ['Kedaluwarsa', 'danger'],
   patuh: ['Patuh', 'ok'], peninjauan: ['Peninjauan', 'warn'], 'tidak-patuh': ['Tidak patuh', 'danger'],
   dilaporkan: ['Dilaporkan', 'warn'], investigasi: ['Investigasi', 'accent'], ditangani: ['Ditangani', 'ok'],
-  buka: ['Buka', 'accent'],
+  buka: ['Buka', 'accent'], direvisi: ['Direvisi', 'neutral'],
   diterapkan: ['Diterapkan', 'ok'], direncanakan: ['Direncanakan', 'warn'], diterima_risiko: ['Risiko diterima', 'neutral'],
 };
 
@@ -89,6 +89,9 @@ export const MODULES = [
 ];
 
 const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
+
+/* Alasan penawaran ditolak (analisis kalah-menang). */
+const QUOTE_LOST = [['harga', 'Harga terlalu tinggi'], ['waktu', 'Waktu penyerahan'], ['spesifikasi', 'Spesifikasi tidak sesuai'], ['pesaing', 'Memilih pesaing'], ['anggaran', 'Anggaran pelanggan'], ['ditunda', 'Proyek ditunda/batal'], ['lainnya', 'Lainnya']];
 
 /* Anggaran bulanan: kolom m01..m12. */
 export const BUDGET_MONTHS = Array.from({ length: 12 }, (_, i) => `m${String(i + 1).padStart(2, '0')}`);
@@ -426,19 +429,46 @@ export const ENTITIES = {
     label: 'Penawaran', one: 'penawaran', module: 'sales', scope: 'branch', title: 'number', number: 'QT', sort: 'date', sortDir: 'desc',
     editable: ['draf'],
     fields: [
-      F.number(), F.date('date', 'Tanggal', { required: true, list: true }), F.date('valid_until', 'Berlaku sampai', { list: true }),
+      F.number(), F.int('revision', 'Revisi ke', { readonly: true, list: true }),
+      F.date('date', 'Tanggal', { required: true, list: true }),
+      F.date('valid_until', 'Berlaku sampai', { list: true, help: 'Kosong = masa berlaku bawaan kebijakan (30 hari).' }),
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
-      F.ref('lead_id', 'Peluang CRM', 'leads'), F.area('notes', 'Catatan'),
+      F.text('attention', 'Kepada (UP)', { max: 120 }),
+      F.email({ label: 'Surel penerima' }),
+      F.text('salesperson', 'Tenaga penjual', { max: 80, list: true, search: true }),
+      F.ref('lead_id', 'Peluang CRM', 'leads'),
+      F.ref('project_id', 'Proyek', 'projects', { help: 'Terbawa ke pesanan penjualan & faktur.' }),
+      F.int('terms_days', 'Termin pembayaran (hari)', { min: 0, max: 365, help: 'Kosong = termin pelanggan.' }),
+      F.int('lead_time_days', 'Waktu penyerahan (hari)', { min: 0, max: 365 }),
+      F.text('delivery_terms', 'Syarat penyerahan', { max: 200, help: 'Mis. franco gudang pelanggan, termasuk instalasi.' }),
+      F.area('notes', 'Syarat & ketentuan / catatan'),
       ...fx(),
       ...docTotals(),
-      F.status(['draf', 'terkirim', 'diterima', 'ditolak'], 'draf'),
+      F.pct('max_discount', 'Diskon tertinggi', { readonly: true, internal: true }),
+      F.money('est_cost', 'Estimasi HPP (IDR)', { readonly: true, internal: true }),
+      F.num('est_margin', 'Estimasi margin kotor (%)', { readonly: true, internal: true }),
+      F.text('approval_note', 'Catatan persetujuan', { readonly: true, internal: true, max: 500 }),
+      F.date('sent_at', 'Tanggal dikirim', { readonly: true }),
+      F.text('sent_to', 'Dikirim ke', { readonly: true, internal: true }),
+      F.date('responded_at', 'Tanggal tanggapan', { readonly: true }),
+      F.text('accepted_by', 'Disetujui pelanggan oleh', { readonly: true }),
+      F.text('customer_po', 'No. PO pelanggan', { readonly: true }),
+      F.sel('lost_reason', 'Alasan ditolak', QUOTE_LOST, { readonly: true, internal: true }),
+      F.ref('revised_from', 'Revisi dari', 'quotations', { readonly: true }),
+      F.ref('sales_order_id', 'Pesanan penjualan', 'sales_orders', { readonly: true }),
+      F.status(['draf', 'menunggu', 'disetujui', 'terkirim', 'diterima', 'ditolak', 'kedaluwarsa', 'direvisi', 'selesai', 'batal'], 'draf'),
     ],
     lines: tradeLines('quotation_lines'),
     actions: [
-      act('send', 'Kirim ke pelanggan', { from: ['draf'], level: 2 }),
-      act('accept', 'Diterima pelanggan', { from: ['terkirim'], level: 2 }),
-      act('reject', 'Ditolak pelanggan', { from: ['terkirim'], level: 2 }),
-      act('to_order', 'Buat pesanan penjualan', { from: ['diterima'], level: 2 }),
+      act('submit', 'Ajukan (cek kebijakan harga)', { from: ['draf'], level: 2 }),
+      act('approve', 'Setujui harga', { from: ['menunggu'], sod: true }),
+      act('return_draft', 'Kembalikan ke draf', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
+      act('send', 'Kirim ke pelanggan', { from: ['disetujui'], level: 2, params: [{ name: 'sent_to', label: 'Surel / nama penerima', type: 'text', help: 'Kosong = surel penerima pada penawaran. Penawaran juga tampil di portal pelanggan.' }] }),
+      act('accept', 'Diterima pelanggan', { from: ['terkirim'], level: 2, params: [{ name: 'accepted_by', label: 'Disetujui oleh (nama pelanggan)', type: 'text', required: true }, { name: 'customer_po', label: 'No. PO pelanggan', type: 'text' }] }),
+      act('reject', 'Ditolak pelanggan', { from: ['terkirim'], level: 2, params: [{ name: 'lost_reason', label: 'Alasan', type: 'select', options: QUOTE_LOST, required: true }, { name: 'note', label: 'Keterangan', type: 'text' }] }),
+      act('revise', 'Buat revisi', { from: ['menunggu', 'disetujui', 'terkirim', 'ditolak', 'kedaluwarsa'], level: 2, confirm: 'Penawaran ini ditandai "direvisi" dan salinan draf revisi baru dibuat.' }),
+      act('to_order', 'Buat pesanan penjualan', { from: ['diterima'], level: 2, params: [{ name: 'warehouse_id', label: 'Gudang kirim', type: 'ref', ref: 'warehouses', help: 'Kosong = gudang pertama cabang penawaran.' }, { name: 'delivery_date', label: 'Tanggal kirim', type: 'date' }] }),
+      act('cancel', 'Batalkan', { from: ['draf', 'menunggu', 'disetujui'], level: 2 }),
     ],
   },
   sales_orders: {
