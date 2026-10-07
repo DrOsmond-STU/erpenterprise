@@ -22,7 +22,7 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 
 | Area | Isi |
 | --- | --- |
-| CRUD | 56 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
+| CRUD | 60 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
 | Integrasi buku besar | Faktur, penerimaan, POS, tagihan, pembayaran, kas/bank, transfer, stok (penyesuaian/transfer), produksi (BOM), penggajian, aset (perolehan, penyusutan, pelepasan), pemeliharaan, jurnal manual — semuanya diposting otomatis, pembatalan memakai jurnal pembalik |
 | Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Laporan Proyek, Dasbor |
 | Penganggaran | Anggaran per akun COA × cabang × pusat biaya dengan pola bulanan (merata / pola tahun lalu / manual), persetujuan maker–checker, salin dari tahun lalu, kolom anggaran di Bagan Akun; laporan realisasi & variance YTD, bulanan, per pusat biaya; kontrol anggaran (peringatan/blokir) |
@@ -33,6 +33,7 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 | Surat jalan & penagihan | SO → surat jalan penuh/sebagian (stok keluar, nilai ke *Persediaan Terkirim Belum Difakturkan*) → faktur dari satu atau beberapa surat jalan (lintas SO pelanggan yang sama); piutang diakui saat faktur terbit; laporan Pemenuhan Pesanan terekonsiliasi dengan buku besar |
 | Pembayaran bertahap | Termin bertahap (DP, termin proyek, cicilan) → jadwal angsuran per faktur & tagihan; pelunasan penuh/sebagian dialokasikan ke angsuran tertua; uang muka pelanggan & pemasok serta pemakaiannya; potongan, PPh 23, dan biaya bank saat pelunasan; umur piutang/hutang per angsuran; Jadwal Angsuran Piutang/Hutang |
 | Giro mundur | Pelunasan dengan bilyet giro / cek mundur dari pelanggan & ke pemasok: tercatat saat diterima/diserahkan, kas berubah saat giro cair, giro ditolak membuka kembali faktur/tagihan (opsi tahan pelanggan); register Giro Mundur terekonsiliasi dengan buku besar |
+| Nota debet & kredit | Nota kredit/debet pelanggan dan nota debet/kredit pemasok: koreksi harga, rabat, klaim, ongkos, denda; nota pengurang (persetujuan SoD) diterapkan ke faktur/tagihan atau menjadi saldo kredit mitra; nota penambah menjadi dokumen terbuka yang dilunasi seperti faktur/tagihan (termasuk giro) dan tampil di umur piutang/hutang |
 | Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
 | Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 18 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
 
@@ -67,6 +68,6 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 ## Pengujian
 
 ```bash
-npm test           # 143 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, giro mundur, CRUD 56 entitas
+npm test           # 152 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, giro mundur, nota debet & kredit, CRUD 60 entitas
 npm install && npm run test:e2e   # Playwright: menu × tema terang/gelap, alur transaksi, fitur lanjutan, anggaran & laporan proyek, portal, peran terbatas, layar 390 px
 ```

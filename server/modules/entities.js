@@ -92,6 +92,36 @@ export const MODULES = [
 
 const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
 
+/**
+ * Nota debet/kredit. reduces = mengurangi saldo mitra (diterapkan ke dokumen, atau menjadi saldo kredit
+ * mitra bila tidak diterapkan) dan wajib disetujui orang lain; selain itu menambah saldo mitra dan menjadi
+ * dokumen terbuka yang dapat dibayar (penuh/sebagian, transfer/giro/uang muka).
+ */
+function noteEntity({ label, one, module, number, party, doc, reduces, defaultHelp }) {
+  const fields = [
+    F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
+    F.ref(party[0], party[1], party[2], { required: true, list: true, search: true }),
+    F.ref(doc[0], doc[1], doc[2], { list: true, refParent: party[0], ...(reduces ? { refFilter: { status: ['terbit', 'sebagian'] }, help: 'Kosong = menjadi saldo kredit mitra (dapat dipakai melunasi dokumen berikutnya lewat "Pakai saldo uang muka").' } : { help: 'Hanya rujukan.' }) }),
+    F.sel('reason', 'Jenis penyesuaian', NOTE_REASONS, { required: true, list: true }),
+    F.text('reference', 'No. dokumen mitra / referensi', { max: 60, search: true }),
+    F.area('description', 'Uraian', { required: true, search: true }),
+    ...(reduces ? [] : [F.date('due_date', 'Jatuh tempo', { list: true, help: 'Kosong = tanggal + termin hari mitra.' })]),
+    F.money('subtotal', 'Subtotal', { readonly: true }), F.pct('tax_rate', 'PPN (%)', { default: 0, help: 'Isi bila penyesuaian mengoreksi DPP ber-PPN.' }), F.money('tax', 'PPN', { readonly: true }),
+    F.money('total', 'Total', { readonly: true, list: true }),
+    ...(reduces ? [F.text('approval_note', 'Catatan persetujuan', { readonly: true, max: 300 })] : [F.money('paid', 'Terbayar', { readonly: true, list: true })]),
+    F.status(reduces ? ['draf', 'menunggu', 'diposting', 'ditolak', 'batal'] : ['draf', 'terbit', 'sebagian', 'lunas', 'batal'], 'draf'),
+  ];
+  return {
+    label, one, module, scope: 'branch', title: 'number', number, sort: 'date', sortDir: 'desc', editable: reduces ? ['draf', 'ditolak'] : ['draf'],
+    fields,
+    lines: { table: `${number.toLowerCase()}_lines`, fields: [F.ref('account_id', 'Akun', 'accounts', { required: true, refFilter: { is_header: 0 }, help: defaultHelp }), F.text('description', 'Keterangan', { max: 300 }), F.money('amount', 'Jumlah (DPP)', { required: true })] },
+    actions: reduces
+      ? [act('submit', 'Ajukan', { from: ['draf', 'ditolak'], level: 2 }), act('approve', 'Setujui & posting', { from: ['menunggu'], sod: true }), act('reject', 'Tolak', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }), act('void', 'Batalkan (jurnal balik)', { from: ['diposting'] })]
+      : [act('post', 'Terbitkan & posting', { from: ['draf'] }), act(module === 'sales' ? 'receive' : 'pay', module === 'sales' ? 'Terima pembayaran' : 'Ajukan pembayaran', { from: ['terbit', 'sebagian'], level: module === 'sales' ? 3 : 2, params: PAY_PARAMS(module === 'sales' ? 'Diterima di' : 'Dibayar dari', module === 'sales' ? 'PPh 23 dipotong pelanggan' : 'PPh 23 dipotong (disetor kita)') }), act('void', 'Batalkan (jurnal balik)', { from: ['terbit'] })],
+  };
+}
+const NOTE_REASONS = [['harga', 'Koreksi harga'], ['potongan', 'Potongan / rabat'], ['klaim', 'Klaim kerusakan / kekurangan'], ['ongkos', 'Ongkos kirim / biaya tambahan'], ['denda', 'Denda / bunga keterlambatan'], ['lainnya', 'Lainnya']];
+
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
 const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
 const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
@@ -464,7 +494,7 @@ export const ENTITIES = {
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((i.total - i.paid) * COALESCE(i.exchange_rate,1)),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((i.total - i.paid) * COALESCE(i.exchange_rate,1)),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM customer_debit_notes n WHERE n.customer_id = t.id AND n.status IN ('terbit','sebagian'))` },
     },
   },
   quotations: {
@@ -621,7 +651,8 @@ export const ENTITIES = {
     lines: {
       table: 'customer_receipt_lines',
       fields: [
-        F.ref('invoice_id', 'Faktur', 'sales_invoices', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
+        F.ref('invoice_id', 'Faktur', 'sales_invoices', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
+        F.ref('debit_note_id', 'atau Nota debet', 'customer_debit_notes', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
         F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
         F.money('discount', 'Potongan / diskon', { default: 0 }),
         F.money('pph23', 'PPh 23 dipotong pelanggan', { default: 0 }),
@@ -663,7 +694,7 @@ export const ENTITIES = {
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM supplier_credit_notes n WHERE n.supplier_id = t.id AND n.status IN ('terbit','sebagian'))` },
     },
   },
   purchase_requests: {
@@ -788,7 +819,8 @@ export const ENTITIES = {
     lines: {
       table: 'supplier_payment_lines',
       fields: [
-        F.ref('bill_id', 'Tagihan', 'purchase_bills', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
+        F.ref('bill_id', 'Tagihan', 'purchase_bills', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
+        F.ref('credit_note_id', 'atau Nota kredit', 'supplier_credit_notes', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
         F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
         F.money('discount', 'Potongan diterima', { default: 0 }),
         F.money('pph23', 'PPh 23 dipotong (disetor kita)', { default: 0 }),
@@ -1081,6 +1113,12 @@ export const ENTITIES = {
     lines: returnLines('purchase_return_lines'),
     actions: [act('post', 'Posting retur', { from: ['draf'] }), act('void', 'Batalkan (jurnal balik)', { from: ['diposting'] })],
   },
+  // Nota debet & nota kredit (penyesuaian non-barang). Debet/kredit mengacu pada akun mitra:
+  // pelanggan (piutang): debet menambah, kredit mengurangi; pemasok (hutang): debet mengurangi, kredit menambah.
+  customer_credit_notes: noteEntity({ label: 'Nota Kredit Pelanggan', one: 'nota kredit', module: 'sales', number: 'NK', party: ['customer_id', 'Pelanggan', 'customers'], doc: ['invoice_id', 'Terapkan ke faktur', 'sales_invoices'], reduces: true, defaultHelp: 'Mis. 4-1900 Retur & Potongan Penjualan (rabat, koreksi harga, klaim).' }),
+  customer_debit_notes: noteEntity({ label: 'Nota Debet Pelanggan', one: 'nota debet', module: 'sales', number: 'ND', party: ['customer_id', 'Pelanggan', 'customers'], doc: ['invoice_id', 'Faktur terkait', 'sales_invoices'], reduces: false, defaultHelp: 'Mis. akun pendapatan/penggantian ongkos kirim, denda keterlambatan, kurang tagih.' }),
+  supplier_debit_notes: noteEntity({ label: 'Nota Debet Pemasok', one: 'nota debet', module: 'purchasing', number: 'NDB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Terapkan ke tagihan', 'purchase_bills'], reduces: true, defaultHelp: 'Mis. 7-1300 Potongan Pembelian, akun beban/persediaan yang dikoreksi (klaim, lebih tagih).' }),
+  supplier_credit_notes: noteEntity({ label: 'Nota Kredit Pemasok', one: 'nota kredit', module: 'purchasing', number: 'NKB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Tagihan terkait', 'purchase_bills'], reduces: false, defaultHelp: 'Mis. beban angkut, biaya tambahan, kurang tagih pemasok.' }),
   bank_reconciliations: {
     label: 'Rekonsiliasi Bank', one: 'rekonsiliasi', module: 'finance', scope: 'branch', title: 'number', number: 'REK', sort: 'statement_date', sortDir: 'desc',
     editable: ['draf'],

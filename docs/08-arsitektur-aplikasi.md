@@ -381,3 +381,30 @@ efektif ≤ 7 hari, lewat tanggal efektif, cair & ditolak 90 hari terakhir — s
 giro belum cair **direkonsiliasi dengan akun 1-1250 / 2-1150**. Notifikasi: giro
 masuk jatuh tempo ≤ 3 hari (setor kliring) dan giro keluar efektif ≤ 3 hari
 (siapkan saldo).
+
+## Nota debet & nota kredit
+
+Penyesuaian nilai piutang/hutang tanpa retur barang (koreksi harga, potongan/rabat,
+klaim, ongkos, denda, lainnya). Baris nota berisi akun lawan (pendapatan/beban/potongan)
+dan nilai DPP; PPN opsional.
+
+| Dokumen | Efek | Jurnal | Alur |
+| --- | --- | --- | --- |
+| Nota Kredit Pelanggan (NK) | Mengurangi piutang | Dr akun baris, PPN Keluaran · Cr Piutang (diterapkan ke faktur) **atau** Cr 2-1600 Uang Muka Pelanggan (saldo kredit pelanggan) | Ajukan → Setujui (SoD, pembuat ≠ penyetuju) / Tolak |
+| Nota Debet Pelanggan (ND) | Menambah piutang | Dr Piutang · Cr akun baris, PPN Keluaran | Posting → dokumen terbuka (jatuh tempo, angsuran, umur piutang) → Terima pembayaran |
+| Nota Debet Pemasok (NDB) | Mengurangi hutang | Dr Hutang (diterapkan ke tagihan) **atau** Dr 1-1510 Uang Muka Pembelian · Cr akun baris, PPN Masukan | Ajukan → Setujui (SoD) / Tolak |
+| Nota Kredit Pemasok (NKB) | Menambah hutang | Dr akun baris, PPN Masukan · Cr Hutang | Posting → dokumen terbuka → Ajukan pembayaran (SoD) |
+
+Aturan: nota pengurang yang diterapkan ke faktur/tagihan hanya untuk dokumen IDR
+yang masih terbuka dan tidak boleh melebihi sisa; faktur/tagihan harus milik mitra
+yang sama. Tanpa dokumen, nilainya menjadi saldo kredit mitra yang dapat dipakai
+lewat pelunasan *Pakai uang muka*. Pembatalan membalik jurnal: nota terapan
+membuka kembali faktur/tagihan; nota tanpa terapan hanya dapat dibatalkan bila
+saldo kredit mitra masih mencukupi. Nota penambah yang sudah (sebagian) dibayar
+tidak dapat dibatalkan.
+
+Baris penerimaan/pembayaran merujuk tepat satu dokumen: `invoice_id` atau
+`debit_note_id` (piutang), `bill_id` atau `credit_note_id` (hutang); pelunasan
+dengan giro, uang muka, potongan, dan PPh 23 berlaku sama. Nota penambah tampil di
+umur piutang/hutang, Jadwal Angsuran, kartu piutang, dan saldo mitra; nota pengurang
+tampil sebagai kredit di rincian pelunasan faktur/tagihan.

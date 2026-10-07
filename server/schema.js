@@ -101,6 +101,9 @@ const EXTRA = {
   users: ['password_hash TEXT', 'mfa_secret TEXT', 'locked_until TEXT', 'must_change_password INTEGER NOT NULL DEFAULT 0', 'mfa_last_step INTEGER'],
   journals: ['posted_at TEXT', 'posted_by INTEGER'],
   stock_moves: ['source_id INTEGER', 'company_id_src INTEGER'],
+  // Nota debet/kredit dicatat dalam IDR; kolom kurs menjaga kueri piutang/hutang tetap seragam.
+  customer_credit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'], customer_debit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'],
+  supplier_debit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'], supplier_credit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'],
 };
 const LINE_EXTRA = {
   journal_lines: ['company_id INTEGER', 'partner_type TEXT', 'partner_id INTEGER', 'is_system INTEGER NOT NULL DEFAULT 0'],

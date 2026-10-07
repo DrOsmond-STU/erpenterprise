@@ -66,9 +66,10 @@ const CUSTOM = {
     b.product_id = db.get('SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_locations WHERE warehouse_id = ?) LIMIT 1', bin.warehouse_id).id;
   },
   budgets: async (b) => { b.amount = 12_000_000; },
+  payment_terms: async (b) => { b.lines = [{ label: 'Pelunasan', pct: 100, days: 30 }]; },
   // Rekening wajib untuk penerimaan/pembayaran jenis pelunasan (tidak wajib untuk pemakaian uang muka).
-  customer_receipts: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; },
-  supplier_payments: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; },
+  customer_receipts: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; b.lines = [{ invoice_id: (await admin.get('/api/lookup/sales_invoices?f_status=terbit,sebagian')).body[0].id, amount: 1000 }]; },
+  supplier_payments: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; b.lines = [{ bill_id: (await admin.get('/api/lookup/purchase_bills?f_status=terbit,sebagian')).body[0].id, amount: 1000 }]; },
   // Surat jalan dari SO yang masih punya sisa kirim; baris kosong = seluruh sisa.
   delivery_orders: async (b) => {
     const so = db.get("SELECT id FROM sales_orders WHERE company_id = 1 AND branch_id = (SELECT id FROM branches WHERE code = 'JKT') AND status IN ('disetujui','dikirim_sebagian') ORDER BY id DESC LIMIT 1");
@@ -117,7 +118,8 @@ for (const key of [
   'purchase_orders', 'purchase_bills', 'supplier_payments', 'stock_adjustments', 'stock_transfers', 'shipments', 'boms', 'work_orders',
   'projects', 'project_tasks', 'employees', 'attendance', 'leave_requests', 'payroll_runs', 'documents', 'workflows', 'compliance_items',
   'risks', 'security_incidents', 'currencies', 'exchange_rates', 'sales_returns', 'purchase_returns', 'bank_reconciliations', 'pos_shifts',
-  'warehouse_bins', 'product_locations', 'bsc_metrics', 'delivery_orders',
+  'warehouse_bins', 'product_locations', 'bsc_metrics', 'delivery_orders', 'payment_terms',
+  'customer_credit_notes', 'customer_debit_notes', 'supplier_debit_notes', 'supplier_credit_notes',
 ]) {
   test(`CRUD ${key}: buat → baca → ubah → konflik versi → hapus`, async () => {
     const e = meta.entities[key];

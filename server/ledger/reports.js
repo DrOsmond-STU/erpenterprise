@@ -309,17 +309,21 @@ export function cashFlow(ctx, { companyId, branchId, from, to }) {
 }
 
 /* --- Umur piutang & hutang ------------------------------------------------------- */
-function aging(table, partyTable, partyField, ctx, { companyId, branchId, asOf }) {
-  const where = [`d.company_id = ?`, `d.status IN ('terbit','sebagian')`, 'd.date <= ?'];
-  const params = [companyId, asOf];
-  if (branchId) { where.push('d.branch_id = ?'); params.push(branchId); }
-  // Per angsuran: dokumen dengan termin bertahap diumurkan menurut jatuh tempo masing-masing tahap.
-  const docs = db.all(`SELECT d.id, d.number || CASE WHEN (SELECT COUNT(*) FROM installments x WHERE x.doc_type = '${table}' AND x.doc_id = d.id) > 1 THEN ' · ' || COALESCE(i.label, 'Tahap ' || i.seq) ELSE '' END number,
-      d.date, COALESCE(i.due_date, d.due_date) due_date, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid) * COALESCE(d.exchange_rate, 1),2) open, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid),2) open_doc,
-      d.exchange_rate, p.name party, p.id party_id, b.name branch
-    FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id
-    LEFT JOIN installments i ON i.doc_type = '${table}' AND i.doc_id = d.id
-    WHERE ${where.join(' AND ')} AND (i.id IS NULL OR i.amount - i.paid > 0.005) ORDER BY 4`, ...params);
+/* Umur per angsuran untuk faktur/tagihan dan nota debet pelanggan / nota kredit pemasok (dokumen terbuka). */
+function aging(tables, partyTable, partyField, ctx, { companyId, branchId, asOf }) {
+  const docs = [];
+  for (const table of tables) {
+    const where = [`d.company_id = ?`, `d.status IN ('terbit','sebagian')`, 'd.date <= ?'];
+    const params = [companyId, asOf];
+    if (branchId) { where.push('d.branch_id = ?'); params.push(branchId); }
+    docs.push(...db.all(`SELECT d.id, '${table}' entity, d.number || CASE WHEN (SELECT COUNT(*) FROM installments x WHERE x.doc_type = '${table}' AND x.doc_id = d.id) > 1 THEN ' · ' || COALESCE(i.label, 'Tahap ' || i.seq) ELSE '' END number,
+        d.date, COALESCE(i.due_date, d.due_date) due_date, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid) * COALESCE(d.exchange_rate, 1),2) open, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid),2) open_doc,
+        d.exchange_rate, p.name party, p.id party_id, b.name branch
+      FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id
+      LEFT JOIN installments i ON i.doc_type = '${table}' AND i.doc_id = d.id
+      WHERE ${where.join(' AND ')} AND (i.id IS NULL OR i.amount - i.paid > 0.005)`, ...params));
+  }
+  docs.sort((a, b) => String(a.due_date || a.date).localeCompare(String(b.due_date || b.date)));
   const B = [['current', 'Belum jatuh tempo'], ['d30', '1–30 hari'], ['d60', '31–60 hari'], ['d90', '61–90 hari'], ['over', '> 90 hari']];
   const bucket = (days) => (days <= 0 ? 'current' : days <= 30 ? 'd30' : days <= 60 ? 'd60' : days <= 90 ? 'd90' : 'over');
   const parties = new Map();
@@ -337,7 +341,7 @@ function aging(table, partyTable, partyField, ctx, { companyId, branchId, asOf }
 }
 
 export function arAging(ctx, q) {
-  const r = aging('sales_invoices', 'customers', 'customer_id', ctx, q);
+  const r = aging(['sales_invoices', 'customer_debit_notes'], 'customers', 'customer_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
   r.glBalance = round2(netOf(gl, acct('ar')) + netOf(gl, acct('ic_receivable')));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;
@@ -345,7 +349,7 @@ export function arAging(ctx, q) {
 }
 
 export function apAging(ctx, q) {
-  const r = aging('purchase_bills', 'suppliers', 'supplier_id', ctx, q);
+  const r = aging(['purchase_bills', 'supplier_credit_notes'], 'suppliers', 'supplier_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
   r.glBalance = round2(-(netOf(gl, acct('ap')) + netOf(gl, acct('ic_payable'))));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;

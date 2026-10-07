@@ -131,6 +131,23 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 4. Harian: periksa notifikasi giro jatuh tempo ≤ 3 hari; akhir bulan pastikan
    indikator register hijau (giro belum cair = saldo akun 1-1250 / 2-1150).
 
+## Nota debet & nota kredit
+
+1. Koreksi harga, rabat, atau klaim pelanggan: **Penjualan → Nota Kredit**, pilih
+   pelanggan, faktur yang masih terbuka (atau kosongkan untuk saldo kredit), jenis
+   penyesuaian, uraian, dan baris akun (mis. 4-1900 Retur & Potongan Penjualan).
+   *Ajukan*, lalu atasan lain *Setujui* — faktur berkurang atau saldo kredit
+   pelanggan bertambah.
+2. Tagihan tambahan ke pelanggan (ongkos kirim, denda keterlambatan):
+   **Penjualan → Nota Debet**, isi jatuh tempo, *Posting*; tagih dan lunasi seperti
+   faktur (*Terima pembayaran*, termasuk giro).
+3. Klaim ke pemasok (barang kurang/rusak, potongan harga): **Pembelian → Nota Debet
+   Pemasok** — mengurangi tagihan setelah disetujui.
+4. Tambahan tagihan pemasok (ongkos angkut, biaya lain): **Pembelian → Nota Kredit
+   Pemasok**, *Posting*, lalu *Ajukan pembayaran*.
+5. Kesalahan: *Batalkan (jurnal balik)*; nota yang sudah dibayar dikoreksi dengan
+   nota lawan.
+
 ## Siklus anggaran tahunan
 
 1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun

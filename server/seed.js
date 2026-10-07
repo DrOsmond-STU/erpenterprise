@@ -756,6 +756,23 @@ async function seedDemo() {
       const r = await run(maker, 'KNM', 'purchase_bills', b4.id, 'pay', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-JKT'], amount: round2(b4.open * 0.4), discount: round2(b4.open * 0.01), pph23: round2(b4.open * 0.02), bank_charge: 6_500, reference: 'Termin 1 cat powder' });
       await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
     }
+    // Nota kredit & nota debet (penyesuaian non-barang) pelanggan dan pemasok.
+    setToday('2026-10-04');
+    const note = async (entity, br, body, approve) => {
+      const nid = await mk(maker, 'KNM', br, entity, { date: '2026-10-04', ...body });
+      if (approve) { await run(maker, 'KNM', entity, nid, 'submit'); await run(checker, 'KNM', entity, nid, 'approve'); } else await run(checker, 'KNM', entity, nid, 'post');
+      return nid;
+    };
+    const ci = openInv('C001');
+    if (ci) await note('customer_credit_notes', 'JKT', { customer_id: CU.C001, invoice_id: ci.id, reason: 'potongan', reference: 'Rabat Q3', description: 'Rabat volume kuartal III sesuai kontrak', tax_rate: 11, lines: [{ account_id: A('4-1900'), description: 'Rabat 2% pembelian Q3', amount: 15_000_000 }] }, true);
+    await note('customer_credit_notes', 'JKT', { customer_id: CU.C002, reason: 'klaim', reference: 'Klaim WK-0921', description: 'Klaim kekurangan jumlah pengiriman — menjadi saldo kredit pelanggan', lines: [{ account_id: A('4-1900'), amount: 4_200_000 }] }, true);
+    const nd = await note('customer_debit_notes', 'SBY', { customer_id: CU.C003, reason: 'ongkos', reference: 'Permintaan kirim ekspres', description: 'Penggantian ongkos kirim ekspres Surabaya–Malang', tax_rate: 11, lines: [{ account_id: A('4-1300'), description: 'Ongkos kirim ekspres', amount: 3_500_000 }] }, false);
+    await run(checker, 'KNM', 'customer_debit_notes', nd, 'receive', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-SBY'], amount: 2_000_000, discount: 0, pph23: 0, bank_charge: 0, reference: 'Transfer sebagian' });
+    await note('customer_debit_notes', 'JKT', { customer_id: CU.C008, reason: 'denda', description: 'Denda keterlambatan pembayaran faktur Agustus (1% per bulan)', lines: [{ account_id: A('7-1000'), amount: 1_250_000 }] }, false);
+    const sb = openBill('S002');
+    if (sb) await note('supplier_debit_notes', 'CKR', { supplier_id: SU.S002, bill_id: sb.id, reason: 'klaim', reference: 'BA klaim resin', description: 'Klaim resin tidak sesuai spesifikasi 50 kg', tax_rate: 11, lines: [{ account_id: A('7-1300'), amount: 1_900_000 }] }, true);
+    await note('supplier_credit_notes', 'JKT', { supplier_id: SU.S004, reason: 'ongkos', reference: 'JPC-ADD-77', description: 'Biaya angkut tambahan pengiriman cat powder', tax_rate: 11, lines: [{ account_id: A('6-2300'), amount: 2_400_000 }] }, false);
+
     // Giro mundur: masuk dari pelanggan (cair, belum cair, ditolak) & keluar ke pemasok (cair, belum cair).
     const giroIn = async (cust, date, due, no, bankName, share) => {
       const inv = openInv(cust);

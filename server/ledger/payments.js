@@ -86,15 +86,15 @@ export function advanceBalance(partyType, partyId, companyId = null) {
 /** Jadwal angsuran terbuka (piutang/hutang) untuk perencanaan arus kas & penagihan. */
 export function installmentSchedule(ctx, { companyId, branchId, asOf, side = 'ar', days = 60 }) {
   const t = asOf || today();
-  const docType = side === 'ap' ? 'purchase_bills' : 'sales_invoices';
+  const docTypes = side === 'ap' ? ['purchase_bills', 'supplier_credit_notes'] : ['sales_invoices', 'customer_debit_notes'];
   const party = side === 'ap' ? ['suppliers', 'supplier_id'] : ['customers', 'customer_id'];
   const until = addDays(t, Math.max(1, Math.min(365, Number(days) || 60)));
   const bf = branchId ? ' AND d.branch_id = ?' : '';
-  const rows = db.all(`SELECT i.doc_id, i.seq, i.label, i.due_date, i.amount, i.paid, ROUND(i.amount - i.paid, 2) open, d.number, d.date, d.total, d.status doc_status,
+  const rows = docTypes.flatMap((docType) => db.all(`SELECT i.doc_id, i.doc_type entity, i.seq, i.label, i.due_date, i.amount, i.paid, ROUND(i.amount - i.paid, 2) open, d.number, d.date, d.total, d.status doc_status,
       COALESCE(d.exchange_rate,1) rate, p.name party, p.id party_id, (SELECT COUNT(*) FROM installments x WHERE x.doc_type = i.doc_type AND x.doc_id = i.doc_id) stages
     FROM installments i JOIN "${docType}" d ON d.id = i.doc_id JOIN "${party[0]}" p ON p.id = d."${party[1]}"
-    WHERE i.doc_type = ? AND d.company_id = ? AND d.status IN ('terbit','sebagian') AND i.amount - i.paid > 0.005 AND i.due_date <= ?${bf}
-    ORDER BY i.due_date, d.number, i.seq`, docType, companyId, until, ...(branchId ? [branchId] : []));
+    WHERE i.doc_type = ? AND d.company_id = ? AND d.status IN ('terbit','sebagian') AND i.amount - i.paid > 0.005 AND i.due_date <= ?${bf}`, docType, companyId, until, ...(branchId ? [branchId] : [])))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.number.localeCompare(b.number) || a.seq - b.seq);
   for (const r of rows) {
     r.openIdr = round2(r.open * r.rate);
     r.amountIdr = round2(r.amount * r.rate);

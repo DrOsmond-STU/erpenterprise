@@ -40,6 +40,33 @@ function applyTerm(row, partyTable, partyField) {
   if (due) row.due_date = due;
 }
 
+/** Nota debet/kredit: total dari baris + PPN; dokumen rujukan milik mitra yang sama; nota pengurang ≤ sisa dokumen. */
+function noteCompute(partyTable, partyField, docTable, docField, reduces) {
+  return (_c, row, lines) => {
+    if (lines) {
+      for (const l of lines) if (!(Number(l.amount) > 0)) throw bad('Jumlah setiap baris nota harus lebih dari nol.');
+      row.subtotal = sum(lines, (l) => l.amount);
+      row.tax_rate = Number(row.tax_rate) || 0;
+      row.tax = round2(row.subtotal * row.tax_rate / 100);
+      row.total = round2(row.subtotal + row.tax);
+    }
+    row.currency_id = null; row.exchange_rate = 1;
+    if (row[docField]) {
+      const d = db.get(`SELECT id, number, ${partyField} party, total, paid, status, COALESCE(exchange_rate,1) rate FROM "${docTable}" WHERE id = ?`, row[docField]);
+      if (!d || d.party !== row[partyField]) throw bad('Dokumen rujukan bukan milik mitra yang dipilih.');
+      if (reduces && row.status !== 'diposting') {
+        if (d.rate !== 1) throw bad('Nota hanya dapat diterapkan ke dokumen IDR.');
+        if (!['terbit', 'sebagian'].includes(d.status)) throw bad(`${d.number} sudah lunas/batal — kosongkan agar menjadi saldo kredit mitra.`);
+        if (row.total > round2(d.total - d.paid) + 0.005) throw bad(`Nota melebihi sisa ${d.number} (${round2(d.total - d.paid).toLocaleString('id-ID')}). Kosongkan dokumen agar kelebihan menjadi saldo kredit.`);
+      }
+    }
+    if (!reduces) {
+      row.paid = row.paid || 0;
+      defaultDue(row, partyTable, partyField);
+    }
+  };
+}
+
 /** Penerimaan/pembayaran: jenis, total kas/uang muka, total pelunasan, validasi rekening & potongan. */
 function settlementTotals(row, lines) {
   row.mode = row.mode || 'pelunasan';
@@ -53,6 +80,8 @@ function settlementTotals(row, lines) {
     row.advance = 0;
     if (lines) {
       for (const l of lines) {
+        const targets = ['invoice_id', 'debit_note_id', 'bill_id', 'credit_note_id'].filter((k) => l[k]);
+        if (targets.length !== 1) throw bad('Setiap baris harus memilih tepat satu dokumen yang dilunasi (faktur/tagihan atau nota).');
         for (const k of ['amount', 'discount', 'pph23']) if ((Number(l[k]) || 0) < 0) throw bad('Nilai pembayaran/potongan tidak boleh negatif.');
         l.discount = Number(l.discount) || 0; l.pph23 = Number(l.pph23) || 0;
         l.settled = round2((Number(l.amount) || 0) + l.discount + l.pph23);
@@ -225,6 +254,10 @@ export const HOOKS = {
   customer_receipts: { compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); settlementTotals(row, lines); } },
   supplier_payments: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); settlementTotals(row, lines); } },
   payment_terms: { compute: (_c, _row, lines) => validateTerm(lines) },
+  customer_credit_notes: { compute: noteCompute('customers', 'customer_id', 'sales_invoices', 'invoice_id', true) },
+  customer_debit_notes: { compute: noteCompute('customers', 'customer_id', 'sales_invoices', 'invoice_id', false) },
+  supplier_debit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', true) },
+  supplier_credit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', false) },
   cash_transactions: { compute: amountTotal },
   journals: {
     compute: (_c, row, lines) => {

@@ -234,15 +234,20 @@ route('POST', '/api/budgets/copy', (ctx, body, _p, q) => {
 /* Jadwal angsuran & riwayat pembayaran satu faktur/tagihan (cakupan diperiksa lewat crud.read). */
 route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
   scoped(ctx, q);
-  if (!['sales_invoices', 'purchase_bills'].includes(p.entity)) throw notFound();
+  const LINEF = { sales_invoices: 'invoice_id', customer_debit_notes: 'debit_note_id', purchase_bills: 'bill_id', supplier_credit_notes: 'credit_note_id' };
+  if (!LINEF[p.entity]) throw notFound();
   const doc = crud.read(ctx, p.entity, p.id);
-  const ar = p.entity === 'sales_invoices';
+  const ar = ['sales_invoices', 'customer_debit_notes'].includes(p.entity);
+  const lf = LINEF[p.entity];
   const payments = db.all(ar
-    ? `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'customer_receipts' entity FROM customer_receipt_lines l JOIN customer_receipts r ON r.id = l.parent_id WHERE l.invoice_id = ? AND r.status <> 'draf' ORDER BY r.date, r.id`
-    : `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'supplier_payments' entity FROM supplier_payment_lines l JOIN supplier_payments r ON r.id = l.parent_id WHERE l.bill_id = ? AND r.status <> 'draf' ORDER BY r.date, r.id`, doc.id);
-  const credits = db.all(ar
-    ? "SELECT id, number, date, total settled, 'sales_returns' entity FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting'"
-    : "SELECT id, number, date, total settled, 'purchase_returns' entity FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting'", doc.id);
+    ? `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'customer_receipts' entity FROM customer_receipt_lines l JOIN customer_receipts r ON r.id = l.parent_id WHERE l.${lf} = ? AND r.status <> 'draf' ORDER BY r.date, r.id`
+    : `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'supplier_payments' entity FROM supplier_payment_lines l JOIN supplier_payments r ON r.id = l.parent_id WHERE l.${lf} = ? AND r.status <> 'draf' ORDER BY r.date, r.id`, doc.id);
+  // Pengurang selain pembayaran: retur & nota pengurang yang diterapkan ke dokumen ini.
+  const credits = p.entity === 'sales_invoices'
+    ? db.all("SELECT id, number, date, total settled, 'sales_returns' entity FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'customer_credit_notes' FROM customer_credit_notes WHERE invoice_id = ? AND status = 'diposting'", doc.id, doc.id)
+    : p.entity === 'purchase_bills'
+      ? db.all("SELECT id, number, date, total settled, 'purchase_returns' entity FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'supplier_debit_notes' FROM supplier_debit_notes WHERE bill_id = ? AND status = 'diposting'", doc.id, doc.id)
+      : [];
   const partyType = ar ? 'customer' : 'supplier';
   return { installments: installmentsOf(p.entity, doc.id), payments, credits, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
 });

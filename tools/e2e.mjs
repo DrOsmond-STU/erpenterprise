@@ -275,6 +275,18 @@ try {
   await page.waitForTimeout(1200);
   check(/Giro belum cair cocok/.test(await page.textContent('.view-root')), 'giro keluar: register cocok dengan buku besar');
 
+  // Nota debet pelanggan: dokumen piutang terbuka yang dapat dilunasi.
+  await page.evaluate(() => { location.hash = '#/nota-debet-pelanggan'; });
+  await page.waitForSelector('tr[data-open^="customer_debit_notes:"]', { timeout: 8000 });
+  await page.click('tr[data-open^="customer_debit_notes:"]');
+  await page.waitForSelector('[data-action-run$=":receive"]', { timeout: 8000 });
+  check(/Nota Debet Pelanggan/.test(await page.textContent('.drawer')), 'nota debet: rincian & aksi terima pembayaran tersedia');
+  await page.screenshot({ path: join(shots, 'nota-debet.png') });
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { location.hash = '#/nota-kredit-pelanggan'; });
+  await page.waitForSelector('tr[data-open^="customer_credit_notes:"]', { timeout: 8000 });
+  check((await page.$$('tr[data-open^="customer_credit_notes:"]')).length >= 2, 'nota kredit pelanggan: daftar tampil');
+
   // Tampilan sempit (ponsel).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });

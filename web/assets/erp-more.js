@@ -41,11 +41,11 @@
     purchase_bills: 'TAGIHAN PEMASOK', customer_receipts: 'KUITANSI PENERIMAAN', supplier_payments: 'BUKTI PEMBAYARAN', cash_transactions: 'BUKTI KAS / BANK',
     journals: 'BUKTI JURNAL UMUM', sales_returns: 'NOTA RETUR PENJUALAN (NOTA KREDIT)', purchase_returns: 'NOTA RETUR PEMBELIAN (NOTA DEBIT)', pos_sales: 'STRUK PENJUALAN',
     purchase_requests: 'PERMINTAAN PEMBELIAN', stock_transfers: 'SURAT JALAN TRANSFER STOK', stock_adjustments: 'BERITA ACARA PENYESUAIAN STOK', work_orders: 'PERINTAH KERJA',
-    bank_transfers: 'BUKTI PEMINDAHBUKUAN', delivery_orders: 'SURAT JALAN', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
+    bank_transfers: 'BUKTI PEMINDAHBUKUAN', delivery_orders: 'SURAT JALAN', customer_credit_notes: 'NOTA KREDIT', customer_debit_notes: 'NOTA DEBET', supplier_debit_notes: 'NOTA DEBET', supplier_credit_notes: 'NOTA KREDIT (DARI PEMASOK)', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
   };
   const SIGN = {
     sales_invoices: ['Hormat kami', 'Penerima'], customer_receipts: ['Penerima kas', 'Penyetor'], supplier_payments: ['Dibuat oleh', 'Disetujui oleh', 'Penerima'],
-    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], delivery_orders: ['Bagian gudang', 'Pengemudi', 'Diterima baik oleh (nama, tanggal & cap)'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
+    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], delivery_orders: ['Bagian gudang', 'Pengemudi', 'Diterima baik oleh (nama, tanggal & cap)'], customer_credit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pelanggan'], customer_debit_notes: ['Hormat kami', 'Diterima pelanggan'], supplier_debit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pemasok'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
   };
 
   function companyHeader() {
