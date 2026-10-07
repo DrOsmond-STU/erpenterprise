@@ -174,7 +174,13 @@ function availableActions(ctx, e, row) {
   return e.actions
     .filter((a) => !a.from || a.from.includes(row[e.statusField]))
     .filter((a) => can(ctx, e.module, Math.min(a.level, 3)) && (a.level < 4 || can(ctx, 'admin', 3)))
-    .map((a) => ({ name: a.name, label: a.label, confirm: a.confirm || null, params: a.params || null, sodBlocked: !!(a.sod && row.created_by === ctx.user.id) }));
+    .map((a) => ({ name: a.name, label: a.label, confirm: a.confirm || null, params: a.params ? a.params.map((p) => openAmountDefault(e, row, p)) : null, sodBlocked: !!(a.sod && row.created_by === ctx.user.id) }));
+}
+
+/* Aksi bayar dari faktur/tagihan: nilai bawaan = sisa terbuka (boleh diubah menjadi sebagian). */
+function openAmountDefault(e, row, p) {
+  if (p.name === 'amount' && ['sales_invoices', 'purchase_bills'].includes(e.key)) return { ...p, default: Math.round(((row.total || 0) - (row.paid || 0)) * 100) / 100, help: `${p.help || ''} Sisa terbuka saat ini ${(Math.round(((row.total || 0) - (row.paid || 0)) * 100) / 100).toLocaleString('id-ID')}.`.trim() };
+  return p;
 }
 
 /* --- Validasi ----------------------------------------------------------------- */

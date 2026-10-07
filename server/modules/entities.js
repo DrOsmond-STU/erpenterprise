@@ -75,6 +75,7 @@ export const STATUS = {
   patuh: ['Patuh', 'ok'], peninjauan: ['Peninjauan', 'warn'], 'tidak-patuh': ['Tidak patuh', 'danger'],
   dilaporkan: ['Dilaporkan', 'warn'], investigasi: ['Investigasi', 'accent'], ditangani: ['Ditangani', 'ok'],
   buka: ['Buka', 'accent'], direvisi: ['Direvisi', 'neutral'],
+  belum: ['Belum jatuh tempo', 'neutral'],
   dikirim_sebagian: ['Dikirim sebagian', 'warn'], dikirim: ['Dikirim', 'accent'], difakturkan: ['Difakturkan', 'ok'],
   diterapkan: ['Diterapkan', 'ok'], direncanakan: ['Direncanakan', 'warn'], diterima_risiko: ['Risiko diterima', 'neutral'],
 };
@@ -90,6 +91,20 @@ export const MODULES = [
 ];
 
 const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
+
+/* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
+const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+const PAY_PARAMS = (bankLabel, pphLabel) => [
+  { name: 'date', label: 'Tanggal', type: 'date', required: true },
+  { name: 'source', label: 'Sumber dana', type: 'select', options: [['bank', 'Kas/bank'], ['uang_muka', 'Saldo uang muka']], default: 'bank', required: true },
+  { name: 'bank_account_id', label: bankLabel, type: 'ref', ref: 'bank_accounts', help: 'Wajib bila sumber dana kas/bank.' },
+  { name: 'amount', label: 'Jumlah dibayar (kas/uang muka)', type: 'money', required: true, help: 'Boleh sebagian — sisa tetap terbuka sesuai jadwal angsuran.' },
+  { name: 'discount', label: 'Potongan / diskon', type: 'money', default: 0 },
+  { name: 'pph23', label: pphLabel, type: 'money', default: 0 },
+  { name: 'bank_charge', label: 'Biaya bank', type: 'money', default: 0 },
+  { name: 'reference', label: 'Referensi', type: 'text' },
+];
 
 /* Alasan penawaran ditolak (analisis kalah-menang). */
 const QUOTE_LOST = [['harga', 'Harga terlalu tinggi'], ['waktu', 'Waktu penyerahan'], ['spesifikasi', 'Spesifikasi tidak sesuai'], ['pesaing', 'Memilih pesaing'], ['anggaran', 'Anggaran pelanggan'], ['ditunda', 'Proyek ditunda/batal'], ['lainnya', 'Lainnya']];
@@ -408,6 +423,18 @@ export const ENTITIES = {
   },
 
   /* ------------------------------------------------------------ Penjualan */
+  payment_terms: {
+    label: 'Termin Pembayaran', one: 'termin', module: 'finance', scope: 'company', title: 'name', sort: 'code',
+    fields: [F.code(), F.name(), F.area('notes', 'Keterangan'), F.status(['aktif', 'nonaktif'], 'aktif')],
+    lines: {
+      table: 'payment_term_lines',
+      fields: [
+        F.text('label', 'Tahap', { required: true, max: 60, help: 'Mis. Uang muka, Termin 2, Pelunasan' }),
+        F.pct('pct', 'Persentase', { required: true }),
+        F.int('days', 'Jatuh tempo (hari setelah faktur)', { required: true, min: 0, max: 730, default: 0 }),
+      ],
+    },
+  },
   customers: {
     label: 'Pelanggan', one: 'pelanggan', module: 'sales', scope: 'company', title: 'name', sort: 'name',
     fields: [
@@ -418,6 +445,7 @@ export const ENTITIES = {
       F.text('npwp', 'NPWP', { max: 30, sensitive: true }),
       F.money('credit_limit', 'Plafon kredit', { list: true }),
       F.int('terms_days', 'Termin (hari)', { default: 30, min: 0, max: 365 }),
+      F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
@@ -540,6 +568,7 @@ export const ENTITIES = {
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true }),
       F.ref('sales_order_id', 'Pesanan penjualan', 'sales_orders', { readonly: true }),
+      F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Kosong = termin pelanggan/pemasok. Angsuran dibentuk saat posting.' }),
       F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
       ...fx(),
@@ -550,6 +579,7 @@ export const ENTITIES = {
     lines: tradeLines('sales_invoice_lines'),
     actions: [
       act('post', 'Terbitkan & posting', { from: ['draf'] }),
+      act('receive', 'Terima pembayaran', { from: ['terbit', 'sebagian'], params: PAY_PARAMS('Diterima di', 'PPh 23 dipotong pelanggan') }),
       act('void', 'Batalkan (jurnal balik)', { from: ['terbit'], confirm: 'Faktur dibatalkan, jurnal & stok dibalik.' }),
     ],
   },
@@ -559,15 +589,25 @@ export const ENTITIES = {
     fields: [
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
-      F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { required: true, list: true }),
+      F.sel('mode', 'Jenis penerimaan', PAY_MODES_AR, { required: true, default: 'pelunasan', list: true }),
+      F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
+      F.money('advance', 'Uang muka diterima', { help: 'Hanya untuk jenis "Terima uang muka (DP)" — dicatat sebagai Uang Muka Pelanggan.' }),
+      F.money('bank_charge', 'Biaya bank (dipotong bank)', { default: 0 }),
       F.text('reference', 'Referensi', { max: 60 }),
-      F.money('total', 'Total', { readonly: true, list: true }),
+      F.money('total', 'Total kas/uang muka', { readonly: true, list: true }),
+      F.money('settled', 'Total pelunasan faktur', { readonly: true, list: true }),
       F.status(['draf', 'diposting', 'batal'], 'draf'),
     ],
     lines: {
       table: 'customer_receipt_lines',
-      fields: [F.ref('invoice_id', 'Faktur', 'sales_invoices', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }), F.money('amount', 'Dibayar', { required: true })],
+      fields: [
+        F.ref('invoice_id', 'Faktur', 'sales_invoices', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
+        F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
+        F.money('discount', 'Potongan / diskon', { default: 0 }),
+        F.money('pph23', 'PPh 23 dipotong pelanggan', { default: 0 }),
+        F.money('settled', 'Melunasi', { readonly: true }),
+      ],
     },
     actions: [act('post', 'Posting', { from: ['draf'] }), act('void', 'Batalkan', { from: ['diposting'] })],
   },
@@ -598,7 +638,7 @@ export const ENTITIES = {
       F.text('city', 'Kota', { list: true }), F.area('address', 'Alamat'),
       F.text('npwp', 'NPWP', { max: 30, sensitive: true }),
       F.text('bank_account_no', 'Rekening bank', { max: 60, sensitive: true }),
-      F.int('terms_days', 'Termin (hari)', { default: 30 }), F.int('lead_time_days', 'Waktu tunggu (hari)', { default: 7, list: true }),
+      F.int('terms_days', 'Termin (hari)', { default: 30 }), F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }), F.int('lead_time_days', 'Waktu tunggu (hari)', { default: 7, list: true }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
@@ -680,6 +720,7 @@ export const ENTITIES = {
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang penerima', 'warehouses'),
       F.ref('purchase_order_id', 'Pesanan pembelian', 'purchase_orders', { readonly: true }),
+      F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Kosong = termin pelanggan/pemasok. Angsuran dibentuk saat posting.' }),
       F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
       ...fx(),
@@ -701,7 +742,7 @@ export const ENTITIES = {
         F.money('amount', 'Jumlah', { readonly: true }),
       ],
     },
-    actions: [act('post', 'Posting tagihan', { from: ['draf'] }), act('void', 'Batalkan (jurnal balik)', { from: ['terbit'] })],
+    actions: [act('post', 'Posting tagihan', { from: ['draf'] }), act('pay', 'Ajukan pembayaran', { from: ['terbit', 'sebagian'], level: 2, params: PAY_PARAMS('Dibayar dari', 'PPh 23 dipotong (disetor kita)') }), act('void', 'Batalkan (jurnal balik)', { from: ['terbit'] })],
   },
   supplier_payments: {
     label: 'Pembayaran Pemasok', one: 'pembayaran', module: 'purchasing', scope: 'branch', title: 'number', number: 'PAY', sort: 'date', sortDir: 'desc',
@@ -709,15 +750,25 @@ export const ENTITIES = {
     fields: [
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
-      F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { required: true, list: true }),
+      F.sel('mode', 'Jenis pembayaran', PAY_MODES_AP, { required: true, default: 'pelunasan', list: true }),
+      F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
+      F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar uang muka (DP)" — dicatat sebagai Uang Muka Pembelian.' }),
+      F.money('bank_charge', 'Biaya transfer (ditanggung kita)', { default: 0 }),
       F.text('reference', 'Referensi', { max: 60 }),
-      F.money('total', 'Total', { readonly: true, list: true }),
+      F.money('total', 'Total kas/uang muka', { readonly: true, list: true }),
+      F.money('settled', 'Total pelunasan tagihan', { readonly: true, list: true }),
       F.status(['draf', 'menunggu', 'diposting', 'batal'], 'draf'),
     ],
     lines: {
       table: 'supplier_payment_lines',
-      fields: [F.ref('bill_id', 'Tagihan', 'purchase_bills', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }), F.money('amount', 'Dibayar', { required: true })],
+      fields: [
+        F.ref('bill_id', 'Tagihan', 'purchase_bills', { required: true, refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
+        F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
+        F.money('discount', 'Potongan diterima', { default: 0 }),
+        F.money('pph23', 'PPh 23 dipotong (disetor kita)', { default: 0 }),
+        F.money('settled', 'Melunasi', { readonly: true }),
+      ],
     },
     actions: [act('submit', 'Ajukan pembayaran', { from: ['draf'], level: 2 }), act('post', 'Setujui & posting', { from: ['menunggu'], sod: true }), act('void', 'Batalkan', { from: ['diposting'] })],
   },

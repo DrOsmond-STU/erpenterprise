@@ -102,6 +102,21 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    (DO belum difakturkan = saldo akun 1-1350) dan tindak lanjuti DO berumur > 30 hari
    serta pesanan yang terlambat dikirim.
 
+## Pembayaran bertahap
+
+1. **Keuangan → Termin Pembayaran**: susun termin (mis. DP 30% / 70% 30 hari,
+   cicilan 3×) dan pasang sebagai termin bawaan pelanggan/pemasok.
+2. Faktur/tagihan yang diposting otomatis memiliki jadwal angsuran. Dari faktur pilih
+   **Terima pembayaran** (penuh atau sebagian; isi potongan, PPh 23 yang dipotong
+   pelanggan, dan biaya bank bila ada). Dari tagihan pilih **Ajukan pembayaran** —
+   disetujui & diposting oleh penyetuju lain.
+3. Uang muka sebelum faktur/tagihan: buat Penerimaan/Pembayaran jenis **Uang muka
+   (DP)**; saat faktur/tagihan terbit, lunasi dengan sumber dana **Saldo uang muka**.
+4. Pantau **Jadwal Angsuran Piutang/Hutang** mingguan (terlambat, jatuh tempo 7 & 30
+   hari) dan rekonsiliasi akun 1-1410 (PPh 23 dibayar di muka — kumpulkan bukti
+   potong), 2-1330 (setor PPh 23 paling lambat tanggal 15 bulan berikutnya),
+   2-1600 & 1-1510 (uang muka).
+
 ## Siklus anggaran tahunan
 
 1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun
@@ -147,6 +162,6 @@ dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 ## Pengujian
 
 ```bash
-npm test            # 133 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, surat jalan, CRUD 55 entitas)
+npm test            # 139 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, CRUD 56 entitas)
 npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```

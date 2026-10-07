@@ -250,6 +250,23 @@ try {
     await page.keyboard.press('Escape');
   } else check(false, 'ada surat jalan belum difakturkan di data demo');
 
+  // Pembayaran bertahap: terima sebagian dari jadwal angsuran.
+  await page.evaluate(() => { location.hash = '#/angsuran-piutang'; });
+  await page.waitForSelector('[data-action-run$=":receive"]', { timeout: 8000 });
+  await page.screenshot({ path: join(shots, 'jadwal-angsuran.png') });
+  const recvBtn = await page.$('[data-action-run$=":receive"]');
+  const invId = (await recvBtn.getAttribute('data-action-run')).split(':')[1];
+  await recvBtn.click();
+  await page.waitForSelector('[data-action-form]');
+  const bankOpt = await page.$$eval('[data-action-form] [name=bank_account_id] option', (o) => o.map((x) => x.value).filter(Boolean));
+  await page.selectOption('[data-action-form] [name=bank_account_id]', bankOpt[0]);
+  await page.fill('[data-action-form] [name=amount]', '1000000');
+  await page.click('.modal [data-ok]');
+  await page.waitForTimeout(1500);
+  const after = await page.evaluate(async (i) => (await fetch(`/api/settlement/sales_invoices/${i}`, { headers: { Accept: 'application/json' } })).json(), invId);
+  check(after.payments?.some((p) => p.amount === 1000000) && after.open > 0, 'pembayaran sebagian dari jadwal angsuran tercatat, sisa tetap terbuka');
+
+  // Tampilan sempit (ponsel).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });
   await page.waitForTimeout(900);

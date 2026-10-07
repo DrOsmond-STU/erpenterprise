@@ -66,6 +66,9 @@ const CUSTOM = {
     b.product_id = db.get('SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_locations WHERE warehouse_id = ?) LIMIT 1', bin.warehouse_id).id;
   },
   budgets: async (b) => { b.amount = 12_000_000; },
+  // Rekening wajib untuk penerimaan/pembayaran jenis pelunasan (tidak wajib untuk pemakaian uang muka).
+  customer_receipts: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; },
+  supplier_payments: async (b) => { b.bank_account_id = (await admin.get('/api/lookup/bank_accounts')).body[0].id; },
   // Surat jalan dari SO yang masih punya sisa kirim; baris kosong = seluruh sisa.
   delivery_orders: async (b) => {
     const so = db.get("SELECT id FROM sales_orders WHERE company_id = 1 AND branch_id = (SELECT id FROM branches WHERE code = 'JKT') AND status IN ('disetujui','dikirim_sebagian') ORDER BY id DESC LIMIT 1");

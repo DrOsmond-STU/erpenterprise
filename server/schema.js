@@ -7,6 +7,12 @@ const SQL_TYPE = { text: 'TEXT', textarea: 'TEXT', email: 'TEXT', select: 'TEXT'
 
 const CORE = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS installments (
+  id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL, doc_type TEXT NOT NULL, doc_id INTEGER NOT NULL, seq INTEGER NOT NULL,
+  label TEXT, due_date TEXT, amount REAL NOT NULL, paid REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_installments_doc ON installments(doc_type, doc_id);
+CREATE INDEX IF NOT EXISTS ix_installments_due ON installments(company_id, due_date);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT, updated_by INTEGER);
 CREATE TABLE IF NOT EXISTS sequences (key TEXT PRIMARY KEY, last INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS role_permissions (

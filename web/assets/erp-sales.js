@@ -152,5 +152,61 @@
     if (ev.target.matches('[data-doinv-id]')) doSum();
   });
 
-  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment };
+  /* ======================================================================== */
+  /* Pembayaran bertahap                                                      */
+  /* ======================================================================== */
+  const MODE = { pelunasan: 'Pelunasan', uang_muka: 'Uang muka', pakai_uang_muka: 'Pakai uang muka' };
+
+  /** Laci faktur/tagihan: jadwal angsuran, riwayat pembayaran (termasuk potongan), saldo uang muka mitra. */
+  async function settlementDrawer(key, r) {
+    if (['draf', 'batal'].includes(r.status)) return '';
+    let s;
+    try { s = await api('GET', `/api/settlement/${key}/${r.id}`); } catch { return ''; }
+    const ar = key === 'sales_invoices';
+    const act = (r.__actions || []).find((a) => a.name === (ar ? 'receive' : 'pay'));
+    return `<div class="section"><span class="section-title">Jadwal angsuran & pembayaran</span>
+      <div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>Tahap</th><th>Jatuh tempo</th><th class="ta-r">Jumlah</th><th class="ta-r">Dibayar</th><th class="ta-r">Sisa</th><th>Status</th></tr></thead><tbody>
+        ${s.installments.map((i) => `<tr><td>${esc(i.label)}</td><td class="num ${i.status === 'terlambat' ? 'neg' : ''}">${esc(ERP.date(i.due_date))}</td><td class="ta-r">${money(i.amount)}</td><td class="ta-r">${money(i.paid)}</td><td class="ta-r">${money(i.open)}</td><td>${pill(i.status)}</td></tr>`).join('')}
+      </tbody><tfoot><tr class="row-total"><td colspan="4">Sisa ${ar ? 'faktur' : 'tagihan'}</td><td class="ta-r">${money(s.open)}</td><td></td></tr></tfoot></table></div>
+      ${s.payments.length || s.credits.length ? `<div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>${ar ? 'Penerimaan' : 'Pembayaran'}</th><th>Tanggal</th><th>Jenis</th><th class="ta-r">Kas/uang muka</th><th class="ta-r">Potongan</th><th class="ta-r">PPh 23</th><th class="ta-r">Melunasi</th><th>Status</th></tr></thead><tbody>
+        ${s.payments.map((p) => `<tr data-open="${p.entity}:${p.id}" tabindex="0"><td class="code">${esc(p.number)}</td><td class="num">${esc(ERP.date(p.date))}</td><td>${esc(MODE[p.mode] || 'Pelunasan')}</td><td class="ta-r">${money(p.amount)}</td><td class="ta-r">${p.discount ? money(p.discount) : ''}</td><td class="ta-r">${p.pph23 ? money(p.pph23) : ''}</td><td class="ta-r">${money(p.settled)}</td><td>${pill(p.status)}</td></tr>`).join('')}
+        ${s.credits.map((c) => `<tr data-open="${c.entity}:${c.id}" tabindex="0"><td class="code">${esc(c.number)}</td><td class="num">${esc(ERP.date(c.date))}</td><td>Retur (nota)</td><td></td><td></td><td></td><td class="ta-r">${money(c.settled)}</td><td>${pill('diposting')}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted">Belum ada pembayaran.</p>'}
+      <p class="field-hint">Saldo uang muka ${ar ? 'pelanggan' : 'ke pemasok'}: <b>${esc(FMT.rp(s.advance))}</b>${s.advance > 0 && s.open > 0 ? ' — dapat dipakai melunasi (sumber dana "Saldo uang muka").' : ''}</p>
+      ${act && s.open > 0 ? `<button class="btn btn-sm btn-primary" data-action-run="${key}:${r.id}:${act.name}">${icon('wallet')} ${esc(act.label)} (penuh / sebagian)</button>` : ''}</div>`;
+  }
+
+  /** Jadwal angsuran piutang/hutang: terlambat, jatuh tempo 7/30 hari, saldo uang muka. */
+  async function schedule(root, side) {
+    const ar = side === 'ar';
+    const st = (state.schedDays = state.schedDays || {});
+    const days = st[side] || 60;
+    const to = state.to || state.meta.today;
+    const title = ar ? 'Jadwal Angsuran Piutang' : 'Jadwal Angsuran Hutang';
+    root.innerHTML = V().pageHead(title, '') + '<div class="loading-cell">Menghitung…</div>';
+    let r;
+    try { r = await api('GET', `/api/reports/angsuran${qs({ side, days, to })}`); } catch (e) { root.innerHTML = R().noAccess(); return; }
+    const t = r.totals;
+    const docKey = ar ? 'sales_invoices' : 'purchase_bills';
+    const canPay = R().ent(docKey) && (state.me.permissions[ar ? 'sales' : 'purchasing'] || 0) >= (ar ? 3 : 2);
+    root.innerHTML = V().pageHead(title, `Per ${ERP.date(r.asOf)} — angsuran terbuka jatuh tempo s.d. ${ERP.date(r.until)} dari termin bertahap ${ar ? 'faktur' : 'tagihan'}. Bayar penuh atau sebagian; pembayaran dialokasikan ke angsuran tertua.`,
+      `<label class="ctx-inline">Rentang <select class="select" data-sched-days="${side}">${[30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${d === days ? 'selected' : ''}>${d} hari</option>`).join('')}</select></label>
+      <button class="btn" data-nav="${ar ? 'umur-piutang' : 'umur-hutang'}">${icon('clock')} Umur ${ar ? 'piutang' : 'hutang'}</button><button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
+      `<section class="kpi-grid-erp">
+        ${kpi('Terlambat', esc(FMT.rpCompact(t.overdue)), 'angsuran lewat jatuh tempo', t.overdue ? 'neg' : 'pos')}
+        ${kpi('Jatuh tempo 7 hari', esc(FMT.rpCompact(t.next7)), ar ? 'perkiraan kas masuk' : 'perkiraan kas keluar')}
+        ${kpi('Jatuh tempo 30 hari', esc(FMT.rpCompact(t.next30)), '')}
+        ${kpi('Dokumen bertahap', String(t.staged), 'lebih dari satu angsuran terbuka')}
+        ${kpi(ar ? 'Uang muka pelanggan' : 'Uang muka ke pemasok', esc(FMT.rpCompact(r.advanceTotal)), `${r.advances.length} mitra · belum dipakai`)}
+      </section>
+      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Jatuh tempo</th><th>${ar ? 'Faktur' : 'Tagihan'}</th><th>${ar ? 'Pelanggan' : 'Pemasok'}</th><th>Tahap</th><th class="ta-r">Jumlah (IDR)</th><th class="ta-r">Dibayar</th><th class="ta-r">Sisa (IDR)</th><th>Status</th><th></th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr class="${x.status === 'terlambat' ? 'row-attn' : ''}"><td class="num ${x.status === 'terlambat' ? 'neg' : ''}">${esc(ERP.date(x.due_date))}${x.overdueDays ? `<span class="cell-sub">${x.overdueDays} hari lewat</span>` : ''}</td><td class="code"><button class="link" data-open="${docKey}:${x.doc_id}">${esc(x.number)}</button></td><td>${esc(x.party)}</td><td>${esc(x.label)}${x.stages > 1 ? `<span class="cell-sub">tahap ${x.seq}/${x.stages}</span>` : ''}</td><td class="ta-r">${money(x.amountIdr)}${x.rate !== 1 ? `<span class="cell-sub">valas × ${esc(num(x.rate))}</span>` : ''}</td><td class="ta-r">${x.paid ? money(x.paidIdr) : ''}</td><td class="ta-r">${money(x.openIdr)}</td><td>${pill(x.status)}</td><td>${canPay ? `<button class="btn btn-sm" data-action-run="${docKey}:${x.doc_id}:${ar ? 'receive' : 'pay'}">${ar ? 'Terima' : 'Bayar'}</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Tidak ada angsuran terbuka pada rentang ini.</td></tr>'}
+      </tbody><tfoot><tr class="row-total"><td colspan="6">Total</td><td class="ta-r">${money(t.all)}</td><td colspan="2"></td></tr></tfoot></table></div></div></article>
+      ${r.advances.length ? card(ar ? 'Saldo uang muka pelanggan' : 'Saldo uang muka ke pemasok', 'dapat dipakai melunasi faktur/tagihan berikutnya', `<div class="table-scroll"><table class="table tbl-sm"><tbody>${r.advances.map((a) => `<tr><td>${esc(a.party)}</td><td class="ta-r">${money(a.balance)}</td></tr>`).join('')}</tbody></table></div>`) : ''}`;
+  }
+  document.addEventListener('change', (ev) => {
+    if (ev.target.matches('[data-sched-days]')) { (state.schedDays = state.schedDays || {})[ev.target.dataset.schedDays] = Number(ev.target.value); ERP.app.renderView(); }
+  });
+
+  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule };
 })();

@@ -9,6 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
+import { createInstallments, syncInstallments, deleteInstallments, advanceBalance } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
 
@@ -119,6 +120,7 @@ function postSalesInvoice(ctx, inv) {
   arLine.debit = round2(jl.filter((x) => x.credit && !x.branch_id).reduce((a, x) => a + x.credit, 0));
   postJournal(ctx, { companyId: inv.company_id, branchId: inv.branch_id, date: inv.date, description: `Faktur ${inv.number} — ${cust.name}`, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number, lines: jl });
   setStatus('sales_invoices', inv.id, 'terbit');
+  createInstallments('sales_invoices', db.get('SELECT * FROM sales_invoices WHERE id = ?', inv.id));
   const dos = db.all('SELECT id, sales_order_id FROM delivery_orders WHERE invoice_id = ?', inv.id);
   for (const d of dos) setStatus('delivery_orders', d.id, 'difakturkan');
   for (const so of new Set(dos.map((d) => d.sales_order_id))) refreshSoStatus(so);
@@ -133,6 +135,7 @@ function voidSalesInvoice(ctx, inv) {
   }
   reverseDocumentJournals(ctx, 'sales_invoices', inv.id, today(), `Pembatalan faktur ${inv.number}`);
   setStatus('sales_invoices', inv.id, 'batal');
+  deleteInstallments('sales_invoices', inv.id);
   const dos = db.all('SELECT id, sales_order_id FROM delivery_orders WHERE invoice_id = ?', inv.id);
   for (const d of dos) setStatus('delivery_orders', d.id, 'dikirim', { invoice_id: null });
   for (const so of new Set(dos.map((d) => d.sales_order_id))) refreshSoStatus(so);
@@ -263,35 +266,76 @@ function settle(table, id, delta) {
   if (paid < -0.005) throw bad('Saldo pembayaran negatif.');
   const status = paid <= 0.005 ? 'terbit' : paid >= d.total - 0.005 ? 'lunas' : 'sebagian';
   db.update(table, id, { paid, status });
+  syncInstallments(table, id);
 }
 
+/* --- Penerimaan & pembayaran bertahap ------------------------------------------- */
+const settledOf = (l) => round2(l.settled ?? ((Number(l.amount) || 0) + (Number(l.discount) || 0) + (Number(l.pph23) || 0)));
+const isBaseDoc = (d) => rateOf(d) === 1 && (!d.currency_id || isBaseCurrency(d.currency_id));
+
+/**
+ * Penerimaan pelanggan:
+ * - pelunasan: kas/bank + potongan + PPh 23 dipotong pelanggan melunasi faktur (penuh/sebagian, per angsuran);
+ * - uang_muka: DP sebelum faktur → Uang Muka Pelanggan (liabilitas);
+ * - pakai_uang_muka: saldo uang muka dipakai melunasi faktur.
+ */
 function postReceipt(ctx, r) {
-  const ls = lines('customer_receipt_lines', r.id);
-  needLines(ls, 'penerimaan');
-  const b = bank(r.bank_account_id);
   const cust = db.get('SELECT * FROM customers WHERE id = ?', r.customer_id);
-  const bankDebit = toBase(r.total, r);
-  const jl = [{ account_id: b.account_id, branch_id: b.branch_id, debit: bankDebit, memo: `Penerimaan ${cust.name}` }];
-  let arCredit = 0;
-  for (const l of ls) {
-    const inv = db.get('SELECT * FROM sales_invoices WHERE id = ?', l.invoice_id);
-    if (!inv || inv.customer_id !== r.customer_id) throw bad('Faktur pada baris penerimaan bukan milik pelanggan ini.');
-    if (!['terbit', 'sebagian'].includes(inv.status)) throw bad(`Faktur ${inv.number} tidak dalam status terbuka.`);
-    if (!(l.amount > 0)) throw bad('Nilai pembayaran per faktur harus positif.');
-    if (!sameCurrency(inv, r)) throw bad(`Mata uang penerimaan harus sama dengan mata uang faktur ${inv.number}.`);
-    settle('sales_invoices', inv.id, l.amount);
-    const base = toBase(l.amount, inv);
-    arCredit += base;
-    jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: base, memo: `Pelunasan ${inv.number}`, partner_type: 'customer', partner_id: cust.id });
+  const mode = r.mode || 'pelunasan';
+  const charge = round2(r.bank_charge || 0);
+  const jl = [];
+  if (mode === 'uang_muka') {
+    if (!isBaseDoc(r)) throw bad('Uang muka dicatat dalam IDR.');
+    if (!(r.advance > 0)) throw bad('Isi nilai uang muka yang diterima.');
+    const b = bank(r.bank_account_id);
+    jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: round2(r.advance - charge), memo: `Uang muka ${cust.name}` });
+    if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya bank' });
+    jl.push({ account_id: acct('customer_advance'), credit: r.advance, memo: `Uang muka ${cust.name}${r.reference ? ` · ${r.reference}` : ''}`, partner_type: 'customer', partner_id: cust.id });
+  } else {
+    const ls = lines('customer_receipt_lines', r.id);
+    needLines(ls, 'penerimaan');
+    let arCredit = 0, cash = 0, disc = 0, pph = 0;
+    for (const l of ls) {
+      const inv = db.get('SELECT * FROM sales_invoices WHERE id = ?', l.invoice_id);
+      if (!inv || inv.customer_id !== r.customer_id) throw bad('Faktur pada baris penerimaan bukan milik pelanggan ini.');
+      if (!['terbit', 'sebagian'].includes(inv.status)) throw bad(`Faktur ${inv.number} tidak dalam status terbuka.`);
+      if (!sameCurrency(inv, r)) throw bad(`Mata uang penerimaan harus sama dengan mata uang faktur ${inv.number}.`);
+      const st = settledOf(l);
+      if (!(st > 0) || l.amount < 0 || (l.discount || 0) < 0 || (l.pph23 || 0) < 0) throw bad('Nilai pelunasan per faktur harus positif.');
+      settle('sales_invoices', inv.id, st);
+      const base = toBase(st, inv);
+      arCredit += base; cash += l.amount; disc += l.discount || 0; pph += l.pph23 || 0;
+      jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: base, memo: `Pelunasan ${inv.number}${st < inv.total - (inv.paid || 0) - 0.005 ? ' (sebagian)' : ''}`, partner_type: 'customer', partner_id: cust.id });
+    }
+    let debitBase = 0;
+    if (mode === 'pakai_uang_muka') {
+      if (!isBaseDoc(r)) throw bad('Pemakaian uang muka hanya untuk faktur IDR.');
+      const avail = advanceBalance('customer', cust.id, r.company_id);
+      if (cash > avail + 0.005) throw bad(`Saldo uang muka ${cust.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
+      if (cash > 0) jl.push({ account_id: acct('customer_advance'), debit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'customer', partner_id: cust.id });
+      debitBase += round2(cash);
+    } else {
+      const b = bank(r.bank_account_id);
+      const bankDebit = toBase(cash - charge, r), chargeBase = toBase(charge, r);
+      if (bankDebit < 0) throw bad('Biaya bank melebihi kas diterima.');
+      if (bankDebit > 0) jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: bankDebit, memo: `Penerimaan ${cust.name}` });
+      if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya bank' });
+      debitBase += bankDebit + chargeBase;
+    }
+    if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: acct('sales_discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
+    if (pph > 0) { const v = toBase(pph, r); jl.push({ account_id: acct('pph23_prepaid'), debit: v, memo: 'PPh 23 dipotong pelanggan', partner_type: 'customer', partner_id: cust.id }); debitBase += v; }
+    const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
+    if (fx) jl.push(fx);
   }
-  const fx = fxLine(bankDebit - arCredit, b.branch_id, 'Selisih kurs terealisasi');
-  if (fx) jl.push(fx);
-  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `Penerimaan ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
+  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
   setStatus('customer_receipts', r.id, 'diposting');
 }
 
 function voidReceipt(ctx, r) {
-  for (const l of lines('customer_receipt_lines', r.id)) settle('sales_invoices', l.invoice_id, -l.amount);
+  if (r.mode === 'uang_muka') {
+    const avail = advanceBalance('customer', r.customer_id, r.company_id);
+    if (avail + 0.005 < r.advance) throw conflict('Uang muka ini sudah dipakai melunasi faktur; batalkan pemakaian uang mukanya terlebih dahulu.');
+  } else for (const l of lines('customer_receipt_lines', r.id)) settle('sales_invoices', l.invoice_id, -settledOf(l));
   reverseDocumentJournals(ctx, 'customer_receipts', r.id, today(), `Pembatalan penerimaan ${r.number}`);
   setStatus('customer_receipts', r.id, 'batal');
 }
@@ -355,6 +399,7 @@ function postBill(ctx, bill) {
   jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), credit: round2(jl.reduce((a, x) => a + (x.debit || 0), 0)), memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
   postJournal(ctx, { companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, description: `Tagihan ${bill.number} (${bill.supplier_invoice_no || '-'}) — ${sup.name}`, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number, lines: jl });
   setStatus('purchase_bills', bill.id, 'terbit');
+  createInstallments('purchase_bills', db.get('SELECT * FROM purchase_bills WHERE id = ?', bill.id));
   if (bill.purchase_order_id) setStatus('purchase_orders', bill.purchase_order_id, 'diterima');
   return { message: warnMessage(warnings) };
 }
@@ -367,36 +412,98 @@ function voidBill(ctx, bill) {
   }
   reverseDocumentJournals(ctx, 'purchase_bills', bill.id, today(), `Pembatalan tagihan ${bill.number}`);
   setStatus('purchase_bills', bill.id, 'batal');
+  deleteInstallments('purchase_bills', bill.id);
 }
 
+/**
+ * Pembayaran pemasok: pelunasan (kas/bank + potongan diterima + PPh 23 yang kita potong & setor),
+ * uang muka (DP) sebelum tagihan → Uang Muka Pembelian (aset), atau pemakaian saldo uang muka.
+ */
 function postPayment(ctx, pay) {
-  const ls = lines('supplier_payment_lines', pay.id);
-  needLines(ls, 'pembayaran');
-  const b = bank(pay.bank_account_id);
   const sup = db.get('SELECT * FROM suppliers WHERE id = ?', pay.supplier_id);
+  const mode = pay.mode || 'pelunasan';
+  const charge = round2(pay.bank_charge || 0);
   const jl = [];
-  let apDebit = 0;
-  for (const l of ls) {
-    const bill = db.get('SELECT * FROM purchase_bills WHERE id = ?', l.bill_id);
-    if (!bill || bill.supplier_id !== pay.supplier_id) throw bad('Tagihan pada baris pembayaran bukan milik pemasok ini.');
-    if (!['terbit', 'sebagian'].includes(bill.status)) throw bad(`Tagihan ${bill.number} tidak dalam status terbuka.`);
-    if (!(l.amount > 0)) throw bad('Nilai pembayaran per tagihan harus positif.');
-    if (!sameCurrency(bill, pay)) throw bad(`Mata uang pembayaran harus sama dengan mata uang tagihan ${bill.number}.`);
-    settle('purchase_bills', bill.id, l.amount);
-    const base = toBase(l.amount, bill);
-    apDebit += base;
-    jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit: base, memo: `Pelunasan ${bill.number}`, partner_type: 'supplier', partner_id: sup.id });
+  if (mode === 'uang_muka') {
+    if (!isBaseDoc(pay)) throw bad('Uang muka dicatat dalam IDR.');
+    if (!(pay.advance > 0)) throw bad('Isi nilai uang muka yang dibayar.');
+    const b = bank(pay.bank_account_id);
+    jl.push({ account_id: acct('supplier_advance'), debit: pay.advance, memo: `Uang muka ${sup.name}${pay.reference ? ` · ${pay.reference}` : ''}`, partner_type: 'supplier', partner_id: sup.id });
+    if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer' });
+    jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: round2(pay.advance + charge), memo: `Uang muka ${sup.name}` });
+  } else {
+    const ls = lines('supplier_payment_lines', pay.id);
+    needLines(ls, 'pembayaran');
+    let apDebit = 0, cash = 0, disc = 0, pph = 0;
+    for (const l of ls) {
+      const bill = db.get('SELECT * FROM purchase_bills WHERE id = ?', l.bill_id);
+      if (!bill || bill.supplier_id !== pay.supplier_id) throw bad('Tagihan pada baris pembayaran bukan milik pemasok ini.');
+      if (!['terbit', 'sebagian'].includes(bill.status)) throw bad(`Tagihan ${bill.number} tidak dalam status terbuka.`);
+      if (!sameCurrency(bill, pay)) throw bad(`Mata uang pembayaran harus sama dengan mata uang tagihan ${bill.number}.`);
+      const st = settledOf(l);
+      if (!(st > 0) || l.amount < 0 || (l.discount || 0) < 0 || (l.pph23 || 0) < 0) throw bad('Nilai pelunasan per tagihan harus positif.');
+      settle('purchase_bills', bill.id, st);
+      const base = toBase(st, bill);
+      apDebit += base; cash += l.amount; disc += l.discount || 0; pph += l.pph23 || 0;
+      jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit: base, memo: `Pelunasan ${bill.number}`, partner_type: 'supplier', partner_id: sup.id });
+    }
+    let creditBase = 0;
+    if (mode === 'pakai_uang_muka') {
+      if (!isBaseDoc(pay)) throw bad('Pemakaian uang muka hanya untuk tagihan IDR.');
+      const avail = advanceBalance('supplier', sup.id, pay.company_id);
+      if (cash > avail + 0.005) throw bad(`Saldo uang muka ke ${sup.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
+      if (cash > 0) jl.push({ account_id: acct('supplier_advance'), credit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'supplier', partner_id: sup.id });
+      creditBase += round2(cash);
+    } else {
+      const b = bank(pay.bank_account_id);
+      const cashBase = toBase(cash, pay), chargeBase = toBase(charge, pay);
+      jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: round2(cashBase + chargeBase), memo: `Pembayaran ${sup.name}` });
+      if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya transfer' });
+      creditBase += cashBase;
+    }
+    if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: acct('purchase_discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
+    if (pph > 0) { const v = toBase(pph, pay); jl.push({ account_id: acct('pph23_payable'), credit: v, memo: `PPh 23 dipotong — ${sup.name}`, partner_type: 'supplier', partner_id: sup.id }); creditBase += v; }
+    const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi');
+    if (fx) jl.push(fx);
   }
-  const bankCredit = toBase(pay.total, pay);
-  jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: bankCredit, memo: `Pembayaran ${sup.name}` });
-  const fx = fxLine(apDebit - bankCredit, b.branch_id, 'Selisih kurs terealisasi');
-  if (fx) jl.push(fx);
-  postJournal(ctx, { companyId: pay.company_id, branchId: pay.branch_id, date: pay.date, description: `Pembayaran ${pay.number} — ${sup.name}`, sourceType: 'supplier_payments', sourceId: pay.id, sourceNo: pay.number, lines: jl });
+  postJournal(ctx, { companyId: pay.company_id, branchId: pay.branch_id, date: pay.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : 'Pembayaran'} ${pay.number} — ${sup.name}`, sourceType: 'supplier_payments', sourceId: pay.id, sourceNo: pay.number, lines: jl });
   setStatus('supplier_payments', pay.id, 'diposting');
 }
 
+/**
+ * Aksi cepat dari faktur/tagihan: buat penerimaan (langsung diposting) atau pembayaran pemasok
+ * (diajukan, menunggu persetujuan orang lain) untuk satu dokumen — penuh atau sebagian.
+ */
+function quickSettle(ctx, table, doc, p) {
+  const ar = table === 'customer_receipts';
+  const open = round2(doc.total - (doc.paid || 0));
+  const settled = round2((p.amount || 0) + (p.discount || 0) + (p.pph23 || 0));
+  if (!(settled > 0)) throw bad('Isi jumlah pembayaran.');
+  if (settled > open + 0.005) throw bad(`Melebihi sisa ${ar ? 'faktur' : 'tagihan'} (${open.toLocaleString('id-ID')}).`);
+  const useAdv = p.source === 'uang_muka';
+  if (!useAdv && !p.bank_account_id) throw bad('Pilih rekening kas/bank.');
+  const header = {
+    company_id: doc.company_id, branch_id: doc.branch_id, date: p.date || today(), [ar ? 'customer_id' : 'supplier_id']: doc[ar ? 'customer_id' : 'supplier_id'],
+    mode: useAdv ? 'pakai_uang_muka' : 'pelunasan', bank_account_id: useAdv ? null : p.bank_account_id, ...fxCopy(doc), bank_charge: useAdv ? 0 : (p.bank_charge || 0),
+    reference: p.reference || null, total: round2(p.amount || 0), settled, status: 'draf',
+  };
+  const line = { [ar ? 'invoice_id' : 'bill_id']: doc.id, amount: round2(p.amount || 0), discount: p.discount || 0, pph23: p.pph23 || 0, settled };
+  const { id, number } = createDoc(ctx, table, ar ? 'RCV' : 'PAY', header, [line], ar ? 'customer_receipt_lines' : 'supplier_payment_lines');
+  const rec = db.get(`SELECT * FROM "${table}" WHERE id = ?`, id);
+  const left = round2(open - settled);
+  if (ar) {
+    postReceipt(ctx, rec);
+    return { message: `Penerimaan ${number} diposting. ${left > 0.005 ? `Sisa faktur ${left.toLocaleString('id-ID')} tetap terbuka sesuai jadwal angsuran.` : 'Faktur lunas.'}`, audit: { receipt: number } };
+  }
+  setStatus('supplier_payments', id, 'menunggu');
+  return { redirect: { entity: 'supplier_payments', id }, message: `Pembayaran ${number} diajukan — menunggu persetujuan & posting oleh penyetuju lain.${left > 0.005 ? ` Sisa tagihan ${left.toLocaleString('id-ID')}.` : ''}` };
+}
+
 function voidPayment(ctx, pay) {
-  for (const l of lines('supplier_payment_lines', pay.id)) settle('purchase_bills', l.bill_id, -l.amount);
+  if (pay.mode === 'uang_muka') {
+    const avail = advanceBalance('supplier', pay.supplier_id, pay.company_id);
+    if (avail + 0.005 < pay.advance) throw conflict('Uang muka ini sudah dipakai melunasi tagihan; batalkan pemakaian uang mukanya terlebih dahulu.');
+  } else for (const l of lines('supplier_payment_lines', pay.id)) settle('purchase_bills', l.bill_id, -settledOf(l));
   reverseDocumentJournals(ctx, 'supplier_payments', pay.id, today(), `Pembatalan pembayaran ${pay.number}`);
   setStatus('supplier_payments', pay.id, 'batal');
 }
@@ -921,7 +1028,7 @@ export const ACTIONS = {
       return { redirect: { entity: 'sales_invoices', id }, message: `Faktur ${number} dibuat (draf). Terbitkan untuk memposting.` };
     },
   },
-  sales_invoices: { post: postSalesInvoice, void: voidSalesInvoice },
+  sales_invoices: { post: postSalesInvoice, void: voidSalesInvoice, receive: (ctx, inv, p) => quickSettle(ctx, 'customer_receipts', inv, p) },
   delivery_orders: {
     ship: shipDelivery,
     void: voidDelivery,
@@ -978,10 +1085,10 @@ export const ACTIONS = {
       return { redirect: { entity: 'purchase_bills', id }, message: `Tagihan ${number} dibuat (draf). Posting untuk menerima stok & mencatat hutang.` };
     },
   },
-  purchase_bills: { post: postBill, void: voidBill },
+  purchase_bills: { post: postBill, void: voidBill, pay: (ctx, bill, p) => quickSettle(ctx, 'supplier_payments', bill, p) },
   supplier_payments: {
     submit: (_c, p) => {
-      needLines(lines('supplier_payment_lines', p.id), 'pembayaran');
+      if (p.mode !== 'uang_muka') needLines(lines('supplier_payment_lines', p.id), 'pembayaran');
       setStatus('supplier_payments', p.id, 'menunggu');
     },
     post: postPayment, void: voidPayment,

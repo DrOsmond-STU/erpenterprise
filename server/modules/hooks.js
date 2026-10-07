@@ -7,6 +7,7 @@ import { hashPassword } from '../security/crypto.js';
 import { clearPermCache, can, LEVEL } from '../security/rbac.js';
 import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
+import { termDueDate, validateTerm } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
@@ -30,6 +31,38 @@ function defaultDue(row, partyTable, partyField) {
   const d = new Date(row.date + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + (p?.terms_days ?? 30));
   row.due_date = d.toISOString().slice(0, 10);
+}
+
+/** Termin bertahap: bawaan dari mitra; jatuh tempo dokumen = tahap terakhir. */
+function applyTerm(row, partyTable, partyField) {
+  if (row.payment_term_id == null && row[partyField]) row.payment_term_id = db.get(`SELECT payment_term_id FROM ${partyTable} WHERE id = ?`, row[partyField])?.payment_term_id ?? null;
+  const due = termDueDate(row.payment_term_id, row.date);
+  if (due) row.due_date = due;
+}
+
+/** Penerimaan/pembayaran: jenis, total kas/uang muka, total pelunasan, validasi rekening & potongan. */
+function settlementTotals(row, lines) {
+  row.mode = row.mode || 'pelunasan';
+  row.bank_charge = Number(row.bank_charge) || 0;
+  if (row.bank_charge < 0) throw bad('Biaya bank tidak boleh negatif.');
+  if (row.mode === 'uang_muka') {
+    if (lines?.length) throw bad('Uang muka (DP) tidak memakai baris faktur/tagihan; kosongkan barisnya.');
+    if (!(Number(row.advance) > 0)) throw bad('Isi nilai uang muka.');
+    row.total = round2(row.advance); row.settled = 0;
+  } else {
+    row.advance = 0;
+    if (lines) {
+      for (const l of lines) {
+        for (const k of ['amount', 'discount', 'pph23']) if ((Number(l[k]) || 0) < 0) throw bad('Nilai pembayaran/potongan tidak boleh negatif.');
+        l.discount = Number(l.discount) || 0; l.pph23 = Number(l.pph23) || 0;
+        l.settled = round2((Number(l.amount) || 0) + l.discount + l.pph23);
+      }
+      row.total = sum(lines, (l) => l.amount);
+      row.settled = sum(lines, (l) => l.settled);
+    }
+  }
+  if (row.mode === 'pakai_uang_muka') { row.bank_account_id = null; row.bank_charge = 0; }
+  else if (!row.bank_account_id) throw bad('Pilih rekening kas/bank.');
 }
 
 /** Surat jalan: pelanggan & gudang dari SO, baris dipetakan ke baris SO (harga/diskon SO), qty ≤ sisa pesanan. */
@@ -130,7 +163,7 @@ export const HOOKS = {
   quotations: { compute: quotationCompute },
   purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
   sales_invoices: {
-    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
+    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); applyTerm(row, 'customers', 'customer_id'); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
     // Faktur dari surat jalan: baris terkunci (qty & barang mengikuti surat jalan); hapus draf → surat jalan dapat difakturkan lagi.
     beforeUpdate: (_c, row, existing, body) => {
       if (body.lines !== undefined && db.get('SELECT id FROM delivery_orders WHERE invoice_id = ?', existing.id)) throw bad('Baris faktur dari surat jalan tidak dapat diubah. Hapus draf faktur lalu buat ulang dari surat jalan yang benar.');
@@ -173,7 +206,7 @@ export const HOOKS = {
   purchase_bills: {
     compute: (ctx, row, lines) => {
       if (lines) for (const l of lines) if (!l.product_id && !l.account_id) throw bad('Setiap baris tagihan harus memilih barang atau akun.');
-      applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
+      applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); applyTerm(row, 'suppliers', 'supplier_id'); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
     },
   },
   pos_sales: {
@@ -182,8 +215,9 @@ export const HOOKS = {
   },
   purchase_requests: { compute: (_c, row, lines) => { if (!lines) return; for (const l of lines) l.amount = round2((l.qty || 0) * (l.price || 0)); row.total = sum(lines, (l) => l.amount); } },
   rfqs: { compute: (_c, row, lines) => { if (lines?.length) row.best_price = Math.min(...lines.map((l) => l.amount || 0)); } },
-  customer_receipts: { compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); amountTotal(c, row, lines); } },
-  supplier_payments: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); amountTotal(c, row, lines); } },
+  customer_receipts: { compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); settlementTotals(row, lines); } },
+  supplier_payments: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); settlementTotals(row, lines); } },
+  payment_terms: { compute: (_c, _row, lines) => validateTerm(lines) },
   cash_transactions: { compute: amountTotal },
   journals: {
     compute: (_c, row, lines) => {

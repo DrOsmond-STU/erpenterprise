@@ -136,6 +136,7 @@
       if (msg) extra = `<div class="section"><div class="notice" data-tone="${r.status === 'diterima' ? 'ok' : exp || r.status === 'kedaluwarsa' ? 'danger' : 'info'}">${icon(r.status === 'diterima' ? 'check' : 'clock')} ${esc(msg)}</div></div>`;
     }
     if (key === 'sales_orders') extra = await ERP.sales.soDrawer(r);
+    if (key === 'sales_invoices' || key === 'purchase_bills') extra = await ERP.sales.settlementDrawer(key, r);
     if (key === 'roles') extra = `<div class="section"><button class="btn" data-nav="peran">${icon('shield')} Buka matriks izin</button></div>`;
     if (key === 'bank_reconciliations') extra = `<div class="section"><button class="btn btn-primary" data-recon-open="${r.id}">${icon('check')} Cocokkan mutasi dengan rekening koran</button></div>`;
 

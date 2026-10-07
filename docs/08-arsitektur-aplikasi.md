@@ -319,3 +319,43 @@ Aturan & kontrol:
   (umur, nilai jual, nilai pokok) yang **direkonsiliasi dengan saldo akun 1-1350**.
 * API: `GET /api/deliveries/uninvoiced?customer=`, `POST /api/deliveries/invoice`
   `{ delivery_ids: [...], date }`.
+
+## Pembayaran bertahap (piutang pelanggan & hutang pemasok) (`server/ledger/payments.js`)
+
+**Termin bertahap** (Keuangan → Termin Pembayaran): tahap berisi label, persentase
+(total 100%), dan jatuh tempo (hari setelah faktur), mis. *DP 30% + pelunasan 30
+hari*, *Termin proyek 30/40/30*, *Cicilan 3× bulanan*. Termin bawaan diatur per
+pelanggan/pemasok dan dapat diganti per faktur/tagihan; jatuh tempo dokumen =
+tahap terakhir.
+
+* Saat faktur/tagihan diposting terbentuk **jadwal angsuran** (`installments`);
+  pembulatan masuk ke tahap terakhir. Tanpa termin = satu angsuran.
+* Setiap pembayaran (penuh atau **sebagian**) dialokasikan otomatis ke angsuran
+  tertua (FIFO); pembatalan pembayaran/retur menghitung ulang alokasi.
+* **Umur piutang/hutang dihitung per angsuran** (jatuh tempo masing-masing tahap)
+  dan tetap direkonsiliasi dengan buku besar.
+
+**Jenis penerimaan pelanggan / pembayaran pemasok**
+
+| Jenis | Jurnal penerimaan pelanggan | Jurnal pembayaran pemasok |
+| --- | --- | --- |
+| Pelunasan (penuh/sebagian) | Dr Bank (neto biaya bank), Beban adm. bank, Potongan penjualan (4-1900), PPh 23 dibayar di muka (1-1410) · Cr Piutang | Dr Hutang · Cr Bank (+ biaya transfer), Potongan pembelian (7-1300), Hutang PPh 23 (2-1330); Dr Beban adm. bank |
+| Uang muka (DP) sebelum faktur | Dr Bank · Cr Uang Muka Pelanggan (2-1600, per pelanggan) | Dr Uang Muka Pembelian (1-1510, per pemasok) · Cr Bank |
+| Pakai saldo uang muka | Dr Uang Muka Pelanggan · Cr Piutang | Dr Hutang · Cr Uang Muka Pembelian |
+
+Nilai yang melunasi faktur/tagihan = kas/uang muka + potongan + PPh 23 (tidak boleh
+melebihi sisa). Selisih kurs dibukukan otomatis untuk dokumen valas; uang muka
+dicatat dalam IDR. Pemakaian uang muka tidak boleh melebihi saldonya; uang muka
+yang sudah dipakai tidak dapat dibatalkan sebelum pemakaiannya dibatalkan.
+
+**Aksi cepat**: *Terima pembayaran* di faktur (langsung diposting) dan *Ajukan
+pembayaran* di tagihan (masuk Kotak Persetujuan — pemisahan tugas) dengan nilai
+bawaan = sisa terbuka; dapat diisi sebagian, dari kas/bank atau saldo uang muka,
+beserta potongan, PPh 23, dan biaya bank. Laci faktur/tagihan menampilkan jadwal
+angsuran, riwayat pembayaran & retur, serta saldo uang muka mitra; portal
+pelanggan/pemasok menampilkan jadwal pembayaran.
+
+**Laporan**: Jadwal Angsuran Piutang / Hutang (`GET /api/reports/angsuran?side=ar|ap&days=`)
+— angsuran terlambat, jatuh tempo 7/30 hari (perkiraan arus kas), dokumen bertahap,
+dan saldo uang muka per mitra. API rincian: `GET /api/settlement/:entitas/:id`,
+`GET /api/advance/customer|supplier/:id`.

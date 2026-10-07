@@ -313,8 +313,13 @@ function aging(table, partyTable, partyField, ctx, { companyId, branchId, asOf }
   const where = [`d.company_id = ?`, `d.status IN ('terbit','sebagian')`, 'd.date <= ?'];
   const params = [companyId, asOf];
   if (branchId) { where.push('d.branch_id = ?'); params.push(branchId); }
-  const docs = db.all(`SELECT d.id, d.number, d.date, d.due_date, ROUND((d.total - d.paid) * COALESCE(d.exchange_rate, 1),2) open, ROUND(d.total - d.paid,2) open_doc, d.exchange_rate, p.name party, p.id party_id, b.name branch
-    FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id WHERE ${where.join(' AND ')} ORDER BY d.due_date`, ...params);
+  // Per angsuran: dokumen dengan termin bertahap diumurkan menurut jatuh tempo masing-masing tahap.
+  const docs = db.all(`SELECT d.id, d.number || CASE WHEN (SELECT COUNT(*) FROM installments x WHERE x.doc_type = '${table}' AND x.doc_id = d.id) > 1 THEN ' · ' || COALESCE(i.label, 'Tahap ' || i.seq) ELSE '' END number,
+      d.date, COALESCE(i.due_date, d.due_date) due_date, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid) * COALESCE(d.exchange_rate, 1),2) open, ROUND(COALESCE(i.amount - i.paid, d.total - d.paid),2) open_doc,
+      d.exchange_rate, p.name party, p.id party_id, b.name branch
+    FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id
+    LEFT JOIN installments i ON i.doc_type = '${table}' AND i.doc_id = d.id
+    WHERE ${where.join(' AND ')} AND (i.id IS NULL OR i.amount - i.paid > 0.005) ORDER BY 4`, ...params);
   const B = [['current', 'Belum jatuh tempo'], ['d30', '1–30 hari'], ['d60', '31–60 hari'], ['d90', '61–90 hari'], ['over', '> 90 hari']];
   const bucket = (days) => (days <= 0 ? 'current' : days <= 30 ? 'd30' : days <= 60 ? 'd60' : days <= 90 ? 'd90' : 'over');
   const parties = new Map();

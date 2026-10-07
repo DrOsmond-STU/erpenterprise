@@ -7,6 +7,7 @@ import { nowIso } from './lib/util.js';
 import { clearAccountCache } from './ledger/posting.js';
 import { clearPermCache } from './security/rbac.js';
 import { spread } from './ledger/budget.js';
+import { syncInstallments } from './ledger/payments.js';
 import { BUDGET_MONTHS } from './modules/entities.js';
 
 export function upgrade() {
@@ -32,6 +33,16 @@ export function upgrade() {
         db.run('INSERT INTO role_permissions(role_id, module, level) VALUES (?, ?, ?) ON CONFLICT(role_id, module) DO NOTHING', role.id, m, lvl);
       }
     }
+    // Faktur/tagihan terbuka sebelum fitur angsuran: satu angsuran pada jatuh tempo.
+    for (const t of ['sales_invoices', 'purchase_bills']) {
+      for (const d of db.all(`SELECT id FROM "${t}" WHERE status IN ('terbit','sebagian','lunas') AND id NOT IN (SELECT doc_id FROM installments WHERE doc_type = ?)`, t)) syncInstallments(t, d.id);
+    }
+    db.run("UPDATE customer_receipts SET mode = 'pelunasan' WHERE mode IS NULL");
+    db.run("UPDATE supplier_payments SET mode = 'pelunasan' WHERE mode IS NULL");
+    db.run('UPDATE customer_receipt_lines SET settled = amount + COALESCE(discount,0) + COALESCE(pph23,0) WHERE settled IS NULL');
+    db.run('UPDATE supplier_payment_lines SET settled = amount + COALESCE(discount,0) + COALESCE(pph23,0) WHERE settled IS NULL');
+    db.run("UPDATE customer_receipts SET settled = (SELECT COALESCE(SUM(settled),0) FROM customer_receipt_lines WHERE parent_id = customer_receipts.id) WHERE settled IS NULL");
+    db.run("UPDATE supplier_payments SET settled = (SELECT COALESCE(SUM(settled),0) FROM supplier_payment_lines WHERE parent_id = supplier_payments.id) WHERE settled IS NULL");
     // Anggaran versi lama (tanpa rincian bulanan & status): bagi merata, anggap sudah disetujui.
     for (const b of db.all('SELECT id, amount, status, phasing FROM budgets WHERE status IS NULL OR phasing IS NULL OR m01 IS NULL')) {
       const months = spread(Number(b.amount) || 0);

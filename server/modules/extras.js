@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import * as db from '../db.js';
 import * as crud from './crud.js';
 import { expireQuotations } from '../ledger/quotation.js';
+import { installmentsOf } from '../ledger/payments.js';
 import * as reports from '../ledger/reports.js';
 import { acct } from '../ledger/posting.js';
 import { reconState } from '../ledger/documents.js';
@@ -616,13 +617,15 @@ export function portalDocument(ctx, type, id) {
   if (!row || (PORTAL_HIDDEN_STATUS[table] || []).includes(row.status)) throw notFound();
   const lines = e.lines ? crud.getLines(e, row.id).map((l) => ({ product: l.product_id__label || l.invoice_id__label || l.bill_id__label, description: l.description, qty: l.qty, price: l.price, discount_pct: l.discount_pct, amount: l.amount })) : [];
   audit.log(ctx, 'portal.view', { entity: table, entityId: row.id, companyId: row.company_id });
+  // Faktur/tagihan: jadwal angsuran (termin bertahap) untuk mitra.
+  const schedule = ['sales_invoices', 'purchase_bills'].includes(table) ? installmentsOf(table, row.id).map(({ label, due_date, amount, paid, open, status }) => ({ label, due_date, amount, paid, open, status })) : null;
   // Penawaran: syarat komersial untuk pelanggan (tanpa margin/HPP/catatan persetujuan internal).
   const quote = table === 'quotations' ? {
     valid_until: row.valid_until, revision: row.revision, attention: row.attention, salesperson: row.salesperson, terms_days: row.terms_days, lead_time_days: row.lead_time_days,
     delivery_terms: row.delivery_terms, notes: row.notes, sent_at: row.sent_at, responded_at: row.responded_at, accepted_by: row.accepted_by, customer_po: row.customer_po,
     canRespond: row.status === 'terkirim',
   } : {};
-  return { id: row.id, type, number: row.number, date: row.date, due_date: row.due_date, subtotal: row.subtotal, tax: row.tax, tax_rate: row.tax_rate, total: row.total, paid: row.paid, status: row.status, lines, party: pc.party.name, company: db.get('SELECT name, address, npwp FROM companies WHERE id = ?', row.company_id), ...quote };
+  return { id: row.id, type, number: row.number, date: row.date, due_date: row.due_date, subtotal: row.subtotal, tax: row.tax, tax_rate: row.tax_rate, total: row.total, paid: row.paid, status: row.status, lines, party: pc.party.name, company: db.get('SELECT name, address, npwp FROM companies WHERE id = ?', row.company_id), schedule, ...quote };
 }
 
 export function portalStatement(ctx, { from, to }) {

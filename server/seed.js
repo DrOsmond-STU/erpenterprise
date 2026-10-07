@@ -127,6 +127,15 @@ async function seedDemo() {
     CC[code] = await mk(maker, 'KNM', null, 'cost_centers', { code, name, department: dept, kind, status: 'aktif' });
   }
 
+  /* --- Termin pembayaran bertahap -------------------------------------------- */
+  const PT = {};
+  for (const [code, name, stages, notes] of [
+    ['NET', 'Sekali bayar sesuai termin hari', [['Pelunasan', 100, 30]], 'Satu angsuran'],
+    ['DP30', 'Uang muka 30% + pelunasan 30 hari', [['Uang muka', 30, 0], ['Pelunasan', 70, 30]], 'DP ditagih saat faktur terbit'],
+    ['TERMIN3', 'Termin proyek 30/40/30', [['Termin 1', 30, 14], ['Termin 2', 40, 45], ['Retensi / serah terima', 30, 75]], 'Pelanggan pemerintah & proyek'],
+    ['CICIL3', 'Cicilan 3× bulanan', [['Cicilan 1', 34, 30], ['Cicilan 2', 33, 60], ['Cicilan 3', 33, 90]], 'Pembelian bahan baku volume besar'],
+  ]) PT[code] = await mk(maker, 'KNM', null, 'payment_terms', { code, name, notes, status: 'aktif', lines: stages.map(([label, pct, days]) => ({ label, pct, days })) });
+
   /* --- Pelanggan & pemasok -------------------------------------------------- */
   const CU = {};
   for (const [co, code, name, seg, city, limit, terms, status = 'aktif', related = null] of [
@@ -148,6 +157,10 @@ async function seedDemo() {
     ['KNMT', 'S101', 'PT Supreme Cable Distribusi', 'Kelistrikan', 'Jakarta', 30, 5], ['KNMT', 'S102', 'PT Nusantara Logistik Prima', 'Logistik', 'Jakarta', 30, 1, 'NLP'],
     ['NLP', 'S201', 'PT Pertamina Retail', 'BBM', 'Jakarta', 14, 1],
   ]) SU[code] = await mk(maker, co, null, 'suppliers', { code, name, category: cat, city, terms_days: terms, lead_time_days: lead, status: 'aktif', bank_account_no: `BCA ${rint(1000, 9999)} ${rint(100000, 999999)}`, related_company_id: related ? CO[related] : null });
+  // Termin bertahap bawaan: pelanggan proyek/pemerintah & pemasok bahan baku utama.
+  db.update('customers', CU.C006, { payment_term_id: PT.TERMIN3 });
+  db.update('customers', CU.C004, { payment_term_id: PT.DP30 });
+  db.update('suppliers', SU.S001, { payment_term_id: PT.CICIL3 });
 
   /* --- Karyawan -------------------------------------------------------------- */
   const EMP = {};
@@ -716,6 +729,38 @@ async function seedDemo() {
     await deliver('KNM', soC, '2026-10-05');
     const soD = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C004', [tradeLine('FG-102', 30), tradeLine('SV-301', 24)], '2026-10-06');
     await deliver('KNM', soD, '2026-10-06', 0.4);
+  }
+
+  /* --- Pembayaran bertahap: uang muka, pelunasan sebagian, potongan PPh 23 & biaya bank ---- */
+  {
+    const openInv = (cust) => db.get("SELECT id, total - paid open FROM sales_invoices WHERE customer_id = ? AND status IN ('terbit','sebagian') ORDER BY date LIMIT 1", CU[cust]);
+    const openBill = (sup) => db.get("SELECT id, total - paid open FROM purchase_bills WHERE supplier_id = ? AND status IN ('terbit','sebagian') ORDER BY date LIMIT 1", SU[sup]);
+    // Uang muka pelanggan (DP) sebelum faktur, lalu sebagian dipakai melunasi faktur terbuka.
+    setToday('2026-10-01');
+    const dp = await mk(maker, 'KNM', 'JKT', 'customer_receipts', { date: '2026-10-01', customer_id: CU.C006, mode: 'uang_muka', bank_account_id: BA['BCA-JKT'], advance: 250_000_000, reference: 'DP SPK-PUJATIM-118' });
+    await run(checker, 'KNM', 'customer_receipts', dp, 'post');
+    const i6 = openInv('C006');
+    if (i6) await run(checker, 'KNM', 'sales_invoices', i6.id, 'receive', { date: '2026-10-02', source: 'uang_muka', amount: round2(Math.min(i6.open, 120_000_000)), discount: 0, pph23: 0, bank_charge: 0, reference: 'Kompensasi DP' });
+    // Pelunasan sebagian dengan PPh 23 dipotong pelanggan & biaya transfer.
+    setToday('2026-10-05');
+    const i1 = openInv('C001');
+    if (i1) await run(checker, 'KNM', 'sales_invoices', i1.id, 'receive', { date: '2026-10-05', source: 'bank', bank_account_id: BA['BCA-JKT'], amount: round2(i1.open * 0.5), discount: 0, pph23: round2(i1.open * 0.02), bank_charge: 6_500, reference: 'Transfer termin 1' });
+    const i4 = openInv('C004');
+    if (i4) await run(checker, 'KNM', 'sales_invoices', i4.id, 'receive', { date: '2026-10-05', source: 'bank', bank_account_id: BA['BCA-JKT'], amount: round2(i4.open * 0.3), discount: 0, pph23: 0, bank_charge: 0, reference: 'Angsuran DP' });
+    // Pemasok: uang muka pembelian, pembayaran sebagian dengan PPh 23 dipotong & potongan pelunasan.
+    const adv = await mk(maker, 'KNM', 'CKR', 'supplier_payments', { date: '2026-10-05', supplier_id: SU.S002, mode: 'uang_muka', bank_account_id: BA['BCA-CKR'], advance: 60_000_000, bank_charge: 6_500, reference: 'DP resin Q4' });
+    await run(maker, 'KNM', 'supplier_payments', adv, 'submit');
+    await run(checker, 'KNM', 'supplier_payments', adv, 'post');
+    const b4 = openBill('S004');
+    if (b4) {
+      const r = await run(maker, 'KNM', 'purchase_bills', b4.id, 'pay', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-JKT'], amount: round2(b4.open * 0.4), discount: round2(b4.open * 0.01), pph23: round2(b4.open * 0.02), bank_charge: 6_500, reference: 'Termin 1 cat powder' });
+      await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
+    }
+    const b1 = openBill('S001');
+    if (b1) {
+      const r = await run(maker, 'KNM', 'purchase_bills', b1.id, 'pay', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-CKR'], amount: round2(b1.open * 0.34), discount: 0, pph23: 0, bank_charge: 0, reference: 'Cicilan 1' });
+      await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
+    }
   }
   await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('FG-103', 400), tradeLine('TG-203', 200)], '2026-10-03');
   const wo = await mk(maker, 'KNM', 'CKR', 'work_orders', { date: '2026-10-05', bom_id: BOM['FG-101'], qty: 180, warehouse_id: WH['WH-CKR'], line: 'Lini A', due_date: '2026-10-09', pic: 'Budi Santoso', progress: 35 });
