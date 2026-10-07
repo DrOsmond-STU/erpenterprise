@@ -83,7 +83,7 @@
     const selectable = !!e.number || ERP.more.bulkActions(key).length > 0;
     st.selected = st.selected || new Set();
     $('thead', card).innerHTML = `<tr>${selectable ? `<th class="col-check"><input type="checkbox" data-check-all aria-label="Pilih semua baris di halaman ini" ${data.rows.length && data.rows.every((r) => st.selected.has(r.id)) ? 'checked' : ''}></th>` : ''}${cols.map((c) => `<th class="${isNum(c) ? 'ta-r' : ''}"><button class="th-sort" data-sort="${esc(c.name)}" data-active="${sortKey === c.name}">${esc(c.label)}<span class="sort-caret">${icon(sortKey === c.name && dir === 'desc' ? 'chevron-down' : 'chevron-up')}</span></button></th>`).join('')}</tr>`;
-    $('tbody', card).innerHTML = data.rows.length ? data.rows.map((r) => `<tr data-open="${key}:${r.id}" tabindex="0" ${st.selected.has(r.id) ? 'aria-selected="true"' : ''}>${selectable ? `<td class="col-check" data-stop><input type="checkbox" data-row-check="${r.id}" aria-label="Pilih ${esc(r.number || r.code || r.id)}" ${st.selected.has(r.id) ? 'checked' : ''}></td>` : ''}${cols.map((c) => `<td class="${isNum(c) ? 'ta-r ' : ''}${c.cls || ''}">${c.computed && c.type === 'money' ? money(r[c.name]) : c.computed ? esc(num(r[c.name])) : fieldHtml(c, r)}</td>`).join('')}</tr>`).join('')
+    $('tbody', card).innerHTML = data.rows.length ? data.rows.map((r) => `<tr data-open="${key}:${r.id}" tabindex="0" ${st.selected.has(r.id) ? 'aria-selected="true"' : ''}>${selectable ? `<td class="col-check" data-stop><input type="checkbox" data-row-check="${r.id}" aria-label="Pilih ${esc(r.number || r.code || r.id)}" ${st.selected.has(r.id) ? 'checked' : ''}></td>` : ''}${cols.map((c) => `<td class="${isNum(c) ? 'ta-r ' : ''}${c.cls || ''}">${c.computed && c.type === 'money' ? money(r[c.name]) : c.computed && c.type === 'pct' ? `<span class="num${r[c.name] > 100 ? ' neg' : ''}">${esc(num(r[c.name], 1))}%</span>` : c.computed ? esc(num(r[c.name])) : fieldHtml(c, r)}</td>`).join('')}</tr>`).join('')
       : `<tr><td colspan="${cols.length + 1}"><div class="empty"><div class="empty-card"><span class="empty-title">Belum ada data</span><span class="empty-note">${st.q || st.status !== 'semua' ? 'Ubah kata kunci atau lepas saringan.' : 'Tambahkan data pertama dengan tombol di kanan atas.'}</span></div></div></td></tr>`;
     if (e.statusField) {
       const opts = e.fields.find((f) => f.name === e.statusField).options || [];
@@ -107,7 +107,7 @@
     const title = r.number || (e.title && r[e.title]) || r.code || r.name || `#${r.id}`;
     const details = e.fields.filter((f) => !f.hidden && f.type !== 'password' && f.name !== 'number')
       .map((f) => `<dt>${esc(f.label)}</dt><dd>${fieldHtml(f, r)}</dd>`).join('') +
-      Object.entries(e.computed || {}).map(([n, c]) => `<dt>${esc(c.label)}</dt><dd>${c.type === 'money' ? money(r[n]) : esc(num(r[n]))}</dd>`).join('') +
+      Object.entries(e.computed || {}).map(([n, c]) => `<dt>${esc(c.label)}</dt><dd>${c.type === 'money' ? money(r[n]) : c.type === 'pct' ? `${esc(num(r[n], 1))}%` : esc(num(r[n]))}</dd>`).join('') +
       (e.scope === 'branch' ? `<dt>Cabang</dt><dd>${esc(r.branch_id__label || '')}</dd>` : '') +
       `<dt>Dibuat</dt><dd class="num">${esc(ERP.dateTime(r.created_at))}</dd><dt>Diubah</dt><dd class="num">${esc(ERP.dateTime(r.updated_at))} · v${r.row_version}</dd>`;
 
@@ -129,7 +129,7 @@
         <span class="tl-body"><span class="tl-title"><b>${esc(a.username || 'sistem')}</b> — ${esc(actionLabel(e, a.action))}</span><span class="tl-meta">${esc(ERP.dateTime(a.ts))}</span></span></div>`).join('')}
       </div></div>` : '';
     let extra = '';
-    if (key === 'projects') extra = await projectGantt(r.id);
+    if (key === 'projects') extra = (await ERP.budget.projectDrawer(r.id)) + (await projectGantt(r.id));
     if (key === 'roles') extra = `<div class="section"><button class="btn" data-nav="peran">${icon('shield')} Buka matriks izin</button></div>`;
     if (key === 'bank_reconciliations') extra = `<div class="section"><button class="btn btn-primary" data-recon-open="${r.id}">${icon('check')} Cocokkan mutasi dengan rekening koran</button></div>`;
 

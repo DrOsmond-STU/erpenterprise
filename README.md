@@ -24,7 +24,9 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 | --- | --- |
 | CRUD | 55 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
 | Integrasi buku besar | Faktur, penerimaan, POS, tagihan, pembayaran, kas/bank, transfer, stok (penyesuaian/transfer), produksi (BOM), penggajian, aset (perolehan, penyusutan, pelepasan), pemeliharaan, jurnal manual — semuanya diposting otomatis, pembatalan memakai jurnal pembalik |
-| Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Dasbor |
+| Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Laporan Proyek, Dasbor |
+| Penganggaran | Anggaran per akun COA × cabang × pusat biaya dengan pola bulanan (merata / pola tahun lalu / manual), persetujuan maker–checker, salin dari tahun lalu, kolom anggaran di Bagan Akun; laporan realisasi & variance YTD, bulanan, per pusat biaya; kontrol anggaran (peringatan/blokir) |
+| Anggaran proyek | Nilai kontrak & RAB per akun, dimensi proyek pada PR/PO/tagihan/SO/faktur/kas/jurnal, komitmen PO, laporan proyek (realisasi, variance, sisa anggaran, EV/CPI/SPI/EAC, margin, kurva-S) |
 | Cabang & konsolidasi | Laporan berkolom per cabang (RAK otomatis menjaga neraca tiap cabang seimbang) dan konsolidasi grup dengan eliminasi antar perusahaan, eliminasi investasi, goodwill, dan kepentingan non-pengendali |
 | Fitur lanjutan | Multi-mata uang & selisih kurs, retur penjualan/pembelian, rekonsiliasi bank, shift kasir, lokasi rak, tutup buku tahunan, MRP, analitik & Balanced Scorecard, asisten data, notifikasi, pencarian global, lampiran terenkripsi, impor CSV, cetak dokumen (terbilang), aksi massal, widget dasbor, portal pelanggan & pemasok |
 | Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
@@ -61,6 +63,6 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 ## Pengujian
 
 ```bash
-npm test           # 111 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, CRUD 55 entitas
-npm install && npm run test:e2e   # Playwright: 78 menu × tema terang/gelap, alur transaksi & fitur lanjutan, portal, peran terbatas, layar 390 px
+npm test           # 119 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, CRUD 55 entitas
+npm install && npm run test:e2e   # Playwright: menu × tema terang/gelap, alur transaksi, fitur lanjutan, anggaran & laporan proyek, portal, peran terbatas, layar 390 px
 ```

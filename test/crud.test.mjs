@@ -65,6 +65,7 @@ const CUSTOM = {
     b.bin_id = bin.id; b.warehouse_id = bin.warehouse_id;
     b.product_id = db.get('SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_locations WHERE warehouse_id = ?) LIMIT 1', bin.warehouse_id).id;
   },
+  budgets: async (b) => { b.amount = 12_000_000; },
   purchase_bills: async (b) => { b.lines = [{ account_id: (await admin.get('/api/lookup/accounts?f_is_header=0')).body[0].id, qty: 1, price: 1000 }]; },
 };
 

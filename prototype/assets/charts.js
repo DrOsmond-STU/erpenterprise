@@ -241,9 +241,9 @@ const Charts = (() => {
         dotA.setAttribute('cx', x(i)); dotA.setAttribute('cy', y(actual[i])); dotA.setAttribute('opacity', 1);
         dotT.setAttribute('cx', x(i)); dotT.setAttribute('cy', y(target[i])); dotT.setAttribute('opacity', 1);
         tip.innerHTML =
-          `<div class="chart-tip-head">${labels[i]} 2026</div>` +
-          `<div class="chart-tip-row"><i class="chart-swatch" style="background:${t.cat[0]}"></i><span>Pendapatan</span><b>${FMT.value(actual[i] * (opts.scale || 1), opts.format)}</b></div>` +
-          `<div class="chart-tip-row"><i class="chart-swatch chart-swatch-line"></i><span>Target</span><b>${FMT.value(target[i] * (opts.scale || 1), opts.format)}</b></div>`;
+          `<div class="chart-tip-head">${labels[i]}${opts.tipSuffix ?? ' 2026'}</div>` +
+          `<div class="chart-tip-row"><i class="chart-swatch" style="background:${t.cat[0]}"></i><span>${opts.actualLabel || 'Pendapatan'}</span><b>${FMT.value(actual[i] * (opts.scale || 1), opts.format)}</b></div>` +
+          `<div class="chart-tip-row"><i class="chart-swatch chart-swatch-line"></i><span>${opts.targetLabel || 'Target'}</span><b>${FMT.value(target[i] * (opts.scale || 1), opts.format)}</b></div>`;
         tip.dataset.show = 'true';
         placeTip(container, tip, x(i), y(Math.max(actual[i], target[i])));
       };

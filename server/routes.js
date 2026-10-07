@@ -9,6 +9,7 @@ import { MODULES, STATUS, ENTITIES } from './modules/entities.js';
 import { LEVEL, can, requirePerm, resolveScope, permissionsFor, clearPermCache } from './security/rbac.js';
 import { getSetting, setSetting, securityPolicy, accountMap, approvalPolicy, clearSettingsCache } from './lib/settings.js';
 import { clearAccountCache } from './ledger/posting.js';
+import { copyBudgets } from './ledger/budget.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -185,7 +186,10 @@ const REPORTS = {
   'umur-piutang': (ctx, r) => reports.arAging(ctx, r),
   'umur-hutang': (ctx, r) => reports.apAging(ctx, r),
   persediaan: (ctx, r) => reports.inventoryValuation(ctx, r),
-  anggaran: (ctx, r, q) => reports.budgetVsActual(ctx, { ...r, year: Number(q.year) || Number(r.to.slice(0, 4)) }),
+  anggaran: (ctx, r, q) => reports.budgetVsActual(ctx, { ...r, year: Number(q.year) || Number(r.to.slice(0, 4)), view: ['ytd', 'bulanan', 'pusat-biaya'].includes(q.view) ? q.view : 'ytd', version: q.version === 'semua' ? 'semua' : 'disetujui' }),
+  'anggaran-akun': (ctx, r, q) => reports.budgetByAccount(ctx, { ...r, year: Number(q.year) || Number(r.to.slice(0, 4)) }),
+  proyek: (ctx, r) => reports.projectSummary(ctx, r),
+  'proyek-detail': (ctx, r, q) => reports.projectDetail(ctx, { ...r, projectId: Number(q.project) }),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
   'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
 };
@@ -194,11 +198,24 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = ['umur-piutang'].includes(p.name) || (p.name === 'kartu-mitra' && q.partner_type !== 'supplier') ? 'sales' : ['umur-hutang'].includes(p.name) || p.name === 'kartu-mitra' ? 'purchasing' : p.name === 'persediaan' ? 'inventory' : 'reports';
+  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects' }[p.name]
+    || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
   if (r.mode === 'consolidated') requirePerm(ctx, 'reports', LEVEL.approve);
   if (r.mode !== 'single') r.branchId = null;
   return fn(ctx, r, q);
+});
+
+/* Salin anggaran dari tahun sebelumnya (sebagai draf) — butuh hak ubah Keuangan; teraudit. */
+route('POST', '/api/budgets/copy', (ctx, body, _p, q) => {
+  scoped(ctx, q);
+  requirePerm(ctx, 'finance', LEVEL.write);
+  const fromYear = Number(body.fromYear), toYear = Number(body.toYear);
+  if (!Number.isInteger(fromYear) || !Number.isInteger(toYear)) throw bad('Tahun sumber dan tujuan wajib diisi.');
+  const branchIds = ctx.branchId ? [ctx.branchId] : ctx.branches.map((b) => b.id);
+  const res = copyBudgets(ctx, { companyId: ctx.companyId, branchIds, fromYear, toYear, adjustPct: Number(body.adjustPct) || 0, basis: body.basis === 'realisasi' ? 'realisasi' : 'anggaran' });
+  audit.log(ctx, 'budgets.copy', { entity: 'budgets', companyId: ctx.companyId, branchId: ctx.branchId, detail: { fromYear, toYear, adjustPct: Number(body.adjustPct) || 0, basis: body.basis, ...res } });
+  return res;
 });
 
 route('GET', '/api/dashboard', (ctx, _b, _p, q) => {
@@ -212,7 +229,7 @@ route('GET', '/api/dashboard', (ctx, _b, _p, q) => {
 /* Kotak persetujuan lintas modul. */
 const APPROVAL_SOURCES = [
   ['sales_orders', 'menunggu', 'approve'], ['purchase_orders', 'menunggu', 'approve'], ['purchase_requests', 'menunggu', 'approve'],
-  ['journals', 'diajukan', 'approve'], ['supplier_payments', 'menunggu', 'post'], ['leave_requests', 'menunggu', 'approve'], ['payroll_runs', 'draf', 'approve'],
+  ['journals', 'diajukan', 'approve'], ['supplier_payments', 'menunggu', 'post'], ['leave_requests', 'menunggu', 'approve'], ['payroll_runs', 'draf', 'approve'], ['budgets', 'diajukan', 'approve'],
 ];
 route('GET', '/api/approvals', (ctx, _b, _p, q) => {
   scoped(ctx, q);
@@ -221,7 +238,7 @@ route('GET', '/api/approvals', (ctx, _b, _p, q) => {
     const e = ENTITIES[key];
     if (!can(ctx, e.module, LEVEL.approve)) continue;
     const { rows } = crud.list(ctx, key, { status, size: 50 });
-    for (const r of rows) out.push({ entity: key, entityLabel: e.one, action, id: r.id, number: r.number || r.code, date: r.date || r.start_date || r.period, total: r.total ?? null, title: r.customer_id__label || r.supplier_id__label || r.employee_id__label || r.description || r.requester || r.period, note: r.approval_note || r.notes || r.reason || null, createdBy: r.created_by, sodBlocked: r.created_by === ctx.user.id, branch: r.branch_id__label });
+    for (const r of rows) out.push({ entity: key, entityLabel: e.one, action, id: r.id, number: r.number || r.code, date: r.date || r.start_date || r.period, total: r.total ?? r.amount ?? null, title: r.customer_id__label || r.supplier_id__label || r.employee_id__label || (r.account_id__label ? `${r.account_id__label} · ${r.year}` : null) || r.description || r.requester || r.period, note: r.approval_note || r.notes || r.reason || null, createdBy: r.created_by, sodBlocked: r.created_by === ctx.user.id, branch: r.branch_id__label });
   }
   return out;
 });
@@ -283,6 +300,7 @@ route('PUT', '/api/settings/:key', (ctx, body, p) => {
     if (next.lockoutThreshold < 3 || next.lockoutThreshold > 20) throw bad('Ambang penguncian 3–20 percobaan.');
     if (next.sessionIdleMinutes < 5 || next.sessionIdleMinutes > 240) throw bad('Batas sesi diam 5–240 menit.');
   }
+  if (p.key === 'approval_policy' && !['none', 'warn', 'block'].includes(next.budgetControl)) throw bad('Kontrol anggaran harus none, warn, atau block.');
   if (p.key === 'account_map') {
     for (const code of Object.values(next)) if (!db.get('SELECT id FROM accounts WHERE code = ? AND is_header = 0', code)) throw bad(`Akun ${code} tidak ditemukan atau akun induk.`);
     clearAccountCache();

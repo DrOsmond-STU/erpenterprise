@@ -6,6 +6,7 @@ import { checkPasswordPolicy, setPassword } from '../security/auth.js';
 import { hashPassword } from '../security/crypto.js';
 import { clearPermCache, can, LEVEL } from '../security/rbac.js';
 import { clearAccountCache } from '../ledger/posting.js';
+import { phaseBudget } from '../ledger/budget.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -146,6 +147,13 @@ export const HOOKS = {
     beforeCreate: (_c, row) => { if (row.probability == null) row.probability = STAGE_PROB[row.stage || 'prospek']; },
   },
   leave_requests: { compute: (_c, row) => { if (row.end_date < row.start_date) throw bad('Tanggal selesai harus setelah tanggal mulai.'); } },
+  budgets: { compute: (_c, row) => phaseBudget(row) },
+  projects: {
+    compute: (_c, row, lines) => {
+      if (lines?.length) row.budget = sum(lines, (l) => l.amount);
+      if (row.end_date && row.start_date && row.end_date < row.start_date) throw bad('Tanggal selesai harus setelah tanggal mulai.');
+    },
+  },
   project_tasks: { compute: (_c, row) => { if (row.end_date < row.start_date) throw bad('Tanggal selesai harus setelah tanggal mulai.'); } },
   fiscal_periods: { compute: (_c, row) => { if (row.end_date < row.start_date) throw bad('Tanggal selesai harus setelah tanggal mulai.'); } },
   bank_transfers: { compute: (_c, row) => { if (row.from_bank_id === row.to_bank_id) throw bad('Rekening asal dan tujuan tidak boleh sama.'); } },

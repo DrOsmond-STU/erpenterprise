@@ -6,6 +6,8 @@ import { ROLES, COA, CURRENCIES } from './seed-master.js';
 import { nowIso } from './lib/util.js';
 import { clearAccountCache } from './ledger/posting.js';
 import { clearPermCache } from './security/rbac.js';
+import { spread } from './ledger/budget.js';
+import { BUDGET_MONTHS } from './modules/entities.js';
 
 export function upgrade() {
   db.tx(() => {
@@ -29,6 +31,11 @@ export function upgrade() {
       for (const [m, lvl] of Object.entries(r.perms)) {
         db.run('INSERT INTO role_permissions(role_id, module, level) VALUES (?, ?, ?) ON CONFLICT(role_id, module) DO NOTHING', role.id, m, lvl);
       }
+    }
+    // Anggaran versi lama (tanpa rincian bulanan & status): bagi merata, anggap sudah disetujui.
+    for (const b of db.all('SELECT id, amount, status, phasing FROM budgets WHERE status IS NULL OR phasing IS NULL OR m01 IS NULL')) {
+      const months = spread(Number(b.amount) || 0);
+      db.update('budgets', b.id, { status: b.status || 'disetujui', phasing: b.phasing || 'rata', ...Object.fromEntries(BUDGET_MONTHS.map((k, i) => [k, months[i]])) });
     }
   });
   clearAccountCache();

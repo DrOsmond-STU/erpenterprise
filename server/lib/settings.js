@@ -40,5 +40,6 @@ export const DEFAULT_ACCOUNT_MAP = {
 
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });
 
-export const DEFAULT_APPROVAL = { poThreshold: 150_000_000, paymentThreshold: 0, requireJournalApproval: true };
+/* budgetControl: none = tanpa kontrol, warn = peringatan saat posting, block = transaksi melebihi anggaran ditolak. */
+export const DEFAULT_APPROVAL = { poThreshold: 150_000_000, paymentThreshold: 0, requireJournalApproval: true, budgetControl: 'warn' };
 export const approvalPolicy = () => ({ ...DEFAULT_APPROVAL, ...(getSetting('approval_policy', {}) || {}) });

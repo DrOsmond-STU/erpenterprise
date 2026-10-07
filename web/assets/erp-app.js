@@ -21,8 +21,8 @@
     { label: 'Pembelian', items: [E('permintaan-pembelian', 'purchase_requests', 'clipboard'), E('rfq', 'rfqs', 'scale'), E('pesanan-pembelian', 'purchase_orders', 'truck'), E('tagihan', 'purchase_bills', 'invoice'), E('pembayaran', 'supplier_payments', 'credit-card'), E('retur-pembelian', 'purchase_returns', 'transfer'), E('pemasok', 'suppliers', 'handshake'), { id: 'kartu-hutang', label: 'Kartu Hutang', icon: 'ledger', view: 'partner-supplier', perm: 'purchasing' }, { id: 'umur-hutang', label: 'Umur Hutang', icon: 'clock', view: 'report', report: 'umur-hutang', perm: 'purchasing' }] },
     { label: 'Inventaris', items: [{ id: 'stok', label: 'Stok & Valuasi', icon: 'boxes', view: 'report', report: 'persediaan', perm: 'inventory' }, E('mutasi', 'stock_moves', 'transfer'), E('penyesuaian', 'stock_adjustments', 'edit'), E('transfer-stok', 'stock_transfers', 'transfer'), E('lokasi-rak', 'warehouse_bins', 'boxes', 'Lokasi Rak'), E('penempatan', 'product_locations', 'link', 'Penempatan Barang'), E('rantai-pasok', 'shipments', 'link')] },
     { label: 'Produksi', items: [{ id: 'perintah-kerja', entity: 'work_orders', icon: 'factory', label: 'Perintah Kerja', view: 'wo' }, { id: 'mrp', label: 'Perencanaan Bahan (MRP)', icon: 'clipboard', view: 'mrp', perm: 'inventory' }] },
-    { label: 'Proyek', items: [E('proyek', 'projects', 'gantt'), E('tugas-proyek', 'project_tasks', 'calendar')] },
-    { label: 'Keuangan', items: [{ id: 'bagan-akun', entity: 'accounts', icon: 'tree', label: 'Bagan Akun', view: 'coa' }, E('jurnal', 'journals', 'ledger'), E('kas-bank', 'bank_accounts', 'vault'), E('kas-transaksi', 'cash_transactions', 'banknote'), E('transfer-bank', 'bank_transfers', 'transfer'), { id: 'rekonsiliasi', entity: 'bank_reconciliations', icon: 'file-check', label: 'Rekonsiliasi Bank', view: 'recon' }, E('mata-uang', 'currencies', 'banknote', 'Mata Uang'), E('kurs', 'exchange_rates', 'transfer', 'Kurs Valuta'), E('anggaran', 'budgets', 'piechart'), E('pusat-biaya', 'cost_centers', 'target'), E('periode', 'fiscal_periods', 'calendar')] },
+    { label: 'Proyek', items: [E('proyek', 'projects', 'gantt'), E('tugas-proyek', 'project_tasks', 'calendar'), { id: 'lap-proyek', label: 'Laporan Proyek', icon: 'bar-chart', view: 'project-report', perm: 'projects' }] },
+    { label: 'Keuangan', items: [{ id: 'bagan-akun', entity: 'accounts', icon: 'tree', label: 'Bagan Akun', view: 'coa' }, E('jurnal', 'journals', 'ledger'), E('kas-bank', 'bank_accounts', 'vault'), E('kas-transaksi', 'cash_transactions', 'banknote'), E('transfer-bank', 'bank_transfers', 'transfer'), { id: 'rekonsiliasi', entity: 'bank_reconciliations', icon: 'file-check', label: 'Rekonsiliasi Bank', view: 'recon' }, E('mata-uang', 'currencies', 'banknote', 'Mata Uang'), E('kurs', 'exchange_rates', 'transfer', 'Kurs Valuta'), E('anggaran', 'budgets', 'piechart', 'Anggaran (COA)'), { id: 'realisasi-anggaran', label: 'Realisasi & Variance', icon: 'bar-chart', view: 'budget', perm: 'finance' }, E('pusat-biaya', 'cost_centers', 'target'), E('periode', 'fiscal_periods', 'calendar')] },
     { label: 'Laporan Keuangan', items: [
       { id: 'lap-neraca', label: 'Neraca', icon: 'scale', view: 'report', report: 'neraca', perm: 'reports' },
       { id: 'lap-laba-rugi', label: 'Laba Rugi', icon: 'bar-chart', view: 'report', report: 'laba-rugi', perm: 'reports' },
@@ -31,7 +31,8 @@
       { id: 'lap-buku-besar', label: 'Buku Besar', icon: 'scroll', view: 'report', report: 'buku-besar', perm: 'reports' },
       { id: 'lap-cabang', label: 'Laporan Cabang', icon: 'building', view: 'branch', perm: 'reports' },
       { id: 'lap-konsolidasi', label: 'Konsolidasi Grup', icon: 'link', view: 'consolidated', perm: 'reports', minLevel: 3, consolidate: true },
-      { id: 'lap-anggaran', label: 'Anggaran vs Realisasi', icon: 'piechart', view: 'report', report: 'anggaran', perm: 'reports' },
+      { id: 'lap-anggaran', label: 'Anggaran vs Realisasi', icon: 'piechart', view: 'budget', perm: 'reports' },
+      { id: 'lap-proyek-keu', label: 'Laporan Proyek', icon: 'gantt', view: 'project-report', perm: 'reports' },
       { id: 'lap-pajak', label: 'Rekap Pajak', icon: 'file-check', view: 'tax', perm: 'reports' },
     ] },
     { label: 'Analitik', items: [{ id: 'analitik', label: 'BI & Analitik', icon: 'bar-chart', view: 'analytics', perm: 'reports' }, { id: 'bsc', label: 'Balanced Scorecard', icon: 'target', view: 'bsc', perm: 'reports' }, E('sasaran-bsc', 'bsc_metrics', 'edit', 'Sasaran BSC')] },
@@ -216,6 +217,8 @@
         case 'branch': return await V().report(root, state.branchTab || 'laba-rugi', 'branch');
         case 'consolidated': return await V().report(root, state.consTab || 'neraca', 'consolidated');
         case 'coa': return await V().coa(root);
+        case 'budget': return await ERP.budget.budgetReport(root);
+        case 'project-report': return await ERP.budget.projectReport(root);
         case 'crm': return state.listMode?.leads ? await R().renderRegister(root, 'leads') : await V().board(root, 'leads', V().crmCfg);
         case 'wo': return state.listMode?.work_orders ? await R().renderRegister(root, 'work_orders') : await V().board(root, 'work_orders', V().woCfg);
         case 'pos': return await V().pos(root);
@@ -415,7 +418,9 @@
     if (t.matches('[data-rp]')) {
       state[t.dataset.rp] = t.value || null; ERP.saveCtx();
       const ctxInput = $(`[data-ctx="${t.dataset.rp}"]`); if (ctxInput) ctxInput.value = t.value;
-      const it = findItem(state.view); const name = it.report || (it.view === 'branch' ? state.branchTab || 'laba-rugi' : state.consTab || 'neraca');
+      const it = findItem(state.view);
+      if (it.view === 'budget') { ERP.budget.loadBudget(); return; }
+      const name = it.report || (it.view === 'branch' ? state.branchTab || 'laba-rugi' : state.consTab || 'neraca');
       V().loadReport($('.view-root'), name, state.reportState[name]); return;
     }
     if (t.matches('[data-rp-account]')) { state.reportState['buku-besar'].account = t.value; V().loadReport($('.view-root'), 'buku-besar', state.reportState['buku-besar']); return; }

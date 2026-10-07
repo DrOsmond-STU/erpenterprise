@@ -214,24 +214,46 @@
   /* ======================================================================== */
   async function coa(root) {
     const e = R().ent('accounts');
-    root.innerHTML = pageHead('Bagan Akun (COA)', 'Struktur akun buku besar grup. Saldo dihitung dari jurnal terposting untuk perusahaan & cabang aktif. Hanya akun detail yang menerima jurnal.',
-      `${e.canWrite ? `<button class="btn btn-primary" data-new="accounts">${icon('plus')} Akun baru</button>` : ''}`) + '<article class="card"><div class="loading-cell">Memuat…</div></article>';
-    let data;
-    try { data = await api('GET', '/api/e/accounts?size=500&sort=code'); } catch (err) { return fail(err); }
+    const canBudget = (state.me.permissions.finance || 0) >= 1 || (state.me.permissions.reports || 0) >= 1;
+    const year = state.coaYear || Number((state.to || state.meta.today).slice(0, 4));
+    const showBudget = canBudget && state.coaBudget !== false;
+    const y0 = Number(state.meta.today.slice(0, 4));
+    const tools = `${canBudget ? `<label class="ctx-inline"><input type="checkbox" data-coa-budget ${showBudget ? 'checked' : ''}> Tampilkan anggaran</label><label class="ctx-inline">Tahun anggaran <select class="select" data-coa-year>${[y0 - 2, y0 - 1, y0, y0 + 1].map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select></label>` : ''}
+      ${R().ent('budgets')?.canWrite ? `<button class="btn" data-new="budgets">${icon('plus')} Anggaran baru</button>` : ''}${canBudget ? `<button class="btn" data-nav="realisasi-anggaran">${icon('bar-chart')} Realisasi & variance</button>` : ''}
+      ${e.canWrite ? `<button class="btn btn-primary" data-new="accounts">${icon('plus')} Akun baru</button>` : ''}`;
+    root.innerHTML = pageHead('Bagan Akun (COA)', 'Struktur akun buku besar grup. Saldo dihitung dari jurnal terposting untuk perusahaan & cabang aktif. Hanya akun detail yang menerima jurnal; anggaran disusun per akun detail dan dijumlahkan ke akun induk.', tools) + '<article class="card"><div class="loading-cell">Memuat…</div></article>';
+    let data, bud = null;
+    try {
+      [data, bud] = await Promise.all([api('GET', '/api/e/accounts?size=500&sort=code'), showBudget ? ERP.budget.coaBudget(year) : null]);
+    } catch (err) { return fail(err); }
+    const B = bud?.accounts || {};
     const rows = data.rows;
     const byId = new Map(rows.map((r) => [r.id, { ...r, kids: [] }]));
     for (const r of byId.values()) if (r.parent_id && byId.has(r.parent_id)) byId.get(r.parent_id).kids.push(r);
     const total = (n) => (n.is_header ? n.kids.reduce((s, k) => s + total(k), 0) : n.balance || 0);
+    // Anggaran & realisasi diagregasi ke akun induk.
+    const agg = (n) => {
+      if (!n.is_header) return B[n.id] || null;
+      const parts = n.kids.map(agg).filter(Boolean);
+      if (!parts.length) return null;
+      const v = parts.reduce((a, x) => ({ budget: a.budget + x.budget, ytdBudget: a.ytdBudget + x.ytdBudget, actual: a.actual + x.actual }), { budget: 0, ytdBudget: 0, actual: 0 });
+      return { ...v, variance: v.actual - v.ytdBudget, usage: v.budget ? v.actual / v.budget * 100 : null, favorable: ['revenue', 'other_income'].includes(n.type) ? v.actual >= v.ytdBudget : v.actual <= v.ytdBudget };
+    };
     const TYPE = Object.fromEntries((e.fields.find((f) => f.name === 'type').options).map(([k, v]) => [k, v]));
+    const meterHtml = (v) => (v == null ? '' : `<span class="meter"><span class="meter-track"><span class="meter-fill" ${v > 100 ? 'data-tone="danger"' : v > 85 ? 'data-tone="warn"' : ''} style="width:${Math.max(0, Math.min(100, v))}%"></span></span><span class="meter-val">${esc(num(v, 1))}%</span></span>`);
     const lines = [];
     const walk = (n, lvl) => {
       const bal = total(n);
       const sign = ['asset', 'cogs', 'expense', 'other_expense', 'tax'].includes(n.type) ? 1 : -1;
-      lines.push(`<tr data-open="accounts:${n.id}" tabindex="0" class="${n.is_header ? 'coa-header-row' : ''}"><td class="indent-${Math.min(lvl, 4)}"><span class="code">${esc(n.code)}</span></td><td class="indent-${Math.min(lvl, 4)}">${n.is_header ? `<b>${esc(n.name)}</b>` : esc(n.name)}${n.is_intercompany ? ' <span class="pill" data-tone="info"><i class="pill-dot"></i>Antar perusahaan</span>' : ''}</td><td>${esc(TYPE[n.type] || n.type)}</td><td>${n.is_header ? 'Induk' : 'Detail'}</td><td class="ta-r">${money(Math.round(bal * sign * 100) / 100)}</td><td>${pill(n.status)}</td></tr>`);
-      for (const k of n.kids.sort((a, b) => a.code.localeCompare(b.code))) walk(k, lvl + 1);
+      const b = showBudget ? agg(n) : null;
+      const budgetCells = showBudget ? (b ? `<td class="ta-r">${money(Math.round(b.budget))}</td><td class="ta-r">${money(Math.round(b.actual))}</td><td class="ta-r ${Math.abs(b.variance) < 0.5 ? '' : b.favorable ? 'pos' : 'neg'}">${money(Math.round(b.variance))}</td><td>${meterHtml(b.usage)}</td>` : '<td></td><td></td><td></td><td></td>') : '';
+      lines.push(`<tr data-open="accounts:${n.id}" tabindex="0" class="${n.is_header ? 'coa-header-row' : ''}"><td class="indent-${Math.min(lvl, 4)}"><span class="code">${esc(n.code)}</span></td><td class="indent-${Math.min(lvl, 4)}">${n.is_header ? `<b>${esc(n.name)}</b>` : esc(n.name)}${n.is_intercompany ? ' <span class="pill" data-tone="info"><i class="pill-dot"></i>Antar perusahaan</span>' : ''}</td><td>${esc(TYPE[n.type] || n.type)}</td><td>${n.is_header ? 'Induk' : 'Detail'}</td><td class="ta-r">${money(Math.round(bal * sign * 100) / 100)}</td>${budgetCells}<td>${pill(n.status)}</td></tr>`);
+      for (const k of n.kids.sort((a, b2) => a.code.localeCompare(b2.code))) walk(k, lvl + 1);
     };
     for (const r of [...byId.values()].filter((x) => !x.parent_id || !byId.has(x.parent_id)).sort((a, b) => a.code.localeCompare(b.code))) walk(r, 0);
-    $('.card', root).innerHTML = `<div class="table-scroll"><table class="table"><thead><tr><th>Kode</th><th>Nama akun</th><th>Golongan</th><th>Tipe</th><th class="ta-r">Saldo normal</th><th>Status</th></tr></thead><tbody>${lines.join('')}</tbody></table></div>`;
+    const bHead = showBudget ? `<th class="ta-r">Anggaran ${year}</th><th class="ta-r">Realisasi ${year}</th><th class="ta-r">Selisih s.d. ${bud?.monthsElapsed ? `${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][bud.monthsElapsed - 1]}` : 'periode'}</th><th>Serapan</th>` : '';
+    $('.card', root).innerHTML = `<div class="table-scroll"><table class="table coa-table"><thead><tr><th>Kode</th><th>Nama akun</th><th>Golongan</th><th>Tipe</th><th class="ta-r">Saldo normal</th>${bHead}<th>Status</th></tr></thead><tbody>${lines.join('')}</tbody></table></div>
+      ${showBudget ? `<p class="pad field-hint">Anggaran = anggaran disetujui tahun ${year}; realisasi dari buku besar ${year} (s.d. ${esc(ERP.date(bud?.asOf || state.meta.today))}); selisih = realisasi − anggaran s.d. bulan berjalan (hijau menguntungkan).</p>` : ''}`;
   }
 
   /* ======================================================================== */
@@ -431,8 +453,9 @@
     lockoutThreshold: 'Ambang penguncian (kali gagal)', lockoutMinutes: 'Lama penguncian (menit)', sessionIdleMinutes: 'Batas sesi diam (menit)',
     sessionAbsoluteHours: 'Batas sesi mutlak (jam)', mfaRequiredForAdmin: 'Wajibkan MFA untuk administrator', loginRateLimitPerMinute: 'Batas percobaan masuk per menit per IP',
     apiRateLimitPerMinute: 'Batas permintaan API per menit per IP', poThreshold: 'Ambang persetujuan PO (Rp)', paymentThreshold: 'Ambang persetujuan pembayaran (Rp)',
-    requireJournalApproval: 'Jurnal manual wajib disetujui',
+    requireJournalApproval: 'Jurnal manual wajib disetujui', budgetControl: 'Kontrol anggaran (COA & proyek)',
   };
+  const SETTING_OPTIONS = { budgetControl: [['none', 'Tanpa kontrol'], ['warn', 'Peringatan saat posting'], ['block', 'Blokir transaksi melebihi anggaran']] };
   async function settings(root) {
     let s;
     try { s = await api('GET', '/api/settings'); } catch (e) { root.innerHTML = R().noAccess(); return; }
@@ -440,6 +463,7 @@
     const group = (key, title, note) => `<article class="card"><div class="card-head"><div class="card-head-text"><h2 class="card-title">${esc(title)}</h2><span class="card-note">${esc(note)}</span></div></div>
       <form class="form-grid pad" data-setting-form="${key}">${Object.entries(s[key]).map(([k, v]) => typeof v === 'boolean'
         ? `<div class="field"><label class="check-inline"><input type="checkbox" name="${k}" ${v ? 'checked' : ''} ${canEdit ? '' : 'disabled'}> <span>${esc(SETTING_LABELS[k] || k)}</span></label></div>`
+        : SETTING_OPTIONS[k] ? `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><select class="select" name="${k}" ${canEdit ? '' : 'disabled'}>${SETTING_OPTIONS[k].map(([v2, l]) => `<option value="${v2}" ${v === v2 ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
         : `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><input class="input ${typeof v === 'number' ? 'num' : 'code'}" name="${k}" type="${typeof v === 'number' ? 'number' : 'text'}" value="${esc(v)}" ${canEdit ? '' : 'disabled'}></div>`).join('')}
       ${canEdit ? `<div class="form-grid-full"><button class="btn btn-primary" type="submit">${icon('check')} Simpan ${esc(title.toLowerCase())}</button></div>` : ''}</form></article>`;
     root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, pemetaan akun posting otomatis, dan tampilan. Setiap perubahan tercatat di jejak audit.') +

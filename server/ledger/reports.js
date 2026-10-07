@@ -6,7 +6,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct } from './posting.js';
-import { bad, round2, isDate, today } from '../lib/util.js';
+import { bad, round2, isDate, today, monthEnd } from '../lib/util.js';
 
 export const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
 export const PL_TYPES = ['revenue', 'cogs', 'expense', 'other_income', 'other_expense', 'tax'];
@@ -363,21 +363,245 @@ export function inventoryValuation(ctx, { companyId, branchId }) {
   return { title: 'Valuasi Persediaan', rows, total, glBalance, reconciled: Math.abs(total - glBalance) < 1 };
 }
 
-/* --- Anggaran vs realisasi ---------------------------------------------------- */
-export function budgetVsActual(ctx, { companyId, branchId, year, asOf }) {
+/* --- Anggaran vs realisasi (COA) ---------------------------------------------- */
+const REVENUE_LIKE = new Set(['revenue', 'other_income']);
+const BUDGET_TYPES = ['revenue', 'cogs', 'expense', 'other_income', 'other_expense', 'tax', 'asset', 'liability', 'equity'];
+const MKEYS = Array.from({ length: 12 }, (_, i) => `m${String(i + 1).padStart(2, '0')}`);
+const zeros = () => Array(12).fill(0);
+const addArr = (a, b) => a.map((x, i) => round2(x + (b[i] || 0)));
+
+/** Metrik selisih satu baris: selisih = realisasi − anggaran s.d. periode; menguntungkan menurut jenis akun. */
+/* elapsed boleh pecahan: bulan berjalan diprorata menurut hari (mis. 9,23 = 7 hari di bulan Oktober). */
+const budgetUpTo = (budgetM, elapsed) => budgetM.slice(0, Math.floor(elapsed)).reduce((s, x) => s + x, 0) + (budgetM[Math.floor(elapsed)] || 0) * (elapsed % 1);
+function budgetMetrics(type, budgetM, actualM, elapsed) {
+  const budget = round2(budgetM.reduce((s, x) => s + x, 0));
+  const ytdBudget = round2(budgetUpTo(budgetM, elapsed));
+  const actual = round2(actualM.reduce((s, x) => s + x, 0));
+  const variance = round2(actual - ytdBudget);
+  const revenue = REVENUE_LIKE.has(type);
+  return {
+    budget, ytdBudget, actual, variance,
+    variancePct: Math.abs(ytdBudget) > EPS ? round2(variance / Math.abs(ytdBudget) * 100) : null,
+    favorable: Math.abs(variance) < EPS ? true : revenue ? variance > 0 : variance < 0,
+    remaining: round2(budget - actual),
+    forecast: round2(actual + budget - budgetUpTo(budgetM, elapsed)),
+    usage: Math.abs(budget) > EPS ? round2(actual / budget * 100) : null,
+    noBudget: Math.abs(budget) < EPS && Math.abs(actual) > EPS,
+  };
+}
+
+function budgetSource({ companyId, branchId, year, version, end, costCenterId }) {
   const where = ['b.company_id = ?', 'b.year = ?'], params = [companyId, year];
   if (branchId) { where.push('b.branch_id = ?'); params.push(branchId); }
-  const budgets = db.all(`SELECT b.account_id, a.code, a.name, a.type, ROUND(SUM(b.amount),2) budget FROM budgets b JOIN accounts a ON a.id = b.account_id WHERE ${where.join(' AND ')} GROUP BY b.account_id ORDER BY a.code`, ...params);
-  const end = asOf && asOf.startsWith(String(year)) ? asOf : `${year}-12-31`;
-  const act = balances({ companyIds: [companyId], branchId, from: `${year}-01-01`, to: end });
-  const elapsed = Math.min(12, Number(end.slice(5, 7)));
-  const rows = budgets.map((b) => {
-    const actual = round2(signFor(b.type) * netOf(act, b.account_id));
-    const forecast = round2(elapsed ? (actual / elapsed) * 12 : 0);
-    const ytdBudget = round2(b.budget * elapsed / 12);
-    return { ...b, ytdBudget, actual, variance: round2(actual - ytdBudget), forecast, usage: b.budget ? round2(actual / b.budget * 100) : 0 };
-  });
-  return { title: `Anggaran vs Realisasi ${year}`, asOf: end, monthsElapsed: elapsed, rows, totals: { budget: round2(rows.reduce((s, r) => s + r.budget, 0)), actual: round2(rows.reduce((s, r) => s + r.actual, 0)) } };
+  where.push(version === 'semua' ? "b.status IN ('draf','diajukan','disetujui','ditolak')" : "b.status = 'disetujui'");
+  if (costCenterId !== undefined) { where.push('COALESCE(b.cost_center_id, 0) = ?'); params.push(costCenterId || 0); }
+  const budgets = db.all(`SELECT b.* FROM budgets b WHERE ${where.join(' AND ')}`, ...params);
+  const aw = ['jl.company_id = ?', "j.status = 'diposting'", "j.source_type IS NOT 'year_closing'", 'j.date BETWEEN ? AND ?'], ap = [companyId, `${year}-01-01`, end || `${year}-01-00`];
+  if (branchId) { aw.push('jl.branch_id = ?'); ap.push(branchId); }
+  if (costCenterId !== undefined) { aw.push('COALESCE(jl.cost_center_id, 0) = ?'); ap.push(costCenterId || 0); }
+  const actuals = end ? db.all(`SELECT jl.account_id a, COALESCE(jl.cost_center_id, 0) cc, CAST(substr(j.date, 6, 2) AS INTEGER) m, ROUND(SUM(jl.debit - jl.credit), 2) net
+    FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts ac ON ac.id = jl.account_id
+    WHERE ${aw.join(' AND ')} AND ac.type IN ('revenue','cogs','expense','other_income','other_expense','tax') GROUP BY jl.account_id, cc, m`, ...ap) : [];
+  return { budgets, actuals };
+}
+
+/**
+ * Laporan anggaran vs realisasi per akun (pohon COA) — YTD, matriks bulanan, dan per pusat biaya.
+ * version: 'disetujui' (bawaan) atau 'semua' (termasuk draf/diajukan untuk simulasi).
+ */
+export function budgetVsActual(ctx, { companyId, branchId, year, asOf, view = 'ytd', version = 'disetujui' }) {
+  year = Number(year) || Number(today().slice(0, 4));
+  const ref = isDate(asOf) ? asOf : today();
+  const end = ref.slice(0, 4) === String(year) ? ref : ref.slice(0, 4) > String(year) ? `${year}-12-31` : null;
+  // Bulan penuh + porsi hari bulan berjalan (akhir bulan = bulan penuh).
+  const dim = end ? Number(monthEnd(year, Number(end.slice(5, 7))).slice(8)) : 1;
+  const elapsed = end ? Number(end.slice(5, 7)) - 1 + Number(end.slice(8)) / dim : 0;
+  const accs = accounts();
+  const { budgets, actuals } = budgetSource({ companyId, branchId, year, version, end });
+
+  const build = (bList, aList) => {
+    const leafB = new Map(), leafA = new Map();
+    for (const b of bList) leafB.set(b.account_id, addArr(leafB.get(b.account_id) || zeros(), MKEYS.map((k) => Number(b[k]) || 0)));
+    for (const r of aList) {
+      const a = accs.byId.get(r.a);
+      const arr = leafA.get(r.a) || zeros();
+      arr[r.m - 1] = round2(arr[r.m - 1] + signFor(a.type) * r.net);
+      leafA.set(r.a, arr);
+    }
+    const sections = [];
+    for (const type of BUDGET_TYPES) {
+      const included = accs.list.filter((a) => a.type === type);
+      const vals = new Map();
+      for (const a of included) if (!a.is_header && (leafB.has(a.id) || leafA.has(a.id))) vals.set(a.id, { b: leafB.get(a.id) || zeros(), a: leafA.get(a.id) || zeros() });
+      if (!vals.size) continue;
+      for (const a of [...included].reverse()) {
+        if (!a.is_header) continue;
+        const kids = included.filter((x) => x.parent_id === a.id && vals.has(x.id));
+        if (!kids.length) continue;
+        vals.set(a.id, kids.reduce((acc, k) => ({ b: addArr(acc.b, vals.get(k.id).b), a: addArr(acc.a, vals.get(k.id).a) }), { b: zeros(), a: zeros() }));
+      }
+      const rows = included.filter((a) => vals.has(a.id)).map((a) => ({
+        id: a.id, code: a.code, name: a.name, type, level: a.level, header: !!a.is_header,
+        ...budgetMetrics(type, vals.get(a.id).b, vals.get(a.id).a, elapsed),
+        ...(view === 'bulanan' ? { months: vals.get(a.id).b.map((bv, i) => ({ budget: bv, actual: vals.get(a.id).a[i] })) } : {}),
+      }));
+      const leaves = included.filter((a) => !a.is_header && vals.has(a.id));
+      const tb = leaves.reduce((s, a) => addArr(s, vals.get(a.id).b), zeros()), ta = leaves.reduce((s, a) => addArr(s, vals.get(a.id).a), zeros());
+      sections.push({ key: type, label: TYPE_LABEL[type], rows, total: { ...budgetMetrics(type, tb, ta, elapsed), ...(view === 'bulanan' ? { months: tb.map((bv, i) => ({ budget: bv, actual: ta[i] })) } : {}) }, _b: tb, _a: ta });
+    }
+    return sections;
+  };
+
+  const sections = build(budgets, actuals);
+  const pick = (types) => sections.filter((s) => types.includes(s.key));
+  const sumArr = (secs, k) => secs.reduce((s, x) => addArr(s, x[k]), zeros());
+  const revB = sumArr(pick(['revenue', 'other_income']), '_b'), revA = sumArr(pick(['revenue', 'other_income']), '_a');
+  const costB = sumArr(pick(['cogs', 'expense', 'other_expense', 'tax']), '_b'), costA = sumArr(pick(['cogs', 'expense', 'other_expense', 'tax']), '_a');
+  const netB = revB.map((x, i) => round2(x - costB[i])), netA = revA.map((x, i) => round2(x - costA[i]));
+  const summary = {
+    revenue: budgetMetrics('revenue', revB, revA, elapsed),
+    cost: budgetMetrics('expense', costB, costA, elapsed),
+    net: budgetMetrics('revenue', netB, netA, elapsed),
+  };
+  const part = (v, i) => round2(i < Math.floor(elapsed) ? v : i === Math.floor(elapsed) ? v * (elapsed % 1) : v);
+  const monthly = MKEYS.map((_, i) => ({ month: i + 1, revenueBudget: part(revB[i], i), revenueActual: i < elapsed ? revA[i] : null, costBudget: part(costB[i], i), costActual: i < elapsed ? costA[i] : null, partial: i === Math.floor(elapsed) && elapsed % 1 > 0 }));
+  for (const s of sections) { delete s._b; delete s._a; }
+
+  let costCenters;
+  if (view === 'pusat-biaya') {
+    const ccIds = new Set([...budgets.map((b) => b.cost_center_id || 0), ...actuals.map((a) => a.cc)]);
+    const ccRows = db.all('SELECT id, code, name FROM cost_centers WHERE company_id = ?', companyId);
+    costCenters = [...ccIds].map((id) => {
+      const cc = ccRows.find((c) => c.id === id);
+      const secs = build(budgets.filter((b) => (b.cost_center_id || 0) === id), actuals.filter((a) => a.cc === id));
+      const leaves = secs.flatMap((s) => s.rows.filter((r) => !r.header));
+      const cb = sumArr(secs.filter((s) => !REVENUE_LIKE.has(s.key)), '_b'), ca = sumArr(secs.filter((s) => !REVENUE_LIKE.has(s.key)), '_a');
+      return { id, code: cc?.code || '—', name: cc?.name || 'Tanpa pusat biaya', rows: leaves, cost: budgetMetrics('expense', cb, ca, elapsed) };
+    }).filter((c) => c.rows.length).sort((a, b) => (a.id === 0) - (b.id === 0) || a.code.localeCompare(b.code));
+  }
+
+  const counts = db.get(`SELECT COUNT(*) n, SUM(status = 'disetujui') approved, SUM(status IN ('draf','ditolak')) draft, SUM(status = 'diajukan') pending FROM budgets WHERE company_id = ? AND year = ?${branchId ? ' AND branch_id = ?' : ''}`, companyId, year, ...(branchId ? [branchId] : []));
+  return {
+    title: `Anggaran vs Realisasi ${year}`, year, asOf: end || `${year}-01-01`, monthsElapsed: Math.ceil(elapsed), monthFraction: round2(elapsed), view, version,
+    sections, summary, monthly, costCenters,
+    status: { total: counts.n || 0, approved: counts.approved || 0, draft: counts.draft || 0, pending: counts.pending || 0 },
+    // Kompatibilitas: daftar datar akun detail beranggaran.
+    rows: sections.flatMap((s) => s.rows.filter((r) => !r.header && !r.noBudget)),
+    totals: { budget: round2(sections.flatMap((s) => s.rows.filter((r) => !r.header)).reduce((s, r) => s + r.budget, 0)), actual: round2(sections.flatMap((s) => s.rows.filter((r) => !r.header && !r.noBudget)).reduce((s, r) => s + r.actual, 0)) },
+  };
+}
+
+/** Anggaran & realisasi per akun untuk tampilan bagan akun (akun detail; induk diagregasi di klien). */
+export function budgetByAccount(ctx, { companyId, branchId, year, asOf }) {
+  const r = budgetVsActual(ctx, { companyId, branchId, year, asOf, view: 'ytd' });
+  return { year: r.year, asOf: r.asOf, monthsElapsed: r.monthsElapsed, accounts: Object.fromEntries(r.sections.flatMap((s) => s.rows.filter((x) => !x.header).map((x) => [x.id, { budget: x.budget, ytdBudget: x.ytdBudget, actual: x.actual, variance: x.variance, favorable: x.favorable, usage: x.usage }]))) };
+}
+
+/* --- Proyek: anggaran (RAB), realisasi, komitmen, nilai hasil --------------------- */
+const daysBetween = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+
+function projectFigures(p, asOf) {
+  const cost = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
+    WHERE jl.project_id = ? AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND j.date <= ? AND a.type IN ('cogs','expense','other_expense')`, p.id, asOf).v;
+  const revenue = db.get(`SELECT ROUND(COALESCE(SUM(jl.credit - jl.debit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
+    WHERE jl.project_id = ? AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND j.date <= ? AND a.type IN ('revenue','other_income')`, p.id, asOf).v;
+  const commitment = db.get(`SELECT ROUND(COALESCE(SUM(subtotal * COALESCE(exchange_rate,1)),0),2) v FROM purchase_orders WHERE project_id = ? AND status IN ('menunggu','disetujui')`, p.id).v;
+  const budget = Number(p.budget) || 0, contract = Number(p.contract_value) || 0, progress = Number(p.progress) || 0;
+  let timePct = null;
+  if (p.start_date && p.end_date) {
+    const total = Math.max(1, daysBetween(p.start_date, p.end_date));
+    timePct = round2(Math.min(100, Math.max(0, daysBetween(p.start_date, asOf) / total * 100)));
+  }
+  const ev = round2(budget * progress / 100);
+  const pv = timePct === null ? null : round2(budget * timePct / 100);
+  const cpi = cost > EPS ? Math.round(ev / cost * 100) / 100 : null;
+  const spi = pv ? Math.round(ev / pv * 100) / 100 : null;
+  const eac = budget ? round2(cpi ? budget / cpi : cost + (budget - ev)) : cost;
+  const usage = budget ? round2(cost / budget * 100) : null;
+  let health = 'sehat';
+  if ((usage !== null && usage > 100) || (cpi !== null && cpi < 0.85) || eac > budget * 1.1 && budget) health = 'kritis';
+  else if ((cpi !== null && cpi < 1) || (spi !== null && spi < 0.9) || (usage !== null && usage > progress + 10)) health = 'waspada';
+  return {
+    budget, contract, progress, timePct, cost, revenue, commitment,
+    variance: round2(budget - cost), available: round2(budget - cost - commitment), usage,
+    ev, pv, cpi, spi, eac, vac: round2(budget - eac), etc: round2(Math.max(0, eac - cost)),
+    margin: round2(revenue - cost), marginPct: revenue ? round2((revenue - cost) / revenue * 100) : null,
+    plannedMargin: round2(contract - budget), plannedMarginPct: contract ? round2((contract - budget) / contract * 100) : null,
+    billedPct: contract ? round2(revenue / contract * 100) : null,
+    health,
+  };
+}
+
+/** Ringkasan seluruh proyek: anggaran vs realisasi, komitmen, sisa, nilai hasil (EV/CPI/SPI), dan margin. */
+export function projectSummary(ctx, { companyId, branchId, asOf }) {
+  const where = ['p.company_id = ?'], params = [companyId];
+  if (branchId) { where.push('p.branch_id = ?'); params.push(branchId); }
+  const projects = db.all(`SELECT p.*, c.name customer, b.name branch FROM projects p LEFT JOIN customers c ON c.id = p.customer_id JOIN branches b ON b.id = p.branch_id WHERE ${where.join(' AND ')} ORDER BY p.code`, ...params);
+  const rows = projects.map((p) => ({ id: p.id, code: p.code, name: p.name, customer: p.customer, branch: p.branch, manager: p.manager, status: p.status, start_date: p.start_date, end_date: p.end_date, ...projectFigures(p, asOf) }));
+  const t = (k) => round2(rows.reduce((s, r) => s + (r[k] || 0), 0));
+  const totals = { budget: t('budget'), contract: t('contract'), cost: t('cost'), revenue: t('revenue'), commitment: t('commitment'), variance: t('variance'), available: t('available'), ev: t('ev'), eac: t('eac'), margin: t('margin') };
+  totals.usage = totals.budget ? round2(totals.cost / totals.budget * 100) : null;
+  totals.cpi = totals.cost ? Math.round(totals.ev / totals.cost * 100) / 100 : null;
+  return { title: 'Laporan Anggaran & Realisasi Proyek', asOf, rows, totals, health: { sehat: rows.filter((r) => r.health === 'sehat').length, waspada: rows.filter((r) => r.health === 'waspada').length, kritis: rows.filter((r) => r.health === 'kritis').length } };
+}
+
+/** Rincian satu proyek: RAB per akun vs realisasi & komitmen, kurva-S, transaksi, tugas. */
+export function projectDetail(ctx, { companyId, branchId, asOf, projectId }) {
+  const p = db.get('SELECT p.*, c.name customer, b.name branch FROM projects p LEFT JOIN customers c ON c.id = p.customer_id JOIN branches b ON b.id = p.branch_id WHERE p.id = ?', Number(projectId));
+  if (!p || p.company_id !== companyId || (branchId && p.branch_id !== branchId)) throw bad('Proyek tidak ditemukan pada perusahaan/cabang aktif.');
+  const figures = projectFigures(p, asOf);
+  const accs = accounts();
+  const budgetLines = db.all('SELECT account_id, description, amount FROM project_budget_lines WHERE parent_id = ? ORDER BY line_no', p.id);
+  const actual = db.all(`SELECT jl.account_id a, ROUND(SUM(jl.debit - jl.credit),2) net FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
+    WHERE jl.project_id = ? AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND j.date <= ? GROUP BY jl.account_id`, p.id, asOf);
+  const commit = db.all(`SELECT COALESCE(pr.cogs_account_id, ?) a, ROUND(SUM(l.amount * COALESCE(po.exchange_rate,1)),2) v FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.parent_id JOIN products pr ON pr.id = l.product_id
+    WHERE po.project_id = ? AND po.status IN ('menunggu','disetujui') GROUP BY a`, db.get("SELECT id FROM accounts WHERE code = '5-1100'")?.id || 0, p.id);
+  const ids = new Set([...budgetLines.map((l) => l.account_id), ...actual.map((r) => r.a), ...commit.map((r) => r.a)]);
+  const costRows = [], revenueRows = [];
+  for (const id of ids) {
+    const a = accs.byId.get(id);
+    if (!a) continue;
+    const act = actual.find((r) => r.a === id)?.net || 0;
+    if (REVENUE_LIKE.has(a.type)) { revenueRows.push({ id, code: a.code, name: a.name, actual: round2(-act) }); continue; }
+    if (!['cogs', 'expense', 'other_expense'].includes(a.type)) continue;
+    const bl = budgetLines.filter((l) => l.account_id === id);
+    const budget = round2(bl.reduce((s, l) => s + l.amount, 0));
+    const commitment = commit.find((r) => r.a === id)?.v || 0;
+    costRows.push({ id, code: a.code, name: a.name, items: bl.map((l) => l.description).filter(Boolean), budget, actual: round2(act), commitment, variance: round2(act - budget), available: round2(budget - act - commitment), usage: budget ? round2(act / budget * 100) : null, noBudget: !budget && Math.abs(act) > EPS });
+  }
+  costRows.sort((a, b) => a.code.localeCompare(b.code));
+  revenueRows.sort((a, b) => a.code.localeCompare(b.code));
+  // Anggaran proyek tanpa rincian per akun: tampilkan satu baris anggaran global.
+  const unallocated = round2(figures.budget - costRows.reduce((s, r) => s + r.budget, 0));
+
+  // Kurva-S: nilai rencana (PV) linear atas jadwal vs biaya aktual kumulatif per bulan.
+  const curve = [];
+  if (p.start_date) {
+    const endRef = [p.end_date || asOf, asOf].sort().pop();
+    const monthly = new Map(db.all(`SELECT substr(j.date,1,7) m, ROUND(SUM(jl.debit - jl.credit),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
+      WHERE jl.project_id = ? AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND a.type IN ('cogs','expense','other_expense') GROUP BY m`, p.id).map((r) => [r.m, r.v]));
+    let d = new Date(p.start_date.slice(0, 7) + '-01T00:00:00Z'), acCum = 0;
+    for (let i = 0; i < 48; i++) {
+      const m = d.toISOString().slice(0, 7);
+      if (m > endRef.slice(0, 7)) break;
+      const mEnd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+      const total = p.end_date ? Math.max(1, daysBetween(p.start_date, p.end_date)) : 1;
+      const pv = p.end_date ? round2(figures.budget * Math.min(1, Math.max(0, daysBetween(p.start_date, mEnd) / total))) : figures.budget;
+      acCum = round2(acCum + (monthly.get(m) || 0));
+      curve.push({ month: m, pv, ac: m <= asOf.slice(0, 7) ? acCum : null });
+      d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    }
+  }
+  const transactions = db.all(`SELECT j.id journal_id, j.number, j.date, j.description, j.source_type, j.source_id, j.source_no, a.code, a.name account, a.type, jl.debit, jl.credit, jl.memo
+    FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
+    WHERE jl.project_id = ? AND j.status = 'diposting' AND j.date <= ? AND a.type IN ('revenue','other_income','cogs','expense','other_expense') ORDER BY j.date DESC, j.id DESC LIMIT 300`, p.id, asOf);
+  const tasks = db.all('SELECT id, name, start_date, end_date, progress, assignee FROM project_tasks WHERE project_id = ? ORDER BY start_date, id', p.id);
+  const pos = db.all(`SELECT id, number, date, status, ROUND(subtotal * COALESCE(exchange_rate,1),2) amount FROM purchase_orders WHERE project_id = ? AND status IN ('menunggu','disetujui') ORDER BY date`, p.id);
+  return {
+    title: `Laporan Proyek ${p.code} — ${p.name}`, asOf,
+    project: { id: p.id, code: p.code, name: p.name, customer: p.customer, branch: p.branch, manager: p.manager, status: p.status, start_date: p.start_date, end_date: p.end_date },
+    figures, costRows, revenueRows, unallocated, curve, transactions, tasks, openPos: pos,
+  };
 }
 
 /* --- Dasbor --------------------------------------------------------------------- */

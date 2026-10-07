@@ -8,6 +8,7 @@ import * as db from '../db.js';
 import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJournal, reverseDocumentJournals, nextNumber } from './posting.js';
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
+import { budgetCheck, warnMessage } from './budget.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
 
 const setStatus = (table, id, status, extra = {}) => db.update(table, id, { status, ...extra });
@@ -59,12 +60,12 @@ function postSalesInvoice(ctx, inv) {
   jl.push(arLine);
   for (const l of ls) {
     const p = product(l.product_id);
-    jl.push({ account_id: ic ? acct('ic_sales') : productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}` });
+    jl.push({ account_id: ic ? acct('ic_sales') : productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
     if (isStockable(p)) {
       const { value, unitCost } = stockOut(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, date: inv.date, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number });
       db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', unitCost, l.id);
       if (value > 0) {
-        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: value, branch_id: wh.branch_id, memo: `HPP ${p.code}` });
+        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: value, branch_id: wh.branch_id, memo: `HPP ${p.code}`, project_id: inv.project_id });
         jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), credit: value, branch_id: wh.branch_id, memo: `Persediaan keluar ${p.code}` });
       }
     }
@@ -173,18 +174,20 @@ function postBill(ctx, bill) {
       const baseAmt = toBase(l.amount, bill) * factor;
       const unit = l.qty ? baseAmt / l.qty : 0;
       stockIn(ctx, { warehouseId: bill.warehouse_id, productId: p.id, qty: l.qty, unitCost: unit, date: bill.date, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number });
-      jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: round2(baseAmt), memo: `${p.code} ${p.name}`, project_id: l.project_id });
+      jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: round2(baseAmt), memo: `${p.code} ${p.name}`, project_id: l.project_id || bill.project_id });
     } else {
       const account = l.account_id || (p ? productAcct(p, 'cogs_account_id', 'cogs') : null);
       if (!account) throw bad('Baris jasa/beban harus memilih akun.');
-      jl.push({ account_id: account, debit: toBase(l.amount, bill), memo: l.description || p?.name, cost_center_id: l.cost_center_id, project_id: l.project_id });
+      jl.push({ account_id: account, debit: toBase(l.amount, bill), memo: l.description || p?.name, cost_center_id: l.cost_center_id, project_id: l.project_id || bill.project_id });
     }
   }
+  const warnings = budgetCheck({ companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, excludePoId: bill.purchase_order_id, lines: jl.map((x) => ({ account_id: x.account_id, amount: x.debit, branch_id: x.branch_id, project_id: x.project_id })) });
   if (bill.tax > 0) jl.push({ account_id: acct('vat_in'), debit: toBase(bill.tax, bill), memo: 'PPN masukan' });
   jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), credit: round2(jl.reduce((a, x) => a + (x.debit || 0), 0)), memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
   postJournal(ctx, { companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, description: `Tagihan ${bill.number} (${bill.supplier_invoice_no || '-'}) — ${sup.name}`, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number, lines: jl });
   setStatus('purchase_bills', bill.id, 'terbit');
   if (bill.purchase_order_id) setStatus('purchase_orders', bill.purchase_order_id, 'diterima');
+  return { message: warnMessage(warnings) };
 }
 
 function voidBill(ctx, bill) {
@@ -236,9 +239,11 @@ function postCash(ctx, c) {
   const b = bank(c.bank_account_id);
   const out = c.direction === 'keluar';
   const jl = ls.map((l) => ({ account_id: l.account_id, [out ? 'debit' : 'credit']: l.amount, memo: l.memo || c.description, cost_center_id: l.cost_center_id, project_id: l.project_id }));
+  const warnings = out ? budgetCheck({ companyId: c.company_id, branchId: c.branch_id, date: c.date, lines: ls.map((l) => ({ account_id: l.account_id, amount: l.amount, project_id: l.project_id })) }) : [];
   jl.push({ account_id: b.account_id, branch_id: b.branch_id, [out ? 'credit' : 'debit']: c.total, memo: c.description });
   postJournal(ctx, { companyId: c.company_id, branchId: c.branch_id, date: c.date, description: `${out ? 'Kas keluar' : 'Kas masuk'} ${c.number}: ${c.description}`, sourceType: 'cash_transactions', sourceId: c.id, sourceNo: c.number, lines: jl });
   setStatus('cash_transactions', c.id, 'diposting');
+  return { message: warnMessage(warnings) };
 }
 
 function postTransfer(ctx, t) {
@@ -261,9 +266,20 @@ const voidSimple = (table, label) => (ctx, d) => {
 };
 
 /* --- Jurnal manual ------------------------------------------------------------ */
+/** Baris jurnal manual sebagai pengeluaran anggaran (debit − kredit pada akun beban). */
+const journalBudgetLines = (j) => lines('journal_lines', j.id).map((l) => ({ account_id: l.account_id, amount: round2((l.debit || 0) - (l.credit || 0)), branch_id: l.branch_id || j.branch_id, project_id: l.project_id }));
+
 function submitJournal(ctx, j) {
   validateJournalLines(j.company_id, j.branch_id, lines('journal_lines', j.id));
-  setStatus('journals', j.id, approvalPolicy().requireJournalApproval ? 'diajukan' : 'diajukan');
+  const warnings = budgetCheck({ companyId: j.company_id, branchId: j.branch_id, date: j.date, lines: journalBudgetLines(j) });
+  setStatus('journals', j.id, 'diajukan');
+  return { message: warnMessage(warnings) };
+}
+
+function approveJournal(ctx, j) {
+  const warnings = budgetCheck({ companyId: j.company_id, branchId: j.branch_id, date: j.date, lines: journalBudgetLines(j) });
+  postExistingJournal(ctx, j.id);
+  return { message: warnMessage(warnings) };
 }
 
 /* --- Persediaan --------------------------------------------------------------- */
@@ -489,14 +505,14 @@ function postSalesReturn(ctx, r) {
     const sold = invLines.filter((x) => x.product_id === l.product_id).reduce((a, x) => a + x.qty, 0);
     if (returnedQty('sales_returns', 'sales_invoice_id', inv.id, l.product_id, r.id) + l.qty > sold + 1e-9) throw bad(`Qty retur ${product(l.product_id).code} melebihi qty pada faktur (${sold}).`);
     const p = product(l.product_id);
-    jl.push({ account_id: acct('sales_returns'), debit: toBase(l.amount, inv), memo: `Retur ${p.code}` });
+    jl.push({ account_id: acct('sales_returns'), debit: toBase(l.amount, inv), memo: `Retur ${p.code}`, project_id: inv.project_id });
     if (isStockable(p)) {
       const unit = src.unit_cost || 0;
       const v = stockIn(ctx, { warehouseId: wh.id, productId: p.id, qty: l.qty, unitCost: unit, date: r.date, sourceType: 'sales_returns', sourceId: r.id, sourceNo: r.number });
       db.run('UPDATE sales_return_lines SET unit_cost = ? WHERE id = ?', unit, l.id);
       if (v > 0) {
         jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: v, memo: `Barang retur ${p.code}` });
-        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), branch_id: wh.branch_id, credit: v, memo: `Koreksi HPP ${p.code}` });
+        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), branch_id: wh.branch_id, credit: v, memo: `Koreksi HPP ${p.code}`, project_id: inv.project_id });
       }
     }
   }
@@ -624,9 +640,15 @@ const to = (table, status) => (_ctx, d) => setStatus(table, d.id, status);
 export const ACTIONS = {
   journals: {
     submit: submitJournal,
-    approve: (ctx, j) => postExistingJournal(ctx, j.id),
+    approve: approveJournal,
     reject: (_ctx, j, p) => setStatus('journals', j.id, 'ditolak', { reference: `Ditolak: ${p.reason}`.slice(0, 60) }),
     reverse: (ctx, j, p) => { const id = reverseJournal(ctx, j.id, p.date); return { redirect: { entity: 'journals', id }, message: 'Jurnal pembalik diposting.' }; },
+  },
+  budgets: {
+    submit: (_c, b) => setStatus('budgets', b.id, 'diajukan', { approval_note: null }),
+    approve: (ctx, b) => setStatus('budgets', b.id, 'disetujui', { approval_note: `Disetujui ${ctx.user.full_name} ${today()}` }),
+    reject: (_c, b, p) => setStatus('budgets', b.id, 'ditolak', { approval_note: `Ditolak: ${p.reason}`.slice(0, 300) }),
+    revise: (ctx, b) => setStatus('budgets', b.id, 'draf', { approval_note: `Direvisi oleh ${ctx.user.full_name} ${today()}` }),
   },
   cash_transactions: { post: postCash, void: voidSimple('cash_transactions', 'transaksi kas') },
   bank_transfers: { post: postTransfer, void: voidSimple('bank_transfers', 'transfer') },
@@ -666,7 +688,7 @@ export const ACTIONS = {
     cancel: to('sales_orders', 'batal'),
     to_invoice: (ctx, so) => {
       const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', {
-        company_id: so.company_id, branch_id: so.branch_id, date: today(), customer_id: so.customer_id, warehouse_id: so.warehouse_id, sales_order_id: so.id, ...fxCopy(so),
+        company_id: so.company_id, branch_id: so.branch_id, date: today(), customer_id: so.customer_id, warehouse_id: so.warehouse_id, sales_order_id: so.id, project_id: so.project_id ?? null, ...fxCopy(so),
         subtotal: so.subtotal, tax_rate: so.tax_rate, tax: so.tax, total: so.total, paid: 0, status: 'draf',
       }, tradeCopy(lines('sales_order_lines', so.id)), 'sales_invoice_lines');
       const c = db.get('SELECT terms_days FROM customers WHERE id = ?', so.customer_id);
@@ -688,7 +710,7 @@ export const ACTIONS = {
       const ls = lines('purchase_request_lines', pr.id).map((l) => ({ product_id: l.product_id, description: l.description, qty: l.qty, price: l.price, discount_pct: 0, amount: l.amount }));
       const subtotal = sum(ls, (l) => l.amount), tax = round2(subtotal * 0.11);
       const { id, number } = createDoc(ctx, 'purchase_orders', 'PO', {
-        company_id: pr.company_id, branch_id: pr.branch_id, date: today(), supplier_id: p.supplier_id, warehouse_id: p.warehouse_id, purchase_request_id: pr.id,
+        company_id: pr.company_id, branch_id: pr.branch_id, date: today(), supplier_id: p.supplier_id, warehouse_id: p.warehouse_id, purchase_request_id: pr.id, project_id: pr.project_id ?? null,
         buyer: ctx.user.full_name, subtotal, tax_rate: 11, tax, total: round2(subtotal + tax), status: 'draf',
       }, ls, 'purchase_order_lines');
       setStatus('purchase_requests', pr.id, 'selesai');
@@ -708,16 +730,18 @@ export const ACTIONS = {
   purchase_orders: {
     submit: (_c, po) => {
       needLines(lines('purchase_order_lines', po.id), 'PO');
-      const need = po.total > approvalPolicy().poThreshold;
+      const warnings = po.project_id ? budgetCheck({ companyId: po.company_id, branchId: po.branch_id, date: po.date, lines: [], extraProjectCommit: { projectId: po.project_id, amount: toBase(po.subtotal, po) }, excludePoId: po.id }) : [];
+      const need = po.total > approvalPolicy().poThreshold || warnings.length > 0;
       setStatus('purchase_orders', po.id, need ? 'menunggu' : 'disetujui');
-      return { message: need ? 'PO di atas ambang — menunggu persetujuan manajer.' : 'PO disetujui otomatis.' };
+      const msg = need ? (warnings.length ? 'PO melebihi anggaran proyek — menunggu persetujuan manajer.' : 'PO di atas ambang — menunggu persetujuan manajer.') : 'PO disetujui otomatis.';
+      return { message: warnings.length ? `${msg} ${warnMessage(warnings)}` : msg };
     },
     approve: to('purchase_orders', 'disetujui'),
     reject: (_c, po, p) => setStatus('purchase_orders', po.id, 'batal', { notes: `${po.notes || ''}\nDitolak: ${p.reason}`.trim() }),
     cancel: to('purchase_orders', 'batal'),
     to_bill: (ctx, po, p) => {
       const { id, number } = createDoc(ctx, 'purchase_bills', 'BILL', {
-        company_id: po.company_id, branch_id: po.branch_id, date: today(), supplier_id: po.supplier_id, warehouse_id: po.warehouse_id, purchase_order_id: po.id, ...fxCopy(po),
+        company_id: po.company_id, branch_id: po.branch_id, date: today(), supplier_id: po.supplier_id, warehouse_id: po.warehouse_id, purchase_order_id: po.id, project_id: po.project_id ?? null, ...fxCopy(po),
         supplier_invoice_no: p.supplier_invoice_no, subtotal: po.subtotal, tax_rate: po.tax_rate, tax: po.tax, total: po.total, paid: 0, status: 'draf',
       }, tradeCopy(lines('purchase_order_lines', po.id)), 'purchase_bill_lines');
       const s = db.get('SELECT terms_days FROM suppliers WHERE id = ?', po.supplier_id);

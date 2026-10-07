@@ -96,7 +96,8 @@ transaksi modul operasional.
 | Buku Besar | per akun, saldo berjalan, telusur ke jurnal | — |
 | Umur Piutang / Hutang | 5 ember umur | Sub-buku = saldo buku besar |
 | Valuasi Persediaan | per gudang, status stok | Nilai stok = akun persediaan |
-| Anggaran vs Realisasi | per akun, prakiraan setahun | — |
+| Anggaran vs Realisasi | pohon COA YTD · matriks bulanan · per pusat biaya | Realisasi laba bersih = Laba Rugi |
+| Laporan Proyek | ringkasan portofolio & rincian per proyek (RAB per akun) | Realisasi proyek = jurnal berdimensi proyek |
 | Dasbor | KPI dari buku besar | — |
 
 **Laba tahun berjalan** dan **saldo laba tahun lalu** dihitung dinamis dari akun
@@ -190,3 +191,61 @@ Stok keluar melebihi saldo ditolak.
 `/api/attachments/:entitas/:id` (GET/POST), `/api/attachment/:id` (GET/DELETE),
 `/api/prefs/:kunci`, `/api/bank-recon/:id` (+ `PUT …/items`), `/api/fx-rate`,
 `/api/reports/pajak`, `/api/reports/kartu-mitra`, `/api/portal/*`.
+
+## Penganggaran (`server/ledger/budget.js`)
+
+### Anggaran COA
+
+* Entitas `budgets`: satu baris per **tahun × cabang × akun detail × pusat biaya**
+  (kombinasi ganda ditolak). Pola bulanan `m01`…`m12`:
+  * **Merata** — anggaran setahun dibagi 12 (sisa pembulatan di Desember);
+  * **Mengikuti realisasi tahun lalu** — bobot bulanan dari buku besar tahun
+    sebelumnya (jatuh ke merata bila belum ada data);
+  * **Manual** — anggaran setahun = jumlah 12 bulan.
+* Alur kerja: `draf → diajukan → disetujui` (persetujuan bertanda pemisahan tugas;
+  muncul di Kotak Persetujuan), `ditolak` kembali dapat diubah, `revise`
+  (tingkat setujui) mengembalikan anggaran disetujui ke draf.
+* Laporan & kontrol hanya memakai anggaran **disetujui**; laporan dapat
+  menampilkan versi "semua" untuk simulasi draf.
+* Realisasi = saldo normal akun dari jurnal terposting tahun tersebut
+  (jurnal penutup tahun dikecualikan). Anggaran s.d. periode = bulan penuh
+  sebelum tanggal laporan + porsi hari bulan berjalan. Selisih = realisasi −
+  anggaran s.d. periode; **menguntungkan** bila pendapatan di atas atau beban di
+  bawah anggaran. Prakiraan akhir tahun = realisasi + sisa anggaran.
+* `POST /api/budgets/copy` menyalin anggaran disetujui (atau realisasi) tahun
+  sumber ke tahun tujuan sebagai draf dengan penyesuaian %, teraudit.
+* Bagan Akun menampilkan kolom anggaran, realisasi, selisih, dan serapan yang
+  dijumlahkan ke akun induk (`/api/reports/anggaran-akun`).
+
+### Anggaran proyek
+
+* `projects` memiliki **nilai kontrak** dan rincian **RAB** per akun biaya
+  (`project_budget_lines`); anggaran proyek = jumlah rincian.
+* Dimensi proyek: header PR, PO, tagihan, SO, faktur (terbawa PR → PO → tagihan
+  dan SO → faktur) serta baris jurnal, kas, dan tagihan. Faktur memberi dimensi
+  proyek pada pendapatan & HPP; tagihan pada baris beban/persediaan; retur
+  penjualan mengikuti faktur asal.
+* Komitmen = PO berstatus menunggu/disetujui yang belum ditagih (DPP × kurs).
+* Indikator: EV = RAB × kemajuan fisik, PV = RAB × porsi waktu berjalan,
+  CPI = EV ÷ realisasi, SPI = EV ÷ PV, EAC = RAB ÷ CPI, VAC = RAB − EAC,
+  kesehatan sehat/waspada/kritis. Rincian proyek memuat kurva-S (PV vs biaya
+  aktual kumulatif), RAB per akun vs realisasi & komitmen, pendapatan & margin,
+  PO terbuka, tugas, dan transaksi.
+
+### Kontrol anggaran
+
+Kebijakan `approval_policy.budgetControl`: `none` · `warn` (bawaan) · `block`.
+Diperiksa saat posting tagihan pemasok, kas keluar, serta pengajuan &
+persetujuan jurnal manual (akun beban pokok/beban): realisasi tahun berjalan +
+transaksi > anggaran COA disetujui (per akun & cabang), atau realisasi +
+komitmen + transaksi > RAB proyek. Pengajuan PO proyek yang melampaui RAB
+selalu dialihkan ke persetujuan manajer. Mode `warn` mengembalikan pesan
+peringatan; `block` menolak transaksi (dibatalkan seluruhnya).
+
+| API | Isi |
+| --- | --- |
+| `GET /api/reports/anggaran?year=&to=&view=ytd\|bulanan\|pusat-biaya&version=disetujui\|semua` | Anggaran vs realisasi COA |
+| `GET /api/reports/anggaran-akun?year=` | Anggaran & realisasi per akun (bagan akun) |
+| `GET /api/reports/proyek?to=` | Ringkasan proyek |
+| `GET /api/reports/proyek-detail?project=&to=` | Rincian satu proyek |
+| `POST /api/budgets/copy` | Salin anggaran (draf) |

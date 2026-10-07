@@ -90,6 +90,17 @@ export const MODULES = [
 
 const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
 
+/* Anggaran bulanan: kolom m01..m12. */
+export const BUDGET_MONTHS = Array.from({ length: 12 }, (_, i) => `m${String(i + 1).padStart(2, '0')}`);
+export const MONTH_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+/* Realisasi anggaran setahun dari buku besar (saldo normal akun; jurnal penutup tahun dikecualikan). */
+const BUDGET_ACTUAL_SQL = `(SELECT ROUND(COALESCE(SUM((jl.debit - jl.credit) * (CASE WHEN a.type IN ('asset','cogs','expense','other_expense','tax') THEN 1 ELSE -1 END)),0),2)
+  FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
+  WHERE jl.account_id = t.account_id AND jl.company_id = t.company_id AND jl.branch_id = t.branch_id AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing'
+    AND j.date BETWEEN (t.year || '-01-01') AND (t.year || '-12-31') AND (t.cost_center_id IS NULL OR jl.cost_center_id = t.cost_center_id))`;
+/* Biaya proyek: akun beban pokok & beban yang ditandai dimensi proyek. */
+const PROJECT_COST_SQL = `(SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id WHERE jl.project_id = t.id AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND a.type IN ('cogs','expense','other_expense'))`;
+
 export const ENTITIES = {
   /* ---------------------------------------------------------------- Admin */
   companies: {
@@ -266,13 +277,28 @@ export const ENTITIES = {
     actions: [act('post', 'Posting', { from: ['draf'] }), act('void', 'Batalkan', { from: ['diposting'] })],
   },
   budgets: {
-    label: 'Anggaran', one: 'anggaran', module: 'finance', scope: 'branch', title: 'notes', sort: 'year', sortDir: 'desc',
+    label: 'Anggaran (COA)', one: 'anggaran', module: 'finance', scope: 'branch', title: 'notes', sort: 'year', sortDir: 'desc',
+    editable: ['draf', 'ditolak'],
     fields: [
       F.int('year', 'Tahun', { required: true, list: true, min: 2000, max: 2100 }),
-      F.ref('account_id', 'Akun', 'accounts', { required: true, list: true, refFilter: { is_header: 0 } }),
+      F.ref('account_id', 'Akun', 'accounts', { required: true, list: true, search: true, refFilter: { is_header: 0 } }),
       F.ref('cost_center_id', 'Pusat biaya', 'cost_centers', { list: true }),
-      F.money('amount', 'Anggaran setahun', { required: true, list: true }),
+      F.sel('phasing', 'Pola bulanan', [['rata', 'Merata (1/12 per bulan)'], ['tahun_lalu', 'Mengikuti pola realisasi tahun lalu'], ['manual', 'Manual per bulan']], { required: true, default: 'rata', help: 'Menentukan pembagian anggaran setahun ke 12 bulan.' }),
+      F.money('amount', 'Anggaran setahun', { list: true, help: 'Pola manual: dihitung otomatis dari jumlah anggaran bulanan.' }),
+      ...BUDGET_MONTHS.map((k, i) => F.money(k, `Anggaran ${MONTH_NAMES[i]}`, { help: i ? undefined : 'Diisi otomatis untuk pola merata / tahun lalu.' })),
       F.text('notes', 'Catatan', { search: true }),
+      F.text('approval_note', 'Catatan persetujuan', { readonly: true, max: 300 }),
+      F.status(['draf', 'diajukan', 'disetujui', 'ditolak'], 'draf'),
+    ],
+    computed: {
+      actual: { label: 'Realisasi', type: 'money', list: true, sql: BUDGET_ACTUAL_SQL },
+      usage: { label: 'Serapan', type: 'pct', list: true, sql: `(CASE WHEN t.amount > 0 THEN ROUND(${BUDGET_ACTUAL_SQL} * 100.0 / t.amount, 1) ELSE 0 END)` },
+    },
+    actions: [
+      act('submit', 'Ajukan', { from: ['draf', 'ditolak'], level: 2 }),
+      act('approve', 'Setujui', { from: ['diajukan'], sod: true }),
+      act('reject', 'Tolak', { from: ['diajukan'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
+      act('revise', 'Revisi (kembali ke draf)', { from: ['disetujui'], confirm: 'Anggaran kembali ke draf dan tidak dipakai di laporan/kontrol sampai disetujui ulang.' }),
     ],
   },
 
@@ -423,7 +449,7 @@ export const ENTITIES = {
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang kirim', 'warehouses', { required: true }),
       F.ref('quotation_id', 'Penawaran', 'quotations', { readonly: true }),
-      F.text('customer_po', 'No. PO pelanggan', { max: 40, search: true }), F.area('notes', 'Catatan'),
+      F.text('customer_po', 'No. PO pelanggan', { max: 40, search: true }), F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }), F.area('notes', 'Catatan'),
       ...fx(),
       ...docTotals(),
       F.text('approval_note', 'Catatan persetujuan', { readonly: true }),
@@ -446,6 +472,7 @@ export const ENTITIES = {
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true }),
       F.ref('sales_order_id', 'Pesanan penjualan', 'sales_orders', { readonly: true }),
+      F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
       ...fx(),
       ...docTotals(),
@@ -519,6 +546,7 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.text('requester', 'Peminta', { required: true, list: true, search: true }),
       F.ref('cost_center_id', 'Pusat biaya', 'cost_centers', { list: true }),
+      F.ref('project_id', 'Proyek', 'projects', { help: 'Pembelian untuk proyek — terbawa ke PO & tagihan.' }),
       F.sel('priority', 'Prioritas', ['rendah', 'sedang', 'tinggi'], { default: 'sedang', list: true }),
       F.date('needed_by', 'Dibutuhkan'), F.area('notes', 'Keperluan', { search: true }),
       F.money('total', 'Estimasi', { readonly: true, list: true }),
@@ -561,7 +589,7 @@ export const ENTITIES = {
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang tujuan', 'warehouses', { required: true }),
       F.ref('purchase_request_id', 'Permintaan', 'purchase_requests', { readonly: true }),
-      F.text('buyer', 'Pembeli', { list: true }), F.area('notes', 'Catatan'),
+      F.text('buyer', 'Pembeli', { list: true }), F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }), F.area('notes', 'Catatan'),
       ...fx(),
       ...docTotals(),
       F.status(['draf', 'menunggu', 'disetujui', 'diterima', 'batal'], 'draf'),
@@ -584,6 +612,7 @@ export const ENTITIES = {
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
       F.ref('warehouse_id', 'Gudang penerima', 'warehouses'),
       F.ref('purchase_order_id', 'Pesanan pembelian', 'purchase_orders', { readonly: true }),
+      F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
       ...fx(),
       ...docTotals(),
@@ -712,12 +741,24 @@ export const ENTITIES = {
     label: 'Proyek', one: 'proyek', module: 'projects', scope: 'branch', title: 'name', sort: 'code',
     fields: [
       F.code(), F.name(), F.ref('customer_id', 'Pelanggan', 'customers', { list: true }),
-      F.text('manager', 'Manajer proyek', { list: true }), F.money('budget', 'Anggaran', { list: true }),
-      F.date('start_date', 'Mulai'), F.date('end_date', 'Selesai', { list: true }), F.pct('progress', 'Kemajuan', { list: true }),
+      F.text('manager', 'Manajer proyek', { list: true }),
+      F.money('contract_value', 'Nilai kontrak', { list: true, help: 'Nilai kontrak/pendapatan yang direncanakan (sebelum PPN).' }),
+      F.money('budget', 'Anggaran biaya (RAB)', { list: true, help: 'Otomatis = jumlah rincian anggaran per akun bila rincian diisi.' }),
+      F.date('start_date', 'Mulai'), F.date('end_date', 'Selesai', { list: true }), F.pct('progress', 'Kemajuan fisik', { list: true }),
       F.status(['perencanaan', 'berjalan', 'ditunda', 'selesai'], 'perencanaan'),
     ],
+    lines: {
+      table: 'project_budget_lines',
+      fields: [
+        F.ref('account_id', 'Akun biaya', 'accounts', { required: true, refFilter: { is_header: 0, type: ['cogs', 'expense', 'other_expense'] } }),
+        F.text('description', 'Uraian pekerjaan (RAB)', { max: 300 }),
+        F.money('amount', 'Anggaran', { required: true }),
+      ],
+    },
     computed: {
-      actual: { label: 'Realisasi biaya', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id WHERE jl.project_id = t.id AND j.status = 'diposting' AND a.type IN ('cogs','expense','other_expense'))` },
+      actual: { label: 'Realisasi biaya', type: 'money', list: true, sql: PROJECT_COST_SQL },
+      remaining: { label: 'Sisa anggaran', type: 'money', list: true, sql: `ROUND(COALESCE(t.budget,0) - ${PROJECT_COST_SQL}, 2)` },
+      usage: { label: 'Serapan', type: 'pct', list: true, sql: `(CASE WHEN t.budget > 0 THEN ROUND(${PROJECT_COST_SQL} * 100.0 / t.budget, 1) ELSE 0 END)` },
     },
   },
   project_tasks: {

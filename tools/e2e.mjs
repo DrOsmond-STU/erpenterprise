@@ -192,6 +192,34 @@ try {
     await page.screenshot({ path: join(shots, `${v}.png`) });
   }
 
+  // Penganggaran: anggaran vs realisasi (3 tampilan), salin anggaran, kolom anggaran COA, laporan proyek.
+  await page.evaluate(() => { location.hash = '#/realisasi-anggaran'; });
+  await page.waitForSelector('[data-report-body] .report-table', { timeout: 8000 });
+  check((await page.$$('[data-report-body] tr[data-gl]')).length > 10, 'anggaran vs realisasi: baris akun tampil');
+  await page.screenshot({ path: join(shots, 'anggaran-realisasi.png'), fullPage: true });
+  await page.click('[data-bview="bulanan"]');
+  await page.waitForTimeout(1200);
+  check((await page.$$eval('[data-report-body] thead th', (t) => t.length)) === 14, 'anggaran: matriks 12 bulan');
+  await page.click('[data-bview="pusat-biaya"]');
+  await page.waitForTimeout(1200);
+  check(/CC-300/.test(await page.textContent('[data-report-body]')), 'anggaran: rincian per pusat biaya');
+  await page.click('[data-budget-copy]');
+  await page.fill('[data-budget-copy-form] [name=toYear]', '2027');
+  await page.fill('[data-budget-copy-form] [name=fromYear]', '2026');
+  await page.click('[data-budget-copy-run]');
+  await page.waitForTimeout(1500);
+  check(/2027/.test(await page.textContent('.report-head')), 'salin anggaran 2026 → 2027 (draf) & tampil di versi semua');
+  await page.evaluate(() => { location.hash = '#/bagan-akun'; });
+  await page.waitForTimeout(1500);
+  check(/Anggaran 20\d\d/i.test(await page.textContent('.coa-table thead')), 'bagan akun: kolom anggaran & realisasi');
+  await page.evaluate(() => { location.hash = '#/lap-proyek'; });
+  await page.waitForSelector('[data-proj-open]');
+  await page.screenshot({ path: join(shots, 'laporan-proyek.png') });
+  await page.click('[data-proj-open]');
+  await page.waitForSelector('[data-chart="scurve"] svg', { timeout: 8000 });
+  check(/RAB/.test(await page.textContent('.view-root')), 'laporan proyek: rincian RAB, kurva-S, transaksi');
+  await page.screenshot({ path: join(shots, 'laporan-proyek-rinci.png'), fullPage: true });
+
   // Tampilan sempit (ponsel).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });

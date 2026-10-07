@@ -343,7 +343,8 @@ export async function update(ctx, key, id, body = {}) {
     if (hooks.compute) {
       const ls = lines || (e.lines ? db.all(`SELECT * FROM "${e.lines.table}" WHERE parent_id = ? ORDER BY line_no`, id) : null);
       hooks.compute(ctx, merged, ls);
-      for (const f of e.fields.filter((x) => x.readonly && !x.virtual)) if (merged[f.name] !== existing[f.name]) row[f.name] = merged[f.name];
+      // Nilai yang dihitung kait (total, pembagian bulanan, dll.) ikut disimpan.
+      for (const f of e.fields.filter((x) => !x.virtual && x.name !== e.statusField)) if (merged[f.name] !== (f.name in row ? row[f.name] : existing[f.name])) row[f.name] = merged[f.name];
       if (lines) lines = ls;
     }
     checkUnique(e, merged, merged.company_id, existing.id);

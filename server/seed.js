@@ -75,6 +75,7 @@ let rngState = 20260101;
 const rnd = () => { rngState = (rngState * 1664525 + 1013904223) % 4294967296; return rngState / 4294967296; };
 const rint = (a, b) => Math.floor(a + rnd() * (b - a + 1));
 const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+const BULAN_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 const d = (m, day) => `2026-${String(m).padStart(2, '0')}-${String(Math.min(day, Number(monthEnd(2026, m).slice(8)))).padStart(2, '0')}`;
 
 function makeCtx(username) {
@@ -461,11 +462,30 @@ async function seedDemo() {
 
   /* --- Anggaran 2026 (KNM) -------------------------------------------------- */
   for (const [br, code, amount, cc] of [
-    ['JKT', '4-1100', 26_000_000_000, null], ['SBY', '4-1100', 11_000_000_000, null], ['SBY', '4-1200', 2_400_000_000, null], ['MDN', '4-1200', 2_000_000_000, null],
-    ['JKT', '6-1000', 1_200_000_000, 'CC-100'], ['CKR', '6-1000', 900_000_000, 'CC-300'], ['JKT', '6-2000', 1_020_000_000, 'CC-100'], ['CKR', '6-2100', 1_500_000_000, 'CC-300'],
-    ['JKT', '6-2400', 360_000_000, 'CC-200'], ['JKT', '6-2500', 1_150_000_000, null], ['JKT', '6-2600', 60_000_000, null], ['SBY', '6-2300', 140_000_000, 'CC-400'],
-    ['JKT', '7-2000', 270_000_000, null], ['JKT', '6-2800', 200_000_000, 'CC-400'], ['MDN', '6-2000', 300_000_000, null],
-  ]) await mk(maker, 'KNM', br, 'budgets', { year: 2026, account_id: A(code), cost_center_id: cc ? CC[cc] : null, amount, notes: 'RKAP 2026' });
+    ['JKT', '4-1100', 13_000_000_000, null], ['SBY', '4-1100', 6_200_000_000, null], ['SBY', '4-1200', 950_000_000, null], ['MDN', '4-1200', 600_000_000, null],
+    ['JKT', '5-1100', 4_300_000_000, null], ['SBY', '5-1100', 2_700_000_000, null], ['SBY', '5-1200', 600_000_000, null], ['MDN', '5-1200', 330_000_000, null], ['JKT', '5-1300', 800_000_000, null],
+    ['JKT', '6-1000', 1_650_000_000, null], ['CKR', '6-1000', 780_000_000, null], ['SBY', '6-1000', 340_000_000, null], ['MDN', '6-1000', 270_000_000, null],
+    ['JKT', '6-2000', 1_020_000_000, 'CC-100'], ['MDN', '6-2000', 300_000_000, null], ['CKR', '6-2100', 1_500_000_000, 'CC-300'], ['JKT', '6-2100', 222_000_000, 'CC-600'],
+    ['JKT', '6-2300', 120_000_000, null], ['SBY', '6-2300', 140_000_000, 'CC-400'], ['JKT', '6-2400', 360_000_000, 'CC-200'],
+    ['JKT', '6-2500', 470_000_000, null], ['CKR', '6-2500', 400_000_000, null], ['SBY', '6-2500', 85_000_000, null], ['MDN', '6-2500', 70_000_000, null],
+    ['JKT', '6-2600', 130_000_000, null], ['JKT', '6-2800', 200_000_000, null], ['JKT', '6-2900', 900_000_000, null], ['JKT', '7-2000', 270_000_000, null], ['JKT', '8-1000', 1_300_000_000, null],
+  ]) {
+    const bid = await mk(maker, 'KNM', br, 'budgets', { year: 2026, account_id: A(code), cost_center_id: cc ? CC[cc] : null, phasing: 'rata', amount, notes: 'RKAP 2026' });
+    await run(maker, 'KNM', 'budgets', bid, 'submit');
+    await run(checker, 'KNM', 'budgets', bid, 'approve');
+  }
+  // Anggaran musiman (manual per bulan) — penjualan jasa Jakarta memuncak di kuartal IV.
+  {
+    const months = [140, 140, 150, 150, 160, 160, 170, 180, 200, 230, 260, 300].map((v) => v * 1_000_000);
+    const bid = await mk(maker, 'KNM', 'JKT', 'budgets', { year: 2026, account_id: A('4-1300'), phasing: 'manual', ...Object.fromEntries(months.map((v, i) => [`m${String(i + 1).padStart(2, '0')}`, v])), notes: 'RKAP 2026 — pola musiman' });
+    await run(maker, 'KNM', 'budgets', bid, 'submit');
+    await run(checker, 'KNM', 'budgets', bid, 'approve');
+  }
+  // Usulan revisi menunggu persetujuan (muncul di Kotak Persetujuan).
+  {
+    const bid = await mk(maker, 'KNM', 'CKR', 'budgets', { year: 2026, account_id: A('6-2200'), cost_center_id: CC['CC-300'], phasing: 'rata', amount: 240_000_000, notes: 'Usulan anggaran pemeliharaan mesin' });
+    await run(maker, 'KNM', 'budgets', bid, 'submit');
+  }
 
   /* --- Data operasional non-keuangan --------------------------------------- */
   setToday('2026-10-06');
@@ -476,21 +496,52 @@ async function seedDemo() {
     ['Komponen panel surya', 'PT Surya Energi Hijau', 'Pameran', 1_500_000_000, 'kalah', '2026-08-31'], ['Instalasi pabrik baru', 'PT Mega Konstruksi', 'Referensi', 2_300_000_000, 'kualifikasi', '2026-12-01'],
   ]) await mk(maker, 'KNM', 'JKT', 'leads', { title, company_name: company, contact: pick(['Bpk. Hadi', 'Ibu Ratna', 'Bpk. Yusuf', 'Ibu Melati']), source: src, value, stage, owner: 'Sari Wulandari', expected_close: close });
 
-  for (const [code, name, cust, mgr, budget, start, end, progress, status] of [
-    ['PRJ-01', 'Instalasi panel Gedung Astra Sunter', 'C001', 'Hendra Gunawan', 950_000_000, '2026-03-01', '2026-11-30', 72, 'berjalan'],
-    ['PRJ-02', 'Rak gudang PU Jatim', 'C006', 'Wahyu Kurniawan', 1_400_000_000, '2026-05-15', '2026-12-20', 45, 'berjalan'],
-    ['PRJ-03', 'Implementasi ISO 27001 internal', null, 'Fajar Nugroho', 450_000_000, '2026-02-01', '2026-12-31', 60, 'berjalan'],
+  // Proyek dengan RAB per akun; biaya & pendapatan diberi dimensi proyek → realisasi dari buku besar.
+  const PRJ = {};
+  for (const [code, name, cust, mgr, contract, rab, start, end, progress, status] of [
+    ['PRJ-01', 'Instalasi panel Gedung Astra Sunter', 'C001', 'Hendra Gunawan', 1_350_000_000, [['5-1300', 'Material & komponen panel', 380_000_000], ['6-2900', 'Subkontraktor instalasi', 420_000_000], ['6-1000', 'Tenaga kerja lapangan', 100_000_000], ['6-2300', 'Transportasi & mobilisasi', 50_000_000]], '2026-03-01', '2026-11-30', 72, 'berjalan'],
+    ['PRJ-02', 'Rak gudang PU Jatim', 'C006', 'Wahyu Kurniawan', 1_950_000_000, [['5-1300', 'Material rak baja', 600_000_000], ['6-2900', 'Subkontraktor fabrikasi & pemasangan', 550_000_000], ['6-2300', 'Pengiriman ke lokasi', 120_000_000], ['6-1000', 'Tenaga kerja & pengawas', 130_000_000]], '2026-05-15', '2026-12-20', 45, 'berjalan'],
+    ['PRJ-03', 'Implementasi ISO 27001 internal', null, 'Fajar Nugroho', 0, [['6-2900', 'Konsultan & audit sertifikasi', 250_000_000], ['6-1000', 'Tim internal', 120_000_000], ['6-2600', 'Pelatihan & perangkat', 80_000_000]], '2026-02-01', '2026-12-31', 80, 'berjalan'],
   ]) {
-    const pid = await mk(maker, 'KNM', 'JKT', 'projects', { code, name, customer_id: cust ? CU[cust] : null, manager: mgr, budget, start_date: start, end_date: end, progress, status });
+    const budget = rab.reduce((s2, x) => s2 + x[2], 0);
+    const pid = await mk(maker, 'KNM', 'JKT', 'projects', { code, name, customer_id: cust ? CU[cust] : null, manager: mgr, contract_value: contract, start_date: start, end_date: end, progress, status, lines: rab.map(([acc, desc, amt]) => ({ account_id: A(acc), description: desc, amount: amt })) });
+    PRJ[code] = pid;
     const tasks = [['Survei & desain', 0, 1, 100], ['Pengadaan material', 1, 3, 90], ['Fabrikasi', 2, 5, 70], ['Instalasi', 4, 7, 40], ['Komisioning & serah terima', 7, 9, 0]];
     for (const [t, s, e, p] of tasks) {
       const sd = new Date(start); sd.setMonth(sd.getMonth() + s);
       const ed = new Date(start); ed.setMonth(ed.getMonth() + e);
       await mk(maker, 'KNM', 'JKT', 'project_tasks', { project_id: pid, name: t, start_date: sd.toISOString().slice(0, 10), end_date: ed.toISOString().slice(0, 10), progress: p, assignee: mgr });
     }
-    // Biaya proyek dibebankan dengan dimensi proyek → realisasi dihitung dari buku besar.
-    await cash('KNM', 'JKT', 'BCA-JKT', '2026-09-18', 'keluar', `Biaya subkon ${code}`, [{ account_id: A('6-2900'), amount: round2(budget * 0.35), project_id: pid }], 'Subkontraktor');
+    // Biaya proyek bulanan sejak mulai: subkon, tenaga kerja, transportasi (dimensi proyek pada baris kas).
+    const startM = Number(start.slice(5, 7));
+    const months = Array.from({ length: 10 - startM + 1 }, (_, i) => startM + i);
+    const costShare = { 'PRJ-01': 0.9, 'PRJ-02': 0.42, 'PRJ-03': 0.55 }[code];
+    for (const [i, m] of months.entries()) {
+      const w = (i + 1) / months.reduce((s2, _x, k) => s2 + k + 1, 0);
+      const ls = rab.filter(([acc]) => acc !== '5-1300').map(([acc, , amt]) => ({ account_id: A(acc), amount: round2(amt * costShare * w), project_id: pid, memo: `${code} ${BULAN_ID[m - 1]}` }));
+      await cash('KNM', 'JKT', 'BCA-JKT', d(m, m === 10 ? 5 : 18), 'keluar', `Biaya proyek ${code} ${BULAN_ID[m - 1]}`, ls, code === 'PRJ-03' ? 'Konsultan ISO' : 'Subkontraktor & lapangan');
+    }
   }
+  // Material proyek ditagih pemasok langsung ke akun beban pokok jasa (tanpa stok), dimensi proyek di header.
+  for (const [code, sup, date, amt] of [['PRJ-01', 'S004', '2026-04-08', 310_000_000], ['PRJ-01', 'S004', '2026-08-12', 95_000_000], ['PRJ-02', 'S001', '2026-07-09', 240_000_000]]) {
+    setToday(date);
+    const bid = await mk(maker, 'KNM', 'JKT', 'purchase_bills', { date, supplier_id: SU[sup], supplier_invoice_no: `F-${sup}-${code}-${date.replace(/-/g, '')}`, project_id: PRJ[code], tax_rate: 11, lines: [{ account_id: A('5-1300'), description: `Material proyek ${code}`, qty: 1, price: amt }] });
+    await run(checker, 'KNM', 'purchase_bills', bid, 'post');
+  }
+  // Komitmen: PO material PRJ-02 sudah disetujui, belum ditagih.
+  setToday('2026-10-03');
+  {
+    const po = await mk(maker, 'KNM', 'JKT', 'purchase_orders', { date: '2026-10-03', eta: '2026-10-20', supplier_id: SU.S001, warehouse_id: WH['WH-JKT'], buyer: 'Wahyu Kurniawan', project_id: PRJ['PRJ-02'], tax_rate: 11, lines: [tradeLine('SV-302', 12, 2_500_000)], notes: 'Pengiriman rak tahap 2 ke lokasi PU Jatim' });
+    await run(maker, 'KNM', 'purchase_orders', po, 'submit');
+    if (db.get('SELECT status FROM purchase_orders WHERE id = ?', po).status === 'menunggu') await run(checker, 'KNM', 'purchase_orders', po, 'approve');
+  }
+  // Penagihan termin proyek ke pelanggan (pendapatan jasa berdimensi proyek).
+  for (const [code, cust, date, hours] of [['PRJ-01', 'C001', '2026-06-25', 1400], ['PRJ-01', 'C001', '2026-09-25', 1100], ['PRJ-02', 'C006', '2026-09-28', 1500]]) {
+    setToday(date);
+    const inv = await mk(maker, 'KNM', 'JKT', 'sales_invoices', { date, customer_id: CU[cust], warehouse_id: WH['WH-JKT'], project_id: PRJ[code], tax_rate: 11, notes: `Termin proyek ${code}`, lines: [tradeLine('SV-301', hours)] });
+    await run(checker, 'KNM', 'sales_invoices', inv, 'post');
+  }
+  setToday('2026-10-06');
 
   for (const [title, src, origin, dest, carrier, status, eta] of [
     ['SHP', 'WH-CKR', 'Cikarang', 'Jakarta', 'PT Nusantara Logistik Prima', 'diterima', '2026-09-10'], ['SHP', 'WH-CKR', 'Cikarang', 'Surabaya', 'PT Nusantara Logistik Prima', 'diterima', '2026-09-12'],

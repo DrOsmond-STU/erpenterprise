@@ -76,6 +76,23 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 3. Tutup periode Desember. Tutup buku tidak dapat dijalankan dua kali untuk
    tahun yang sama; koreksi dilakukan dengan membalik jurnal penutup.
 
+## Siklus anggaran tahunan
+
+1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun
+   berjalan (atau realisasinya) ke tahun berikutnya dengan penyesuaian %,
+   hasilnya draf per cabang.
+2. Pemilik anggaran menyesuaikan di **Keuangan → Anggaran (COA)** (pola merata,
+   pola tahun lalu, atau manual per bulan), lalu *Ajukan*.
+3. Direksi/penyetuju lain *Setujui* dari Kotak Persetujuan (pemisahan tugas).
+4. Pantau bulanan di **Realisasi & Variance** (YTD, bulanan, per pusat biaya)
+   dan kolom anggaran **Bagan Akun**; revisi anggaran memakai aksi *Revisi*
+   lalu persetujuan ulang (tercatat di jejak audit).
+5. Atur **Pengaturan → Kebijakan persetujuan → Kontrol anggaran**: peringatan
+   (bawaan) atau blokir transaksi yang melampaui anggaran COA/RAB proyek.
+6. Proyek: isi nilai kontrak & RAB per akun, beri dimensi proyek pada PR/PO,
+   tagihan, kas, faktur; pantau **Proyek → Laporan Proyek** (CPI/SPI, EAC,
+   komitmen, margin).
+
 ## Mata uang asing
 
 * Perbarui **Keuangan → Kurs Valuta** (mis. kurs tengah BI) secara berkala, atau
@@ -104,6 +121,6 @@ dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 ## Pengujian
 
 ```bash
-npm test            # 111 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, CRUD 55 entitas)
+npm test            # 119 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, CRUD 55 entitas)
 npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```
