@@ -39,6 +39,7 @@ export const DEFAULT_ACCOUNT_MAP = {
   goods_delivered: '1-1350',
   customer_advance: '2-1600', supplier_advance: '1-1510', pph23_prepaid: '1-1410', pph23_payable: '2-1330',
   sales_discount: '4-1900', purchase_discount: '7-1300', bank_charge: '7-2100',
+  giro_receivable: '1-1250', giro_payable: '2-1150',
 };
 
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });

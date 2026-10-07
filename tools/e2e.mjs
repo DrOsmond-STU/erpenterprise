@@ -266,6 +266,15 @@ try {
   const after = await page.evaluate(async (i) => (await fetch(`/api/settlement/sales_invoices/${i}`, { headers: { Accept: 'application/json' } })).json(), invId);
   check(after.payments?.some((p) => p.amount === 1000000) && after.open > 0, 'pembayaran sebagian dari jadwal angsuran tercatat, sisa tetap terbuka');
 
+  // Giro mundur: register masuk/keluar terekonsiliasi dengan buku besar.
+  await page.evaluate(() => { location.hash = '#/giro'; });
+  await page.waitForSelector('.notice');
+  check(/Giro belum cair cocok/.test(await page.textContent('.view-root')) && (await page.$$('[data-action-run$=":giro_clear"]')).length >= 1, 'giro masuk: register cocok dengan buku besar & aksi cair/tolak tersedia');
+  await page.screenshot({ path: join(shots, 'giro-mundur.png') });
+  await page.click('[data-giro-side="out"]');
+  await page.waitForTimeout(1200);
+  check(/Giro belum cair cocok/.test(await page.textContent('.view-root')), 'giro keluar: register cocok dengan buku besar');
+
   // Tampilan sempit (ponsel).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });

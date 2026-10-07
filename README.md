@@ -32,6 +32,7 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 | Penawaran → SO | Penawaran ke pelanggan dengan kebijakan harga (diskon/margin/nilai) & persetujuan, kirim, terima/tolak langsung di portal pelanggan, revisi (-R1, -R2), kedaluwarsa otomatis, konversi ke SO; SO wajib dari penawaran diterima; Analisis Penawaran (corong, tingkat menang, alasan kalah) |
 | Surat jalan & penagihan | SO → surat jalan penuh/sebagian (stok keluar, nilai ke *Persediaan Terkirim Belum Difakturkan*) → faktur dari satu atau beberapa surat jalan (lintas SO pelanggan yang sama); piutang diakui saat faktur terbit; laporan Pemenuhan Pesanan terekonsiliasi dengan buku besar |
 | Pembayaran bertahap | Termin bertahap (DP, termin proyek, cicilan) → jadwal angsuran per faktur & tagihan; pelunasan penuh/sebagian dialokasikan ke angsuran tertua; uang muka pelanggan & pemasok serta pemakaiannya; potongan, PPh 23, dan biaya bank saat pelunasan; umur piutang/hutang per angsuran; Jadwal Angsuran Piutang/Hutang |
+| Giro mundur | Pelunasan dengan bilyet giro / cek mundur dari pelanggan & ke pemasok: tercatat saat diterima/diserahkan, kas berubah saat giro cair, giro ditolak membuka kembali faktur/tagihan (opsi tahan pelanggan); register Giro Mundur terekonsiliasi dengan buku besar |
 | Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
 | Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 18 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
 
@@ -66,6 +67,6 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 ## Pengujian
 
 ```bash
-npm test           # 139 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, CRUD 56 entitas
+npm test           # 143 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, giro mundur, CRUD 56 entitas
 npm install && npm run test:e2e   # Playwright: menu × tema terang/gelap, alur transaksi, fitur lanjutan, anggaran & laporan proyek, portal, peran terbatas, layar 390 px
 ```

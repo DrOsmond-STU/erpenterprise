@@ -173,6 +173,7 @@ function isEditable(e, row) {
 function availableActions(ctx, e, row) {
   return e.actions
     .filter((a) => !a.from || a.from.includes(row[e.statusField]))
+    .filter((a) => !a.when || a.when(row))
     .filter((a) => can(ctx, e.module, Math.min(a.level, 3)) && (a.level < 4 || can(ctx, 'admin', 3)))
     .map((a) => ({ name: a.name, label: a.label, confirm: a.confirm || null, params: a.params ? a.params.map((p) => openAmountDefault(e, row, p)) : null, sodBlocked: !!(a.sod && row.created_by === ctx.user.id) }));
 }
@@ -396,6 +397,7 @@ export async function runAction(ctx, key, id, actionName, params = {}) {
   if (!existing) throw notFound();
   assertInScope(ctx, e.scope, existing);
   if (a.from && !a.from.includes(existing[e.statusField])) throw conflict(`Aksi "${a.label}" tidak berlaku untuk status "${existing[e.statusField]}".`);
+  if (a.when && !a.when(existing)) throw conflict(`Aksi "${a.label}" tidak berlaku untuk dokumen ini.`);
   // Pemisahan tugas (ISO 27001 A.5.3): pembuat dokumen tidak boleh menyetujuinya sendiri.
   if (a.sod && existing.created_by === ctx.user.id) throw forbidden('Pemisahan tugas: dokumen tidak boleh disetujui oleh pembuatnya sendiri.');
   const p = a.params ? validateFields(a.params, params, ctx, { companyId: existing.company_id ?? null, isCreate: true }) : {};
@@ -414,7 +416,7 @@ export async function runAction(ctx, key, id, actionName, params = {}) {
 
 /* --- Pencarian rujukan ------------------------------------------------------ */
 /* Data induk yang dirujuk lintas modul (mis. produk di penjualan & pembelian). */
-const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles', 'currencies', 'warehouse_bins']);
+const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles', 'currencies', 'warehouse_bins', 'payment_terms']);
 
 export function lookup(ctx, key, q = {}) {
   const e = mustEntity(key);

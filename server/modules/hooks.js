@@ -61,6 +61,13 @@ function settlementTotals(row, lines) {
       row.settled = sum(lines, (l) => l.settled);
     }
   }
+  row.method = row.method || 'transfer';
+  if (row.method === 'giro') {
+    if (row.mode !== 'pelunasan') throw bad('Giro/cek mundur hanya untuk pelunasan faktur/tagihan.');
+    if (!row.giro_no) throw bad('Isi nomor giro/cek.');
+    if (!row.giro_due) throw bad('Isi tanggal efektif (jatuh tempo) giro.');
+    if (row.date && row.giro_due < row.date) throw bad('Tanggal efektif giro tidak boleh sebelum tanggal penerimaan/penyerahan giro.');
+  }
   if (row.mode === 'pakai_uang_muka') { row.bank_account_id = null; row.bank_charge = 0; }
   else if (!row.bank_account_id) throw bad('Pilih rekening kas/bank.');
 }

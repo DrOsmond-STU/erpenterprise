@@ -117,6 +117,20 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    potong), 2-1330 (setor PPh 23 paling lambat tanggal 15 bulan berikutnya),
    2-1600 & 1-1510 (uang muka).
 
+## Giro mundur
+
+1. Giro dari pelanggan: dari faktur pilih **Terima pembayaran → sumber dana "Giro / cek
+   mundur"** (isi nomor, bank penerbit, tanggal efektif). Faktur langsung lunas; giro
+   tercatat di **Keuangan → Giro Mundur** sebagai *belum cair*.
+2. Pada/ setelah tanggal efektif setorkan ke bank (kliring), lalu catat **Giro cair**
+   (isi biaya kliring bila ada). Jika ditolak bank, pilih **Giro ditolak** — faktur
+   terbuka kembali; centang *Tahan mitra* untuk memblokir transaksi baru pelanggan.
+3. Giro ke pemasok: dari tagihan **Ajukan pembayaran → giro**; setelah disetujui
+   tagihan lunas dan giro tercatat *belum cair*. Saat bank mendebit rekening, catat
+   **Giro cair**.
+4. Harian: periksa notifikasi giro jatuh tempo ≤ 3 hari; akhir bulan pastikan
+   indikator register hijau (giro belum cair = saldo akun 1-1250 / 2-1150).
+
 ## Siklus anggaran tahunan
 
 1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun
@@ -162,6 +176,6 @@ dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 ## Pengujian
 
 ```bash
-npm test            # 139 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, CRUD 56 entitas)
+npm test            # 143 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, surat jalan, pembayaran bertahap, giro mundur, CRUD 56 entitas)
 npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```

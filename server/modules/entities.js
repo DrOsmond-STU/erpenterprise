@@ -75,7 +75,7 @@ export const STATUS = {
   patuh: ['Patuh', 'ok'], peninjauan: ['Peninjauan', 'warn'], 'tidak-patuh': ['Tidak patuh', 'danger'],
   dilaporkan: ['Dilaporkan', 'warn'], investigasi: ['Investigasi', 'accent'], ditangani: ['Ditangani', 'ok'],
   buka: ['Buka', 'accent'], direvisi: ['Direvisi', 'neutral'],
-  belum: ['Belum jatuh tempo', 'neutral'],
+  belum: ['Belum jatuh tempo', 'neutral'], beredar: ['Giro belum cair', 'warn'], cair: ['Giro cair', 'ok'], tolak: ['Giro ditolak', 'danger'],
   dikirim_sebagian: ['Dikirim sebagian', 'warn'], dikirim: ['Dikirim', 'accent'], difakturkan: ['Difakturkan', 'ok'],
   diterapkan: ['Diterapkan', 'ok'], direncanakan: ['Direncanakan', 'warn'], diterima_risiko: ['Risiko diterima', 'neutral'],
 };
@@ -95,10 +95,23 @@ const act = (name, label, o = {}) => ({ name, label, level: 3, ...o });
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
 const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
 const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+/* Aksi giro hanya untuk giro yang belum cair; pembatalan biasa tidak berlaku untuk giro yang sudah cair. */
+const giroOpen = (r) => r.method === 'giro' && r.giro_status === 'beredar';
+const notCleared = (r) => !(r.method === 'giro' && r.giro_status === 'cair');
+const PAY_METHODS = [['transfer', 'Tunai / transfer'], ['giro', 'Giro / cek mundur']];
+const GIRO_STATUS = [['', '—'], ['beredar', 'Belum cair'], ['cair', 'Cair'], ['tolak', 'Ditolak / batal']];
+const GIRO_BOUNCE_PARAMS = [
+  { name: 'date', label: 'Tanggal ditolak/batal', type: 'date', required: true },
+  { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. saldo tidak cukup, tanda tangan tidak sesuai, giro dibatalkan.' },
+  { name: 'hold', label: 'Tahan mitra (blokir transaksi baru)', type: 'bool', default: 0 },
+];
 const PAY_PARAMS = (bankLabel, pphLabel) => [
   { name: 'date', label: 'Tanggal', type: 'date', required: true },
-  { name: 'source', label: 'Sumber dana', type: 'select', options: [['bank', 'Kas/bank'], ['uang_muka', 'Saldo uang muka']], default: 'bank', required: true },
-  { name: 'bank_account_id', label: bankLabel, type: 'ref', ref: 'bank_accounts', help: 'Wajib bila sumber dana kas/bank.' },
+  { name: 'source', label: 'Sumber dana', type: 'select', options: [['bank', 'Kas/bank (tunai/transfer)'], ['giro', 'Giro / cek mundur'], ['uang_muka', 'Saldo uang muka']], default: 'bank', required: true },
+  { name: 'bank_account_id', label: bankLabel, type: 'ref', ref: 'bank_accounts', help: 'Wajib untuk kas/bank & giro (rekening setor/penerbit giro).' },
+  { name: 'giro_no', label: 'No. giro / cek', type: 'text', help: 'Isi bila sumber dana giro.' },
+  { name: 'giro_bank', label: 'Bank penerbit giro', type: 'text' },
+  { name: 'giro_due', label: 'Tanggal efektif giro', type: 'date' },
   { name: 'amount', label: 'Jumlah dibayar (kas/uang muka)', type: 'money', required: true, help: 'Boleh sebagian — sisa tetap terbuka sesuai jadwal angsuran.' },
   { name: 'discount', label: 'Potongan / diskon', type: 'money', default: 0 },
   { name: 'pph23', label: pphLabel, type: 'money', default: 0 },
@@ -590,6 +603,12 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('customer_id', 'Pelanggan', 'customers', { required: true, list: true, search: true }),
       F.sel('mode', 'Jenis penerimaan', PAY_MODES_AR, { required: true, default: 'pelunasan', list: true }),
+      F.sel('method', 'Cara bayar', PAY_METHODS, { required: true, default: 'transfer', list: true, help: 'Giro/cek mundur: pelunasan dicatat saat giro diterima/diserahkan, kas berubah saat giro cair.' }),
+      F.text('giro_no', 'No. giro / cek', { max: 40, search: true }),
+      F.text('giro_bank', 'Bank penerbit giro', { max: 60 }),
+      F.date('giro_due', 'Tanggal efektif (jatuh tempo) giro', { list: true }),
+      F.sel('giro_status', 'Status giro', GIRO_STATUS, { readonly: true, list: true }),
+      F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
       F.money('advance', 'Uang muka diterima', { help: 'Hanya untuk jenis "Terima uang muka (DP)" — dicatat sebagai Uang Muka Pelanggan.' }),
@@ -609,7 +628,7 @@ export const ENTITIES = {
         F.money('settled', 'Melunasi', { readonly: true }),
       ],
     },
-    actions: [act('post', 'Posting', { from: ['draf'] }), act('void', 'Batalkan', { from: ['diposting'] })],
+    actions: [act('post', 'Posting', { from: ['draf'] }), act('giro_clear', 'Giro cair', { from: ['diposting'], when: giroOpen, params: [{ name: 'date', label: 'Tanggal cair', type: 'date', required: true }, { name: 'bank_account_id', label: 'Rekening', type: 'ref', ref: 'bank_accounts', help: 'Kosong = rekening pada dokumen.' }, { name: 'bank_charge', label: 'Biaya kliring', type: 'money', default: 0 }] }), act('giro_bounce', 'Giro ditolak / dibatalkan', { from: ['diposting'], when: giroOpen, params: GIRO_BOUNCE_PARAMS }), act('void', 'Batalkan', { from: ['diposting'], when: notCleared })],
   },
   pos_sales: {
     label: 'Transaksi Kasir', one: 'transaksi kasir', module: 'pos', scope: 'branch', title: 'number', number: 'POS', sort: 'date', sortDir: 'desc',
@@ -751,6 +770,12 @@ export const ENTITIES = {
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
       F.sel('mode', 'Jenis pembayaran', PAY_MODES_AP, { required: true, default: 'pelunasan', list: true }),
+      F.sel('method', 'Cara bayar', PAY_METHODS, { required: true, default: 'transfer', list: true, help: 'Giro/cek mundur: pelunasan dicatat saat giro diterima/diserahkan, kas berubah saat giro cair.' }),
+      F.text('giro_no', 'No. giro / cek', { max: 40, search: true }),
+      F.text('giro_bank', 'Bank penerbit giro', { max: 60 }),
+      F.date('giro_due', 'Tanggal efektif (jatuh tempo) giro', { list: true }),
+      F.sel('giro_status', 'Status giro', GIRO_STATUS, { readonly: true, list: true }),
+      F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
       F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar uang muka (DP)" — dicatat sebagai Uang Muka Pembelian.' }),
@@ -770,7 +795,7 @@ export const ENTITIES = {
         F.money('settled', 'Melunasi', { readonly: true }),
       ],
     },
-    actions: [act('submit', 'Ajukan pembayaran', { from: ['draf'], level: 2 }), act('post', 'Setujui & posting', { from: ['menunggu'], sod: true }), act('void', 'Batalkan', { from: ['diposting'] })],
+    actions: [act('submit', 'Ajukan pembayaran', { from: ['draf'], level: 2 }), act('post', 'Setujui & posting', { from: ['menunggu'], sod: true }), act('giro_clear', 'Giro cair', { from: ['diposting'], when: giroOpen, params: [{ name: 'date', label: 'Tanggal cair', type: 'date', required: true }, { name: 'bank_account_id', label: 'Rekening', type: 'ref', ref: 'bank_accounts', help: 'Kosong = rekening pada dokumen.' }, { name: 'bank_charge', label: 'Biaya kliring', type: 'money', default: 0 }] }), act('giro_bounce', 'Giro ditolak / dibatalkan', { from: ['diposting'], when: giroOpen, params: GIRO_BOUNCE_PARAMS }), act('void', 'Batalkan', { from: ['diposting'], when: notCleared })],
   },
 
   /* ------------------------------------------------------------ Inventaris */

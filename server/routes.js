@@ -13,7 +13,7 @@ import { copyBudgets } from './ledger/budget.js';
 import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
 import { invoiceFromDeliveries } from './ledger/documents.js';
 import { fulfillmentReport } from './ledger/fulfillment.js';
-import { installmentsOf, installmentSchedule, advanceBalance } from './ledger/payments.js';
+import { installmentsOf, installmentSchedule, advanceBalance, giroRegister } from './ledger/payments.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -198,6 +198,7 @@ const REPORTS = {
   'proyek-detail': (ctx, r, q) => reports.projectDetail(ctx, { ...r, projectId: Number(q.project) }),
   penawaran: (ctx, r) => quotationReport(ctx, r),
   pemenuhan: (ctx, r) => fulfillmentReport(ctx, r),
+  giro: (ctx, r, q) => giroRegister(ctx, { ...r, side: q.side === 'out' ? 'out' : 'in', from: isDate(q.from) ? q.from : null }),
   angsuran: (ctx, r, q) => installmentSchedule(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar', days: q.days }),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
   'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
@@ -209,6 +210,7 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const r = reportQuery(ctx, q);
   const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales' }[p.name]
     || (p.name === 'angsuran' ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
+    || (p.name === 'giro' ? (q.side === 'out' ? 'purchasing' : 'sales') : null)
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
   if (r.mode === 'consolidated') requirePerm(ctx, 'reports', LEVEL.approve);

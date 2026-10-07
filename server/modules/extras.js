@@ -59,6 +59,12 @@ export function notifications(ctx) {
     if (acc) push('ok', `${acc} penawaran diterima pelanggan`, 'Buat pesanan penjualan dari penawaran tersebut.', { view: 'penawaran' });
     const exp = count(`SELECT COUNT(*) n FROM quotations WHERE company_id = ? AND status IN ('disetujui','terkirim') AND valid_until BETWEEN ? AND ?${b.sql}`, ctx.companyId, t, addDays(t, 7), ...b.p);
     if (exp) push('warn', `${exp} penawaran berakhir ≤ 7 hari`, 'Tindak lanjuti pelanggan atau buat revisi.', { view: 'analisis-penawaran' });
+    const g = db.get(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM customer_receipts WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar' AND giro_due <= ?${b.sql}`, ctx.companyId, addDays(t, 3), ...b.p);
+    if (g.n) push('warn', `${g.n} giro masuk jatuh tempo ≤ 3 hari / lewat`, `Total ${fmt(g.v)} — setor kliring & catat "Giro cair".`, { view: 'giro' });
+  }
+  if (can(ctx, 'purchasing', LEVEL.read)) {
+    const g = db.get(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM supplier_payments WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar' AND giro_due <= ?${b.sql}`, ctx.companyId, addDays(t, 3), ...b.p);
+    if (g.n) push('danger', `${g.n} giro keluar efektif ≤ 3 hari`, `Pastikan saldo rekening cukup: ${fmt(g.v)}.`, { view: 'giro' });
   }
   if (can(ctx, 'purchasing', LEVEL.read)) {
     const r = db.get(`SELECT COUNT(*) n, COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0) v FROM purchase_bills WHERE company_id = ? AND status IN ('terbit','sebagian') AND due_date BETWEEN ? AND ?${b.sql}`, ctx.companyId, t, addDays(t, 7), ...b.p);

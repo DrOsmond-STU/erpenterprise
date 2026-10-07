@@ -208,5 +208,45 @@
     if (ev.target.matches('[data-sched-days]')) { (state.schedDays = state.schedDays || {})[ev.target.dataset.schedDays] = Number(ev.target.value); ERP.app.renderView(); }
   });
 
-  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule };
+  /* ======================================================================== */
+  /* Giro mundur                                                               */
+  /* ======================================================================== */
+  const GIRO_STATE = { beredar: ['Belum cair', 'accent'], segera: ['Jatuh tempo ≤ 7 hari', 'warn'], lewat: ['Lewat tanggal efektif', 'danger'], cair: ['Cair', 'ok'], tolak: ['Ditolak / batal', 'danger'] };
+  async function giro(root) {
+    state.giroSide = state.giroSide || (state.me.permissions.sales ? 'in' : 'out');
+    const side = state.giroSide;
+    const table = side === 'in' ? 'customer_receipts' : 'supplier_payments';
+    const to = state.to || state.meta.today;
+    const head = (sub, tools = '') => V().pageHead('Giro Mundur', sub, tools);
+    const tabs = `<div class="segmented" role="group" aria-label="Arah giro"><button data-giro-side="in" aria-pressed="${side === 'in'}">Giro masuk (pelanggan)</button><button data-giro-side="out" aria-pressed="${side === 'out'}">Giro keluar (pemasok)</button></div>`;
+    root.innerHTML = head('') + '<div class="loading-cell">Memuat…</div>';
+    let r;
+    try { r = await api('GET', `/api/reports/giro${qs({ side, to })}`); } catch (e) { root.innerHTML = head('Register bilyet giro / cek mundur.', tabs) + `<p class="pad neg">${esc(e.message)}</p>`; return; }
+    const t = r.totals;
+    const canAct = (state.me.permissions[side === 'in' ? 'sales' : 'purchasing'] || 0) >= 3;
+    root.innerHTML = head(side === 'in'
+      ? 'Giro/cek mundur dari pelanggan: faktur dilunasi saat giro diterima (akun Giro Diterima Belum Cair); kas bertambah saat giro cair; giro ditolak membuka kembali faktur.'
+      : 'Giro/cek mundur ke pemasok: tagihan dilunasi saat giro diserahkan (Giro Diberikan Belum Cair); kas berkurang saat giro cair di bank.', `${tabs}<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
+      `<section class="kpi-grid-erp">
+        ${kpi('Belum cair', esc(FMT.rpCompact(t.open)), `${t.openCount} lembar`)}
+        ${kpi('Efektif ≤ 7 hari', esc(FMT.rpCompact(t.due7)), side === 'in' ? 'setor kliring' : 'siapkan saldo rekening', t.due7 ? 'neg' : '')}
+        ${kpi('Lewat tanggal efektif', esc(FMT.rpCompact(t.overdue)), 'belum dicatat cair/ditolak', t.overdue ? 'neg' : 'pos')}
+        ${kpi('Cair (90 hari)', esc(FMT.rpCompact(t.cleared)), '', 'pos')}
+        ${kpi('Ditolak / batal', esc(FMT.rpCompact(t.bounced)), `${t.bouncedCount} lembar (90 hari)`, t.bouncedCount ? 'neg' : '')}
+      </section>
+      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Giro belum cair cocok dengan saldo akun ${side === 'in' ? '1-1250 Giro Mundur Diterima' : '2-1150 Giro Mundur Diberikan'} (${FMT.rp(r.glBalance)}).` : `Tidak cocok: register ${FMT.rp(t.open)} vs buku besar ${FMT.rp(r.glBalance)}.`)}</div>
+      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Tanggal efektif</th><th>No. giro</th><th>Bank penerbit</th><th>${side === 'in' ? 'Pelanggan' : 'Pemasok'}</th><th>Dokumen</th><th>Diterima/diserahkan</th><th class="ta-r">Nilai</th><th>Status</th><th></th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr class="${x.state === 'lewat' ? 'row-attn' : ''}"><td class="num ${x.state === 'lewat' ? 'neg' : ''}">${esc(ERP.date(x.giro_due))}${x.giro_status === 'beredar' ? `<span class="cell-sub">${x.daysToDue >= 0 ? `${x.daysToDue} hari lagi` : `${-x.daysToDue} hari lewat`}</span>` : x.giro_cleared ? `<span class="cell-sub">${esc(ERP.date(x.giro_cleared))}</span>` : ''}</td>
+          <td class="code">${esc(x.giro_no)}</td><td>${esc(x.giro_bank || '—')}</td><td>${esc(x.party)}</td><td class="code"><button class="link" data-open="${table}:${x.id}">${esc(x.number)}</button></td><td class="num">${esc(ERP.date(x.date))}</td><td class="ta-r">${money(x.amount)}</td>
+          <td><span class="pill" data-tone="${GIRO_STATE[x.state]?.[1] || 'neutral'}"><i class="pill-dot"></i>${esc(GIRO_STATE[x.state]?.[0] || x.state)}</span></td>
+          <td>${x.giro_status === 'beredar' && canAct ? `<button class="btn btn-sm" data-action-run="${table}:${x.id}:giro_clear">Cair</button> <button class="btn btn-sm btn-danger-ghost" data-action-run="${table}:${x.id}:giro_bounce">Ditolak</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Belum ada giro.</td></tr>'}
+      </tbody></table></div></div></article>
+      <p class="field-hint">Terima giro dari faktur (Terima pembayaran → sumber dana "Giro / cek mundur") atau buat Penerimaan dengan cara bayar giro. Giro keluar dibuat dari tagihan (Ajukan pembayaran → giro) dan disetujui penyetuju lain.</p>`;
+  }
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-giro-side]');
+    if (el) { state.giroSide = el.dataset.giroSide; ERP.app.renderView(); }
+  });
+
+  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro };
 })();

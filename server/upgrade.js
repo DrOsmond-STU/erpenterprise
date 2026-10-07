@@ -38,6 +38,8 @@ export function upgrade() {
       for (const d of db.all(`SELECT id FROM "${t}" WHERE status IN ('terbit','sebagian','lunas') AND id NOT IN (SELECT doc_id FROM installments WHERE doc_type = ?)`, t)) syncInstallments(t, d.id);
     }
     db.run("UPDATE customer_receipts SET mode = 'pelunasan' WHERE mode IS NULL");
+    db.run("UPDATE customer_receipts SET method = 'transfer' WHERE method IS NULL");
+    db.run("UPDATE supplier_payments SET method = 'transfer' WHERE method IS NULL");
     db.run("UPDATE supplier_payments SET mode = 'pelunasan' WHERE mode IS NULL");
     db.run('UPDATE customer_receipt_lines SET settled = amount + COALESCE(discount,0) + COALESCE(pph23,0) WHERE settled IS NULL');
     db.run('UPDATE supplier_payment_lines SET settled = amount + COALESCE(discount,0) + COALESCE(pph23,0) WHERE settled IS NULL');

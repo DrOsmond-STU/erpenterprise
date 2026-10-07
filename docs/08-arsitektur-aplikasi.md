@@ -359,3 +359,25 @@ pelanggan/pemasok menampilkan jadwal pembayaran.
 — angsuran terlambat, jatuh tempo 7/30 hari (perkiraan arus kas), dokumen bertahap,
 dan saldo uang muka per mitra. API rincian: `GET /api/settlement/:entitas/:id`,
 `GET /api/advance/customer|supplier/:id`.
+
+## Giro mundur (bilyet giro / cek mundur)
+
+Pelunasan faktur/tagihan dapat memakai **cara bayar "Giro / cek mundur"** (nomor,
+bank penerbit, tanggal efektif). Giro hanya untuk pelunasan dokumen IDR.
+
+| Kejadian | Giro masuk (pelanggan) | Giro keluar (pemasok) |
+| --- | --- | --- |
+| Giro diterima / diserahkan | Dr 1-1250 Giro Mundur Diterima · Cr Piutang — faktur lunas/sebagian, status giro *belum cair* | Dr Hutang · Cr 2-1150 Giro Mundur Diberikan — tagihan lunas/sebagian (pembayaran tetap melalui persetujuan SoD) |
+| Giro cair (≥ tanggal efektif) | Dr Bank (neto biaya kliring), Beban adm. bank · Cr 1-1250 | Dr 2-1150, Beban adm. bank · Cr Bank |
+| Giro ditolak / dibatalkan (sebelum cair) | Jurnal penerimaan dibalik → piutang & angsuran faktur terbuka kembali; opsi **tahan pelanggan** | Jurnal pembayaran dibalik → tagihan terbuka kembali |
+
+Aturan: giro tidak dapat dicairkan sebelum tanggal efektif; giro yang sudah cair
+tidak dapat dibatalkan/ditolak (koreksi dengan transaksi baru); aksi *Giro cair* /
+*Giro ditolak* hanya muncul untuk giro yang belum cair. Pelunasan cepat dari
+faktur/tagihan mendukung sumber dana giro.
+
+**Register Giro Mundur** (`GET /api/reports/giro?side=in|out`): giro belum cair,
+efektif ≤ 7 hari, lewat tanggal efektif, cair & ditolak 90 hari terakhir — saldo
+giro belum cair **direkonsiliasi dengan akun 1-1250 / 2-1150**. Notifikasi: giro
+masuk jatuh tempo ≤ 3 hari (setor kliring) dan giro keluar efektif ≤ 3 hari
+(siapkan saldo).

@@ -756,6 +756,31 @@ async function seedDemo() {
       const r = await run(maker, 'KNM', 'purchase_bills', b4.id, 'pay', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-JKT'], amount: round2(b4.open * 0.4), discount: round2(b4.open * 0.01), pph23: round2(b4.open * 0.02), bank_charge: 6_500, reference: 'Termin 1 cat powder' });
       await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
     }
+    // Giro mundur: masuk dari pelanggan (cair, belum cair, ditolak) & keluar ke pemasok (cair, belum cair).
+    const giroIn = async (cust, date, due, no, bankName, share) => {
+      const inv = openInv(cust);
+      if (!inv) return null;
+      setToday(date);
+      await run(checker, 'KNM', 'sales_invoices', inv.id, 'receive', { date, source: 'giro', bank_account_id: BA['BCA-JKT'], giro_no: no, giro_bank: bankName, giro_due: due, amount: round2(inv.open * share), discount: 0, pph23: 0, bank_charge: 0, reference: `BG ${no}` });
+      return db.get("SELECT id FROM customer_receipts WHERE giro_no = ?", no).id;
+    };
+    const g1 = await giroIn('C003', '2026-09-20', '2026-10-05', 'BG-BNI-552310', 'BNI', 1);
+    if (g1) { setToday('2026-10-05'); await run(checker, 'KNM', 'customer_receipts', g1, 'giro_clear', { date: '2026-10-05', bank_charge: 5_000 }); }
+    await giroIn('C002', '2026-10-01', '2026-10-20', 'BG-MDR-118804', 'Mandiri', 0.5);
+    await giroIn('C001', '2026-10-03', '2026-10-09', 'CEK-BCA-77120', 'BCA', 0.3);
+    const g4 = await giroIn('C008', '2026-09-16', '2026-09-30', 'BG-DNM-009921', 'Danamon', 0.6);
+    if (g4) { setToday('2026-10-01'); await run(checker, 'KNM', 'customer_receipts', g4, 'giro_bounce', { date: '2026-10-01', reason: 'Saldo tidak cukup (tolakan kliring)', hold: 0 }); }
+    const giroOut = async (sup, date, due, no) => {
+      const bl = openBill(sup);
+      if (!bl) return null;
+      setToday(date);
+      const r = await run(maker, 'KNM', 'purchase_bills', bl.id, 'pay', { date, source: 'giro', bank_account_id: BA['BCA-JKT'], giro_no: no, giro_bank: 'BCA', giro_due: due, amount: round2(bl.open), discount: 0, pph23: 0, bank_charge: 0, reference: `BG ${no}` });
+      await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
+      return r.redirect.id;
+    };
+    const o1 = await giroOut('S003', '2026-09-25', '2026-10-02', 'BG-BCA-300101');
+    if (o1) { setToday('2026-10-02'); await run(checker, 'KNM', 'supplier_payments', o1, 'giro_clear', { date: '2026-10-02', bank_charge: 0 }); }
+    await giroOut('S005', '2026-10-04', '2026-10-25', 'BG-BCA-300117');
     const b1 = openBill('S001');
     if (b1) {
       const r = await run(maker, 'KNM', 'purchase_bills', b1.id, 'pay', { date: '2026-10-06', source: 'bank', bank_account_id: BA['BCA-CKR'], amount: round2(b1.open * 0.34), discount: 0, pph23: 0, bank_charge: 0, reference: 'Cicilan 1' });

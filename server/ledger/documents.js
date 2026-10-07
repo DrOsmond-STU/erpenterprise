@@ -314,6 +314,11 @@ function postReceipt(ctx, r) {
       if (cash > avail + 0.005) throw bad(`Saldo uang muka ${cust.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
       if (cash > 0) jl.push({ account_id: acct('customer_advance'), debit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'customer', partner_id: cust.id });
       debitBase += round2(cash);
+    } else if (r.method === 'giro') {
+      // Giro mundur diterima: piutang dilunasi ke "giro diterima belum cair"; kas bertambah saat giro cair.
+      if (!isBaseDoc(r)) throw bad('Giro/cek mundur dicatat dalam IDR.');
+      jl.push({ account_id: acct('giro_receivable'), debit: round2(cash), memo: `Giro ${r.giro_no}${r.giro_bank ? ` (${r.giro_bank})` : ''} jatuh tempo ${r.giro_due}`, partner_type: 'customer', partner_id: cust.id });
+      debitBase += round2(cash);
     } else {
       const b = bank(r.bank_account_id);
       const bankDebit = toBase(cash - charge, r), chargeBase = toBase(charge, r);
@@ -327,8 +332,8 @@ function postReceipt(ctx, r) {
     const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
   }
-  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
-  setStatus('customer_receipts', r.id, 'diposting');
+  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : r.method === 'giro' ? `Giro mundur ${r.giro_no}` : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
+  setStatus('customer_receipts', r.id, 'diposting', r.method === 'giro' && mode === 'pelunasan' ? { giro_status: 'beredar' } : {});
 }
 
 function voidReceipt(ctx, r) {
@@ -336,8 +341,9 @@ function voidReceipt(ctx, r) {
     const avail = advanceBalance('customer', r.customer_id, r.company_id);
     if (avail + 0.005 < r.advance) throw conflict('Uang muka ini sudah dipakai melunasi faktur; batalkan pemakaian uang mukanya terlebih dahulu.');
   } else for (const l of lines('customer_receipt_lines', r.id)) settle('sales_invoices', l.invoice_id, -settledOf(l));
+  if (r.method === 'giro' && r.giro_status === 'cair') throw conflict('Giro sudah cair; koreksi dengan transaksi baru (mis. retur/pengembalian dana).');
   reverseDocumentJournals(ctx, 'customer_receipts', r.id, today(), `Pembatalan penerimaan ${r.number}`);
-  setStatus('customer_receipts', r.id, 'batal');
+  setStatus('customer_receipts', r.id, 'batal', r.method === 'giro' ? { giro_status: 'tolak', giro_cleared: today() } : {});
 }
 
 function postPos(ctx, s) {
@@ -454,6 +460,11 @@ function postPayment(ctx, pay) {
       if (cash > avail + 0.005) throw bad(`Saldo uang muka ke ${sup.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
       if (cash > 0) jl.push({ account_id: acct('supplier_advance'), credit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'supplier', partner_id: sup.id });
       creditBase += round2(cash);
+    } else if (pay.method === 'giro') {
+      // Giro mundur diserahkan: hutang dilunasi ke "giro diberikan belum cair"; kas berkurang saat giro cair.
+      if (!isBaseDoc(pay)) throw bad('Giro/cek mundur dicatat dalam IDR.');
+      jl.push({ account_id: acct('giro_payable'), credit: round2(cash), memo: `Giro ${pay.giro_no} jatuh tempo ${pay.giro_due}`, partner_type: 'supplier', partner_id: sup.id });
+      creditBase += round2(cash);
     } else {
       const b = bank(pay.bank_account_id);
       const cashBase = toBase(cash, pay), chargeBase = toBase(charge, pay);
@@ -466,8 +477,8 @@ function postPayment(ctx, pay) {
     const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
   }
-  postJournal(ctx, { companyId: pay.company_id, branchId: pay.branch_id, date: pay.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : 'Pembayaran'} ${pay.number} — ${sup.name}`, sourceType: 'supplier_payments', sourceId: pay.id, sourceNo: pay.number, lines: jl });
-  setStatus('supplier_payments', pay.id, 'diposting');
+  postJournal(ctx, { companyId: pay.company_id, branchId: pay.branch_id, date: pay.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : pay.method === 'giro' ? `Giro mundur ${pay.giro_no}` : 'Pembayaran'} ${pay.number} — ${sup.name}`, sourceType: 'supplier_payments', sourceId: pay.id, sourceNo: pay.number, lines: jl });
+  setStatus('supplier_payments', pay.id, 'diposting', pay.method === 'giro' && mode === 'pelunasan' ? { giro_status: 'beredar' } : {});
 }
 
 /**
@@ -480,11 +491,15 @@ function quickSettle(ctx, table, doc, p) {
   const settled = round2((p.amount || 0) + (p.discount || 0) + (p.pph23 || 0));
   if (!(settled > 0)) throw bad('Isi jumlah pembayaran.');
   if (settled > open + 0.005) throw bad(`Melebihi sisa ${ar ? 'faktur' : 'tagihan'} (${open.toLocaleString('id-ID')}).`);
-  const useAdv = p.source === 'uang_muka';
+  const useAdv = p.source === 'uang_muka', giro = p.source === 'giro';
   if (!useAdv && !p.bank_account_id) throw bad('Pilih rekening kas/bank.');
+  if (giro && (!p.giro_no || !p.giro_due)) throw bad('Isi nomor dan tanggal efektif giro.');
+  if (giro && p.giro_due < (p.date || today())) throw bad('Tanggal efektif giro tidak boleh sebelum tanggal pembayaran.');
+  if (giro && !isBaseDoc(doc)) throw bad('Giro/cek mundur hanya untuk dokumen IDR.');
   const header = {
     company_id: doc.company_id, branch_id: doc.branch_id, date: p.date || today(), [ar ? 'customer_id' : 'supplier_id']: doc[ar ? 'customer_id' : 'supplier_id'],
-    mode: useAdv ? 'pakai_uang_muka' : 'pelunasan', bank_account_id: useAdv ? null : p.bank_account_id, ...fxCopy(doc), bank_charge: useAdv ? 0 : (p.bank_charge || 0),
+    mode: useAdv ? 'pakai_uang_muka' : 'pelunasan', method: giro ? 'giro' : 'transfer', giro_no: giro ? p.giro_no : null, giro_bank: giro ? p.giro_bank || null : null, giro_due: giro ? p.giro_due : null,
+    bank_account_id: useAdv ? null : p.bank_account_id, ...fxCopy(doc), bank_charge: useAdv || giro ? 0 : (p.bank_charge || 0),
     reference: p.reference || null, total: round2(p.amount || 0), settled, status: 'draf',
   };
   const line = { [ar ? 'invoice_id' : 'bill_id']: doc.id, amount: round2(p.amount || 0), discount: p.discount || 0, pph23: p.pph23 || 0, settled };
@@ -493,10 +508,50 @@ function quickSettle(ctx, table, doc, p) {
   const left = round2(open - settled);
   if (ar) {
     postReceipt(ctx, rec);
-    return { message: `Penerimaan ${number} diposting. ${left > 0.005 ? `Sisa faktur ${left.toLocaleString('id-ID')} tetap terbuka sesuai jadwal angsuran.` : 'Faktur lunas.'}`, audit: { receipt: number } };
+    return { message: `${giro ? `Giro ${p.giro_no} diterima (cair ${p.giro_due})` : 'Penerimaan'} ${number} diposting. ${left > 0.005 ? `Sisa faktur ${left.toLocaleString('id-ID')} tetap terbuka sesuai jadwal angsuran.` : 'Faktur lunas.'}`, audit: { receipt: number } };
   }
   setStatus('supplier_payments', id, 'menunggu');
   return { redirect: { entity: 'supplier_payments', id }, message: `Pembayaran ${number} diajukan — menunggu persetujuan & posting oleh penyetuju lain.${left > 0.005 ? ` Sisa tagihan ${left.toLocaleString('id-ID')}.` : ''}` };
+}
+
+/* --- Giro mundur: cair & ditolak ------------------------------------------------ */
+/** Giro cair (efektif di bank): pindahkan dari akun giro belum cair ke rekening bank. */
+function giroClear(table) {
+  return (ctx, d, p) => {
+    const ar = table === 'customer_receipts';
+    const date = p.date || today();
+    if (date < d.giro_due) throw bad(`Giro ${d.giro_no} baru efektif ${d.giro_due}; belum dapat dicairkan.`);
+    const b = bank(p.bank_account_id || d.bank_account_id);
+    if (b.company_id !== d.company_id) throw bad('Rekening harus milik perusahaan yang sama.');
+    const charge = round2(p.bank_charge || 0);
+    const party = ar ? db.get('SELECT id, name FROM customers WHERE id = ?', d.customer_id) : db.get('SELECT id, name FROM suppliers WHERE id = ?', d.supplier_id);
+    const amount = round2(d.total);
+    const jl = ar
+      ? [{ account_id: b.account_id, branch_id: b.branch_id, debit: round2(amount - charge), memo: `Giro ${d.giro_no} cair` },
+        ...(charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
+        { account_id: acct('giro_receivable'), credit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'customer', partner_id: party.id }]
+      : [{ account_id: acct('giro_payable'), debit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'supplier', partner_id: party.id },
+        ...(charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
+        { account_id: b.account_id, branch_id: b.branch_id, credit: round2(amount + charge), memo: `Giro ${d.giro_no} cair` }];
+    postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date, description: `Giro ${d.giro_no} cair — ${d.number} · ${party.name}`, sourceType: table, sourceId: d.id, sourceNo: d.number, lines: jl });
+    db.update(table, d.id, { giro_status: 'cair', giro_cleared: date, bank_account_id: b.id });
+    return { message: `Giro ${d.giro_no} cair Rp ${amount.toLocaleString('id-ID')} ke ${b.name}.` };
+  };
+}
+
+/** Giro ditolak bank / dibatalkan: pelunasan dibalik, faktur/tagihan terbuka kembali (sesuai angsuran). */
+function giroBounce(table) {
+  return (ctx, d, p) => {
+    const ar = table === 'customer_receipts';
+    const date = p.date || today();
+    const ls = lines(ar ? 'customer_receipt_lines' : 'supplier_payment_lines', d.id);
+    for (const l of ls) settle(ar ? 'sales_invoices' : 'purchase_bills', ar ? l.invoice_id : l.bill_id, -settledOf(l));
+    reverseDocumentJournals(ctx, table, d.id, date, `Giro ${d.giro_no} ditolak/batal: ${p.reason}`.slice(0, 300));
+    db.update(table, d.id, { status: 'batal', giro_status: 'tolak', giro_cleared: date });
+    let held = '';
+    if (ar && p.hold) { db.update('customers', d.customer_id, { status: 'ditahan' }); held = ' Pelanggan ditahan — transaksi baru diblokir sampai dibuka kembali.'; }
+    return { message: `Giro ${d.giro_no} ditolak: ${ls.length} ${ar ? 'faktur' : 'tagihan'} kembali terbuka.${held}`, audit: { reason: p.reason } };
+  };
 }
 
 function voidPayment(ctx, pay) {
@@ -504,8 +559,9 @@ function voidPayment(ctx, pay) {
     const avail = advanceBalance('supplier', pay.supplier_id, pay.company_id);
     if (avail + 0.005 < pay.advance) throw conflict('Uang muka ini sudah dipakai melunasi tagihan; batalkan pemakaian uang mukanya terlebih dahulu.');
   } else for (const l of lines('supplier_payment_lines', pay.id)) settle('purchase_bills', l.bill_id, -settledOf(l));
+  if (pay.method === 'giro' && pay.giro_status === 'cair') throw conflict('Giro sudah cair; koreksi dengan transaksi baru.');
   reverseDocumentJournals(ctx, 'supplier_payments', pay.id, today(), `Pembatalan pembayaran ${pay.number}`);
-  setStatus('supplier_payments', pay.id, 'batal');
+  setStatus('supplier_payments', pay.id, 'batal', pay.method === 'giro' ? { giro_status: 'tolak', giro_cleared: today() } : {});
 }
 
 /* --- Kas & bank ----------------------------------------------------------------- */
@@ -1034,7 +1090,7 @@ export const ACTIONS = {
     void: voidDelivery,
     to_invoice: (ctx, d) => { const r = invoiceFromDeliveries(ctx, [d.id]); return { redirect: { entity: 'sales_invoices', id: r.id }, message: `Faktur ${r.number} dibuat (draf) dari ${d.number}. Terbitkan untuk mengakui piutang.` }; },
   },
-  customer_receipts: { post: postReceipt, void: voidReceipt },
+  customer_receipts: { post: postReceipt, void: voidReceipt, giro_clear: giroClear('customer_receipts'), giro_bounce: giroBounce('customer_receipts') },
   pos_sales: { pay: postPos, void: voidPos },
 
   purchase_requests: {
@@ -1091,7 +1147,7 @@ export const ACTIONS = {
       if (p.mode !== 'uang_muka') needLines(lines('supplier_payment_lines', p.id), 'pembayaran');
       setStatus('supplier_payments', p.id, 'menunggu');
     },
-    post: postPayment, void: voidPayment,
+    post: postPayment, void: voidPayment, giro_clear: giroClear('supplier_payments'), giro_bounce: giroBounce('supplier_payments'),
   },
   stock_adjustments: { post: postAdjustment },
   stock_transfers: { post: postStockTransfer },

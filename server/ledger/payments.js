@@ -116,3 +116,41 @@ export function installmentSchedule(ctx, { companyId, branchId, asOf, side = 'ar
     advances, advanceTotal: round2(advances.reduce((s, a) => s + a.balance, 0)),
   };
 }
+
+/* --- Register giro mundur ------------------------------------------------------- */
+/**
+ * Giro masuk (dari pelanggan) / keluar (ke pemasok): belum cair, cair, ditolak.
+ * Saldo giro belum cair direkonsiliasi dengan akun 1-1250 (masuk) / 2-1150 (keluar).
+ */
+export function giroRegister(ctx, { companyId, branchId, asOf, side = 'in', from = null }) {
+  const t = asOf || today();
+  const incoming = side !== 'out';
+  const table = incoming ? 'customer_receipts' : 'supplier_payments';
+  const party = incoming ? ['customers', 'customer_id'] : ['suppliers', 'supplier_id'];
+  const since = from || addDays(t, -90);
+  const bf = branchId ? ' AND d.branch_id = ?' : '';
+  const rows = db.all(`SELECT d.id, d.number, d.date, d.giro_no, d.giro_bank, d.giro_due, d.giro_status, d.giro_cleared, d.total amount, d.status, p.name party, b.name bank
+    FROM "${table}" d JOIN "${party[0]}" p ON p.id = d."${party[1]}" LEFT JOIN bank_accounts b ON b.id = d.bank_account_id
+    WHERE d.company_id = ? AND d.method = 'giro' AND d.giro_status IS NOT NULL AND d.giro_status <> ''
+      AND (d.giro_status = 'beredar' OR COALESCE(d.giro_cleared, d.date) >= ?)${bf}
+    ORDER BY CASE d.giro_status WHEN 'beredar' THEN 0 ELSE 1 END, d.giro_due, d.number`, companyId, since, ...(branchId ? [branchId] : []));
+  for (const r of rows) {
+    r.daysToDue = Math.round((Date.parse(r.giro_due) - Date.parse(t)) / 864e5);
+    r.state = r.giro_status !== 'beredar' ? r.giro_status : r.daysToDue < 0 ? 'lewat' : r.daysToDue <= 7 ? 'segera' : 'beredar';
+  }
+  const open = rows.filter((r) => r.giro_status === 'beredar');
+  const sumBy = (xs) => round2(xs.reduce((s, r) => s + r.amount, 0));
+  const account = acct(incoming ? 'giro_receivable' : 'giro_payable');
+  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, account).v;
+  const glBalance = round2(incoming ? glRaw : -glRaw);
+  const openAll = branchId ? round2(db.get(`SELECT COALESCE(SUM(total),0) v FROM "${table}" WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar'`, companyId).v) : sumBy(open);
+  return {
+    title: incoming ? 'Register Giro Masuk' : 'Register Giro Keluar', side: incoming ? 'in' : 'out', asOf: t, since,
+    rows,
+    totals: {
+      open: sumBy(open), openCount: open.length, due7: sumBy(open.filter((r) => r.daysToDue >= 0 && r.daysToDue <= 7)), overdue: sumBy(open.filter((r) => r.daysToDue < 0)),
+      cleared: sumBy(rows.filter((r) => r.giro_status === 'cair')), bounced: sumBy(rows.filter((r) => r.giro_status === 'tolak')), bouncedCount: rows.filter((r) => r.giro_status === 'tolak').length,
+    },
+    glBalance, reconciled: Math.abs(glBalance - openAll) < 1,
+  };
+}
