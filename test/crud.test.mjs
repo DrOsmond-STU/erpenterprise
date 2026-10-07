@@ -2,7 +2,7 @@
    (dengan penguncian optimistis), dan hapus — dibangkitkan dari metadata. */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, stop, as } from './helpers.mjs';
+import { start, stop, as, db } from './helpers.mjs';
 
 let admin, meta;
 before(async () => {
@@ -51,6 +51,20 @@ const CUSTOM = {
   project_tasks: async (b) => { b.end_date = b.start_date; },
   fiscal_periods: async (b) => { b.start_date = '2030-01-01'; b.end_date = '2030-01-31'; },
   companies: async (b) => { b.parent_id = null; },
+  currencies: async (b) => { b.code = `Q${String.fromCharCode(65 + (seq % 26))}${String.fromCharCode(65 + ((seq * 7) % 26))}`; },
+  sales_returns: async (b) => {
+    const inv = db.get("SELECT i.id, l.product_id FROM sales_invoices i JOIN sales_invoice_lines l ON l.parent_id = i.id JOIN products p ON p.id = l.product_id WHERE i.status = 'terbit' AND p.kind != 'jasa' AND i.company_id = 1 LIMIT 1");
+    b.sales_invoice_id = inv.id; b.lines = [{ product_id: inv.product_id, qty: 1 }];
+  },
+  purchase_returns: async (b) => {
+    const bill = db.get("SELECT b.id, l.product_id FROM purchase_bills b JOIN purchase_bill_lines l ON l.parent_id = b.id WHERE b.status = 'terbit' AND l.product_id IS NOT NULL AND b.company_id = 1 LIMIT 1");
+    b.purchase_bill_id = bill.id; b.lines = [{ product_id: bill.product_id, qty: 1 }];
+  },
+  product_locations: async (b) => {
+    const bin = db.get("SELECT id, warehouse_id FROM warehouse_bins WHERE company_id = 1 LIMIT 1");
+    b.bin_id = bin.id; b.warehouse_id = bin.warehouse_id;
+    b.product_id = db.get('SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_locations WHERE warehouse_id = ?) LIMIT 1', bin.warehouse_id).id;
+  },
   purchase_bills: async (b) => { b.lines = [{ account_id: (await admin.get('/api/lookup/accounts?f_is_header=0')).body[0].id, qty: 1, price: 1000 }]; },
 };
 
@@ -93,7 +107,8 @@ for (const key of [
   'quotations', 'sales_orders', 'sales_invoices', 'customer_receipts', 'pos_sales', 'suppliers', 'purchase_requests', 'rfqs',
   'purchase_orders', 'purchase_bills', 'supplier_payments', 'stock_adjustments', 'stock_transfers', 'shipments', 'boms', 'work_orders',
   'projects', 'project_tasks', 'employees', 'attendance', 'leave_requests', 'payroll_runs', 'documents', 'workflows', 'compliance_items',
-  'risks', 'security_incidents',
+  'risks', 'security_incidents', 'currencies', 'exchange_rates', 'sales_returns', 'purchase_returns', 'bank_reconciliations', 'pos_shifts',
+  'warehouse_bins', 'product_locations', 'bsc_metrics',
 ]) {
   test(`CRUD ${key}: buat → baca → ubah → konflik versi → hapus`, async () => {
     const e = meta.entities[key];

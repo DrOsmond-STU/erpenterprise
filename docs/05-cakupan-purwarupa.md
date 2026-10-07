@@ -147,16 +147,21 @@ mencoba.
 - **Pengaturan**: formulir konfigurasi perusahaan & tampilan
 - **Sistem Desain**: galeri token warna, tipografi, spasi, dan komponen
 
-## Dirancang, belum dibuat layarnya
+## Dirancang, belum dibuat layarnya (purwarupa) — kini tersedia di aplikasi
 
-Butir-butir ini ada di arsitektur informasi dan alur, tetapi belum punya layar
-di purwarupa:
+Seluruh butir yang dahulu belum memiliki layar di purwarupa sekarang berjalan
+penuh di aplikasi (`server/` + `web/`):
 
-- Laporan keuangan (neraca, laba rugi, arus kas)
-- Bill of Materials dan perencanaan kebutuhan bahan
-- Manajemen gudang tingkat lokasi rak
-- Multi-mata uang dan penjabaran kurs
-- Portal pelanggan dan pemasok
+| Butir | Di aplikasi |
+| --- | --- |
+| Laporan keuangan (neraca, laba rugi, arus kas) | Laporan Keuangan — per perusahaan, per cabang, konsolidasi |
+| Bill of Materials dan perencanaan kebutuhan bahan | Data Master → BOM; Produksi → Perencanaan Bahan (MRP) |
+| Manajemen gudang tingkat lokasi rak | Inventaris → Lokasi Rak & Penempatan Barang |
+| Multi-mata uang dan penjabaran kurs | Keuangan → Mata Uang & Kurs Valuta; dokumen valas + laba/rugi selisih kurs |
+| Portal pelanggan dan pemasok | Akun portal terpisah (faktur, pesanan, pembayaran, kartu piutang/hutang) |
+| AI Copilot (dasbor) | Asisten data — tanya-jawab dari buku besar tanpa layanan AI eksternal |
+| Analitik & Balanced Scorecard | Analitik → BI & Analitik, Balanced Scorecard, Sasaran BSC |
+| Aksi massal, ekspor, cetak | Aksi massal di register, ekspor CSV, cetak dokumen bersertifikat terbilang |
 
 ## Batas yang disengaja
 

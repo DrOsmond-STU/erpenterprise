@@ -22,12 +22,13 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 
 | Area | Isi |
 | --- | --- |
-| CRUD | 46 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
+| CRUD | 55 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
 | Integrasi buku besar | Faktur, penerimaan, POS, tagihan, pembayaran, kas/bank, transfer, stok (penyesuaian/transfer), produksi (BOM), penggajian, aset (perolehan, penyusutan, pelepasan), pemeliharaan, jurnal manual — semuanya diposting otomatis, pembatalan memakai jurnal pembalik |
 | Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Dasbor |
 | Cabang & konsolidasi | Laporan berkolom per cabang (RAK otomatis menjaga neraca tiap cabang seimbang) dan konsolidasi grup dengan eliminasi antar perusahaan, eliminasi investasi, goodwill, dan kepentingan non-pengendali |
+| Fitur lanjutan | Multi-mata uang & selisih kurs, retur penjualan/pembelian, rekonsiliasi bank, shift kasir, lokasi rak, tutup buku tahunan, MRP, analitik & Balanced Scorecard, asisten data, notifikasi, pencarian global, lampiran terenkripsi, impor CSV, cetak dokumen (terbilang), aksi massal, widget dasbor, portal pelanggan & pemasok |
 | Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
-| Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 17 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
+| Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 18 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
 
 ## Struktur repositori
 
@@ -60,6 +61,6 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 ## Pengujian
 
 ```bash
-npm test           # 86 uji: keamanan, RBAC, SoD, posting, rekonsiliasi, laporan, konsolidasi, CRUD semua entitas
-npm install && npm run test:e2e   # Playwright: semua menu × tema terang/gelap + alur transaksi + layar 390 px
+npm test           # 111 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, CRUD 55 entitas
+npm install && npm run test:e2e   # Playwright: 78 menu × tema terang/gelap, alur transaksi & fitur lanjutan, portal, peran terbatas, layar 390 px
 ```

@@ -61,9 +61,34 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 3. Periksa **Neraca Saldo** (seimbang), **Umur Piutang/Hutang** dan **Valuasi
    Persediaan** (cocok dengan buku besar — indikator hijau).
 4. Rekonsiliasi bank terhadap **Buku Besar** akun kas/bank.
-5. **Keuangan → Periode Fiskal → Tutup periode**. Periode tertutup menolak
+5. **Keuangan → Rekonsiliasi Bank**: buat rekonsiliasi per rekening dengan saldo
+   rekening koran, centang mutasi, lalu *Selesaikan* (oleh penyetuju lain).
+6. **Keuangan → Periode Fiskal → Tutup periode**. Periode tertutup menolak
    posting baru; membuka kembali memerlukan hak admin penuh dan tercatat di
    jejak audit.
+
+## Tutup buku tahunan
+
+1. Pastikan seluruh periode Januari–Desember sudah direkonsiliasi dan disetujui.
+2. Buat/buka periode fiskal Desember (masih terbuka), jalankan aksi
+   **Tutup buku tahunan** — saldo akun laba rugi setiap cabang dipindahkan ke
+   *Saldo Laba* dengan jurnal penutup tertanggal 31 Desember.
+3. Tutup periode Desember. Tutup buku tidak dapat dijalankan dua kali untuk
+   tahun yang sama; koreksi dilakukan dengan membalik jurnal penutup.
+
+## Mata uang asing
+
+* Perbarui **Keuangan → Kurs Valuta** (mis. kurs tengah BI) secara berkala, atau
+  impor lewat CSV. Dokumen valas memakai kurs terakhir ≤ tanggal dokumen.
+* Rekening valas tetap dicatat dalam IDR di buku besar; laba/rugi selisih kurs
+  terbentuk otomatis saat pelunasan.
+
+## Portal pelanggan & pemasok
+
+Buat pengguna dengan peran *Portal Pelanggan* / *Portal Pemasok*, batasi ke
+perusahaan terkait, dan isi *Akun portal pelanggan/pemasok*. Pengguna portal
+hanya melihat dokumen terbit milik mitra tersebut. Wajibkan MFA bila memungkinkan
+dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 
 ## Pemantauan & respons insiden
 
@@ -79,6 +104,6 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 ## Pengujian
 
 ```bash
-npm test            # 86 uji integrasi API (keamanan, RBAC, posting, laporan, CRUD semua entitas)
-npm run test:e2e    # uji peramban: seluruh menu × 2 tema + alur transaksi (perlu Playwright)
+npm test            # 111 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, CRUD 55 entitas)
+npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```

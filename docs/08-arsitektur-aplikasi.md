@@ -151,3 +151,42 @@ Stok keluar melebihi saldo ditolak.
 | `GET/PUT /api/roles/:id/permissions`, `/api/settings/:kunci` | Administrasi |
 | `GET /api/audit`, `/api/audit/verify`, `/api/security/overview` | Audit & pemantauan |
 | `POST /api/admin/backup`, `GET /api/admin/backups` | Cadangan terenkripsi |
+
+## Fitur lanjutan (fase 2)
+
+| Fitur | Ringkasan | Lokasi kode |
+| --- | --- | --- |
+| **Multi-mata uang** | Master mata uang (IDR dasar) & kurs harian. Penawaran, SO, faktur, PO, tagihan, penerimaan, dan pembayaran dapat dalam valas; kurs terisi otomatis dari kurs terakhir ≤ tanggal dokumen (dapat ditimpa). Buku besar selalu IDR; pelunasan dengan kurs berbeda membukukan **laba/rugi selisih kurs terealisasi** (7-1200 / 7-2300). Sub-buku piutang/hutang dinilai pada kurs historis sehingga tetap cocok dengan buku besar. | `hooks.applyFx`, `documents.js` |
+| **Retur penjualan / pembelian** | Mengacu faktur/tagihan asal; harga, PPN, dan kurs diambil dari dokumen asal; qty retur kumulatif tidak boleh melebihi qty asal. Retur penjualan: Dr Retur & PPN keluaran / Cr Piutang; stok masuk pada HPP asal (Dr Persediaan / Cr HPP). Retur pembelian: Dr Hutang / Cr Persediaan (biaya rata-rata) & PPN masukan; selisih harga ke akun selisih persediaan. Nilai retur mengurangi sisa tagihan dokumen asal. | `documents.js` |
+| **Rekonsiliasi bank** | Mutasi buku besar rekening dicentang terhadap rekening koran; selisih harus nol, penyelesaian memakai pemisahan tugas, dan baris yang sudah direkonsiliasi terkunci. | `extras.reconDetail`, `documents.finalizeRecon` |
+| **Shift kasir** | Modal awal → penjualan tunai shift → kas dihitung; selisih otomatis dijurnal ke *Beban Selisih Kas Kasir*. Satu laci hanya satu shift terbuka. | `documents.closeShift` |
+| **Lokasi rak** | Lokasi rak per gudang dan penempatan default barang. | entitas `warehouse_bins`, `product_locations` |
+| **Tutup buku tahunan** | Aksi pada periode fiskal: saldo akun laba rugi per cabang dipindahkan ke Saldo Laba (jurnal penutup 31 Des), tidak dapat diulang. | `documents.closeYear` |
+| **MRP** | Kebutuhan (SO terbuka + komponen WO + stok pengaman) vs pasokan (stok + PO/PR + produksi berjalan), eksplosi BOM satu tingkat, saran beli/produksi, pembuatan PR langsung. | `extras.mrp` |
+| **Analitik & BSC** | Analitik lintas modul (kategori, segmen, produk, beban, pemasok, umur piutang, persediaan, pipeline, SDM). Balanced Scorecard 4 perspektif dengan 15 sumber ukuran otomatis + input manual. | `extras.analytics`, `extras.balancedScorecard` |
+| **Asisten data** | Tanya-jawab bahasa Indonesia (pendapatan, laba, kas, piutang, hutang, stok, persetujuan, status dokumen) yang dihitung dari buku besar dan menghormati izin. Tidak ada data yang dikirim ke layanan AI pihak ketiga. | `extras.assistant` |
+| **Notifikasi & pencarian global** | Notifikasi kontekstual (persetujuan, jatuh tempo, stok, dokumen kedaluwarsa, kepatuhan, insiden, sandi/MFA) dan pencarian lintas dokumen di palet perintah. | `extras.notifications`, `extras.search` |
+| **Lampiran** | PDF/gambar/Excel/Word/CSV/TXT ≤ 5 MB per rekaman; tipe diverifikasi dari isi (magic bytes), disimpan terenkripsi AES-256-GCM + SHA-256, unduh/hapus teraudit. | `extras.*Attachment` |
+| **Impor CSV** | Data induk (produk, pelanggan, pemasok, karyawan, akun, kurs, dll.) melalui validasi yang sama dengan formulir; rujukan dapat berupa kode/nama; laporan galat per baris. | `extras.importRows` |
+| **Cetak dokumen** | Pratinjau cetak A4 (faktur, PO, kuitansi, nota retur, bukti jurnal/kas, slip gaji, laporan) dengan kop perusahaan, terbilang rupiah, dan kolom tanda tangan; simpan sebagai PDF dari peramban. | `web/assets/erp-more.js` |
+| **Portal pelanggan/pemasok** | Akun eksternal (peran PORTAL_*) yang terikat ke satu pelanggan/pemasok: ringkasan, dokumen (tanpa draf), cetak, kartu piutang/hutang, keamanan akun. Tidak ada akses ke API internal. | `extras.portal*` |
+| **Widget dasbor** | Tata letak & visibilitas widget disimpan per pengguna di server. | `extras.getPref/setPref` |
+| **Migrasi aditif** | Kolom baru ditambahkan otomatis ke tabel lama; akun, mata uang, dan peran baru disisipkan idempoten saat start. | `schema.migrate`, `upgrade.js` |
+
+### Tambahan matriks posting
+
+| Dokumen / aksi | Debit | Kredit |
+| --- | --- | --- |
+| Penerimaan / pembayaran valas | Bank (kurs bayar) · Rugi selisih kurs | Piutang/Hutang (kurs faktur) · Laba selisih kurs |
+| Retur penjualan | Retur penjualan, PPN keluaran; Persediaan | Piutang; HPP |
+| Retur pembelian | Hutang | Persediaan, PPN masukan, selisih harga |
+| Tutup shift kasir | Selisih kas (kurang) / Kas (lebih) | Kas / Selisih kas |
+| Tutup buku tahunan | Akun pendapatan (saldo) · Saldo laba (bila rugi) | Akun beban (saldo) · Saldo laba (bila laba) |
+
+### API tambahan
+
+`/api/notifications`, `/api/search`, `/api/analytics`, `/api/bsc`, `POST /api/assistant`,
+`/api/mrp`, `POST /api/mrp/request`, `POST /api/import/:entitas`,
+`/api/attachments/:entitas/:id` (GET/POST), `/api/attachment/:id` (GET/DELETE),
+`/api/prefs/:kunci`, `/api/bank-recon/:id` (+ `PUT …/items`), `/api/fx-rate`,
+`/api/reports/pajak`, `/api/reports/kartu-mitra`, `/api/portal/*`.
