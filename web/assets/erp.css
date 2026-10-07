@@ -1,0 +1,148 @@
+/* ==========================================================================
+   ERP Enterprise — gaya tambahan aplikasi (di atas tokens.css + app.css
+   dari sistem desain purwarupa). Seluruh warna memakai token sehingga
+   tema terang/gelap tetap konsisten.
+   ========================================================================== */
+
+/* --- Layar autentikasi ------------------------------------------------------- */
+.auth-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; background: var(--canvas); }
+.auth-art {
+  background: linear-gradient(145deg, #101a2e 0%, var(--brand-600) 58%, var(--teal-500) 100%);
+  color: #fff; display: flex; align-items: center; justify-content: center; padding: var(--sp-8);
+}
+.auth-art-inner { max-width: 420px; display: flex; flex-direction: column; gap: var(--sp-4); }
+.auth-art h2 { font-size: 1.75rem; letter-spacing: -0.02em; margin: 0; }
+.auth-art p { opacity: .85; margin: 0; line-height: 1.55; }
+.auth-art ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.auth-art li { display: flex; gap: var(--sp-2); align-items: center; opacity: .92; font-size: var(--fs-lead); }
+.auth-art .rail-mark { width: 44px; height: 44px; }
+.auth-panel { display: flex; align-items: center; justify-content: center; padding: var(--sp-6) var(--sp-4); }
+.auth-card {
+  width: min(400px, 100%); display: flex; flex-direction: column; gap: var(--sp-3);
+  background: var(--surface); border: 1px solid var(--line-faint); border-radius: var(--r-lg);
+  box-shadow: 0 8px 32px rgba(16,26,46,.08); padding: var(--sp-6);
+}
+.auth-card h1 { font-size: var(--fs-h1); margin: 0; letter-spacing: -0.01em; }
+.auth-card p { margin: 0; }
+.auth-foot { font-size: var(--fs-cap); color: var(--ink-4); text-align: center; }
+.btn-block { width: 100%; justify-content: center; }
+.otp { letter-spacing: .4em; font-size: var(--fs-h3); text-align: center; }
+@media (max-width: 840px) { .auth-shell { grid-template-columns: 1fr; } .auth-art { display: none; } }
+
+/* --- Pemberitahuan sebaris ---------------------------------------------------- */
+.notice {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); margin: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+.auth-card .notice, .section .notice { margin: 0; }
+.notice svg { flex: 0 0 auto; margin-top: 1px; }
+.notice[data-tone="ok"] { color: var(--ok); background: var(--ok-soft); border-color: var(--ok-line); }
+.notice[data-tone="warn"] { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-line); }
+.notice[data-tone="danger"] { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
+.notice[data-tone="info"] { color: var(--info); background: var(--info-soft); border-color: var(--info-line); }
+
+/* --- Konteks ---------------------------------------------------------------- */
+.contextbar { gap: var(--sp-4); align-items: center; padding-block: 6px; flex-wrap: nowrap; }
+.ctx-field { display: flex; flex-direction: column; gap: 2px; justify-content: center; min-width: 0; }
+.ctx-select { height: 28px; padding-block: 0; font-weight: 600; min-width: 180px; max-width: 280px; }
+.ctx-range { display: inline-flex; align-items: center; gap: 4px; }
+.ctx-range .input { height: 28px; width: 140px; }
+.ctx-inline { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--ink-3); }
+.ctx-inline .input, .ctx-inline .select { height: 30px; }
+
+/* --- Overlay ------------------------------------------------------------------ */
+.drawer-wide { width: min(760px, 100vw); }
+.drawer-head-text, .modal-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.drawer-foot { flex-wrap: wrap; }
+.modal-wide { width: min(1080px, calc(100vw - 32px)); }
+.scrim-clear { background: transparent; }
+.form-error { color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger-line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); }
+.req { color: var(--danger); }
+.check-inline { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); cursor: pointer; }
+.check-inline input { accent-color: var(--accent); width: 15px; height: 15px; }
+.pill-xs { padding: 0 4px; }
+.pill-xs svg { width: 11px; height: 11px; }
+.btn-danger-ghost { color: var(--danger); }
+.btn-danger-ghost:hover { background: var(--danger-soft); border-color: var(--danger-line); }
+.link { border: 0; background: none; padding: 0; color: var(--accent-ink); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pad { padding: var(--sp-3) var(--sp-4); }
+.loading-cell { padding: var(--sp-5); color: var(--ink-3); text-align: center; font-size: var(--fs-sm); }
+.palette-list { max-height: 50vh; overflow: auto; margin-top: var(--sp-2); }
+.steps { margin: 0 0 var(--sp-2); padding-left: 1.2em; font-size: var(--fs-sm); }
+.secret { font-size: var(--fs-h3); letter-spacing: .08em; padding: var(--sp-2) var(--sp-3); background: var(--surface-inset); border-radius: var(--r-sm); word-break: break-all; }
+.audit-detail { max-width: 420px; font-family: var(--font-num); font-size: var(--fs-cap); color: var(--ink-3); word-break: break-all; }
+
+/* --- Editor baris dokumen ----------------------------------------------------- */
+.lines-edit .table td { padding: 4px 6px; vertical-align: middle; }
+.lines-edit .input, .lines-edit .select { height: 30px; min-width: 90px; }
+.lines-edit .select { min-width: 200px; }
+.lines-edit .textarea { min-height: 30px; }
+.lines-edit output { display: inline-block; min-width: 90px; text-align: right; font-weight: 600; }
+.col-no { width: 32px; text-align: center; }
+.lines-actions { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.lines-actions .field-hint b { color: var(--ink); }
+
+/* --- KPI ------------------------------------------------------------------------ */
+.kpi-grid-erp { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: var(--sp-3); }
+.kpi-tile .kpi-value { font-family: var(--font-num); font-size: var(--fs-metric); font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi-tile .kpi-label { font-size: var(--fs-cap); color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.kpi-tile .kpi-foot { font-size: var(--fs-cap); color: var(--ink-3); }
+.approval-amount { font-size: var(--fs-h3); font-weight: 650; }
+
+/* --- Laporan keuangan -------------------------------------------------------- */
+.report-toolbar { flex-wrap: wrap; row-gap: var(--sp-2); }
+.report-head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--sp-4) var(--sp-4) var(--sp-2); text-align: center; font-size: var(--fs-sm); }
+.report-head b { font-size: var(--fs-h3); }
+.report-table td, .report-table th { white-space: nowrap; }
+.report-table td:first-child { white-space: normal; min-width: 260px; }
+.report-table tbody tr[data-gl], .report-table tbody tr[data-open] { cursor: pointer; }
+.row-section td { background: var(--surface-inset); font-weight: 700; text-transform: uppercase; font-size: var(--fs-cap); letter-spacing: .04em; color: var(--ink-2); }
+.row-header td { font-weight: 650; }
+.row-extra td { font-style: italic; }
+.row-sub td { font-weight: 650; border-top: 1px solid var(--line-strong); background: var(--surface-2); }
+.row-total td { font-weight: 700; border-top: 1px solid var(--line-strong); background: var(--surface-2); }
+.row-grand td { font-weight: 750; border-top: 2px solid var(--ink-3); border-bottom: 3px double var(--ink-3); background: var(--accent-soft); }
+.indent-0 { padding-left: var(--sp-3) !important; }
+.indent-1 { padding-left: calc(var(--sp-3) + 16px) !important; }
+.indent-2 { padding-left: calc(var(--sp-3) + 32px) !important; }
+.indent-3 { padding-left: calc(var(--sp-3) + 48px) !important; }
+.indent-4 { padding-left: calc(var(--sp-3) + 64px) !important; }
+.col-elim { background: color-mix(in srgb, var(--warn-soft) 55%, transparent); }
+.col-total { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); font-weight: 650; }
+details.pad summary { cursor: pointer; font-size: var(--fs-sm); color: var(--accent-ink); margin-bottom: var(--sp-2); }
+
+/* --- Kanban & POS -------------------------------------------------------------- */
+.board-erp { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.board-erp .board-col-body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-2); min-height: 80px; }
+.board-erp .board-card { cursor: pointer; }
+.board-erp .board-card[draggable="true"] { cursor: grab; }
+.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--sp-2); padding: var(--sp-3); }
+.pos-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.pos-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.pos-form { display: grid; grid-template-columns: 1fr; gap: var(--sp-2); padding: 0 var(--sp-4) var(--sp-3); }
+.pos-foot { justify-content: flex-end; }
+.pos-foot .totals { width: 100%; }
+.input-qty { width: 72px; height: 28px; }
+.select-sm { height: 28px; padding-block: 0; font-size: var(--fs-cap); min-width: 130px; }
+.matrix td { padding: 4px 6px; }
+
+/* --- Responsif ---------------------------------------------------------------- */
+@media (max-width: 820px) {
+  .contextbar { flex-wrap: wrap; padding: var(--sp-2) var(--sp-3); }
+  .ctx-select { min-width: 0; max-width: 100%; width: 100%; }
+  .ctx-field { flex: 1 1 140px; }
+  .drawer-wide { width: 100vw; }
+}
+
+/* --- Cetak -------------------------------------------------------------------- */
+@media print {
+  .rail, .topbar, .contextbar, .page-actions, .toolbar, .card-foot, .drawer-foot, .toasts, .scrim, .ctx-actions, .report-toolbar, .notice svg { display: none !important; }
+  .app { display: block !important; }
+  .content { padding: 0 !important; background: #fff !important; }
+  .card, .report-card { box-shadow: none !important; border: 0 !important; }
+  .drawer { position: static !important; width: 100% !important; box-shadow: none !important; transform: none !important; }
+  .table-scroll { overflow: visible !important; }
+  .row-grand td, .row-total td, .row-sub td, .row-section td, .col-elim, .col-total { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
