@@ -276,3 +276,46 @@ menang (jumlah & nilai), konversi ke SO, rata-rata waktu tanggapan pelanggan,
 margin rata-rata, kinerja tenaga penjual, alasan kalah, dan penawaran yang
 berakhir ≤ 7 hari. Notifikasi: penawaran diterima (perlu dibuatkan SO) dan
 penawaran yang segera berakhir.
+
+## Surat jalan (delivery order) & pengakuan piutang
+
+Pesanan penjualan dapat dikirim dengan **surat jalan (DO)** — penuh atau beberapa
+kali sebagian — lalu ditagih dengan faktur yang memuat **satu atau beberapa** surat
+jalan. **Piutang selalu diakui saat faktur diterbitkan**, bukan saat barang dikirim.
+
+| Kejadian | Debit | Kredit | Stok |
+| --- | --- | --- | --- |
+| Surat jalan dikirim | 1-1350 Persediaan Terkirim Belum Difakturkan (nilai pokok rata-rata) | Persediaan barang | keluar dari gudang DO |
+| Faktur dari DO diterbitkan | Piutang usaha; HPP (nilai pokok DO) | Pendapatan, PPN keluaran; 1-1350 | tidak berubah |
+| Faktur dari DO dibatalkan | (jurnal balik) | | tidak berubah — DO kembali *dikirim* |
+| Surat jalan dibatalkan (belum difakturkan) | (jurnal balik) | | kembali ke gudang |
+
+Skenario yang didukung:
+
+1. **SO penuh → DO sebagian berkali-kali → satu faktur dari beberapa DO.**
+   SO → *Buat surat jalan* (mode "isi manual") → isi qty kirim → *Kirim & posting
+   stok*; ulangi untuk sisa. Lalu **Faktur dari surat jalan** → pilih pelanggan →
+   centang DO-DO tersebut → *Buat faktur*.
+2. **SO penuh → DO penuh → faktur dari satu DO.** SO → *Buat surat jalan* (mode
+   "seluruh sisa") → kirim → di DO pilih *Buat faktur dari surat jalan ini*.
+3. **Beberapa SO dikirim penuh → satu faktur gabungan.** Setiap SO dibuatkan DO
+   penuh; faktur gabungan memilih DO dari beberapa SO pelanggan yang sama.
+
+Aturan & kontrol:
+
+* Qty DO ≤ sisa pesanan (memperhitungkan DO draf/terkirim lain); barang harus ada
+  di SO; harga & diskon diambil dari SO.
+* Faktur gabungan: pelanggan, perusahaan, mata uang, dan tarif PPN harus sama;
+  hanya DO berstatus *dikirim* yang belum masuk faktur lain; setiap DO diperiksa
+  cakupan perusahaan/cabang pengguna. Faktur draf mengunci DO (tidak dapat
+  ditagih dua kali); baris faktur dari DO tidak dapat diubah; menghapus draf
+  melepas DO.
+* Status SO: *disetujui → dikirim sebagian → terkirim* (penuh, belum seluruhnya
+  difakturkan) *→ selesai*. Faktur langsung dari SO (tanpa DO) tetap tersedia bila
+  SO belum memiliki DO.
+* Retur penjualan dari faktur DO memakai nilai pokok DO.
+* **Pemenuhan Pesanan** (`GET /api/reports/pemenuhan`): pesanan terbuka per baris
+  (dipesan/terkirim/difakturkan/sisa, keterlambatan) dan DO belum difakturkan
+  (umur, nilai jual, nilai pokok) yang **direkonsiliasi dengan saldo akun 1-1350**.
+* API: `GET /api/deliveries/uninvoiced?customer=`, `POST /api/deliveries/invoice`
+  `{ delivery_ids: [...], date }`.

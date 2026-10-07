@@ -11,6 +11,8 @@ import { getSetting, setSetting, securityPolicy, accountMap, approvalPolicy, cle
 import { clearAccountCache } from './ledger/posting.js';
 import { copyBudgets } from './ledger/budget.js';
 import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
+import { invoiceFromDeliveries } from './ledger/documents.js';
+import { fulfillmentReport } from './ledger/fulfillment.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -194,6 +196,7 @@ const REPORTS = {
   proyek: (ctx, r) => reports.projectSummary(ctx, r),
   'proyek-detail': (ctx, r, q) => reports.projectDetail(ctx, { ...r, projectId: Number(q.project) }),
   penawaran: (ctx, r) => quotationReport(ctx, r),
+  pemenuhan: (ctx, r) => fulfillmentReport(ctx, r),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
   'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
 };
@@ -202,7 +205,7 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales' }[p.name]
+  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales' }[p.name]
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
   if (r.mode === 'consolidated') requirePerm(ctx, 'reports', LEVEL.approve);
@@ -220,6 +223,28 @@ route('POST', '/api/budgets/copy', (ctx, body, _p, q) => {
   const res = copyBudgets(ctx, { companyId: ctx.companyId, branchIds, fromYear, toYear, adjustPct: Number(body.adjustPct) || 0, basis: body.basis === 'realisasi' ? 'realisasi' : 'anggaran' });
   audit.log(ctx, 'budgets.copy', { entity: 'budgets', companyId: ctx.companyId, branchId: ctx.branchId, detail: { fromYear, toYear, adjustPct: Number(body.adjustPct) || 0, basis: body.basis, ...res } });
   return res;
+});
+
+/* --- Surat jalan → faktur ------------------------------------------------------------ */
+/* Surat jalan terkirim yang belum difakturkan (untuk faktur gabungan), dibatasi cakupan perusahaan/cabang. */
+route('GET', '/api/deliveries/uninvoiced', (ctx, _b, _p, q) => {
+  scoped(ctx, q);
+  requirePerm(ctx, 'sales', LEVEL.read);
+  const where = ["d.company_id = ?", "d.status = 'dikirim'", 'd.invoice_id IS NULL'], params = [ctx.companyId];
+  if (ctx.branchId) { where.push('d.branch_id = ?'); params.push(ctx.branchId); }
+  if (q.customer) { where.push('d.customer_id = ?'); params.push(Number(q.customer)); }
+  return db.all(`SELECT d.id, d.number, d.date, d.value, d.customer_id, c.name customer, so.number so_number, so.currency_id, so.tax_rate, w.name warehouse
+    FROM delivery_orders d JOIN customers c ON c.id = d.customer_id JOIN sales_orders so ON so.id = d.sales_order_id JOIN warehouses w ON w.id = d.warehouse_id
+    WHERE ${where.join(' AND ')} ORDER BY c.name, d.date, d.number LIMIT 500`, ...params);
+});
+/* Faktur dari satu/beberapa surat jalan — setiap surat jalan diperiksa cakupannya (anti-IDOR). */
+route('POST', '/api/deliveries/invoice', (ctx, body, _p, q) => {
+  scoped(ctx, q);
+  requirePerm(ctx, 'sales', LEVEL.write);
+  const ids = Array.isArray(body.delivery_ids) ? body.delivery_ids.slice(0, 50) : [];
+  for (const id of ids) crud.read(ctx, 'delivery_orders', id);
+  if (body.date !== undefined && body.date !== null && body.date !== '' && !isDate(body.date)) throw bad('Tanggal faktur tidak valid.');
+  return db.tx(() => invoiceFromDeliveries(ctx, ids, { date: body.date || null }));
 });
 
 route('GET', '/api/dashboard', (ctx, _b, _p, q) => {

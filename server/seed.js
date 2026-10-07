@@ -14,6 +14,7 @@ import { setSetting } from './lib/settings.js';
 import { nowIso, setToday, round2, monthEnd } from './lib/util.js';
 import { COMPANIES, BRANCHES, PRODUCTS, BOMS } from './seed-master.js';
 import { upgrade } from './upgrade.js';
+import { invoiceFromDeliveries } from './ledger/documents.js';
 import { DEFAULT_SECURITY_POLICY } from './config.js';
 
 export const DEMO_PASSWORD = 'Erp#Demo2026!';
@@ -256,10 +257,43 @@ async function seedDemo() {
     return { qid, so: r.redirect.id };
   };
 
+  const addDays = (date, n) => { const x = new Date(date + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  /** SO dari penawaran diterima, diajukan & disetujui. */
+  const approvedSo = async (co, br, wh, cust, lines, date) => {
+    const { so } = await quote(maker, co, br, cust, lines, date, { wh });
+    await run(maker, co, 'sales_orders', so, 'submit');
+    if (db.get('SELECT status FROM sales_orders WHERE id = ?', so).status === 'menunggu') await run(checker, co, 'sales_orders', so, 'approve');
+    return so;
+  };
+  /** Surat jalan dari sisa SO (share < 1 = kirim sebagian), lalu kirim & posting stok. */
+  const deliver = async (co, so, date, share = 1) => {
+    setToday(date);
+    const doId = (await run(maker, co, 'sales_orders', so, 'to_delivery', { date, mode: 'sisa' })).redirect.id;
+    if (share < 1) {
+      const ls = db.all('SELECT product_id, qty FROM delivery_order_lines WHERE parent_id = ? ORDER BY line_no', doId);
+      await crud.update(at(maker, co), 'delivery_orders', doId, { lines: ls.map((l) => ({ product_id: l.product_id, qty: Math.max(1, Math.floor(l.qty * share)) })) });
+    }
+    await run(maker, co, 'delivery_orders', doId, 'ship');
+    return doId;
+  };
+
   const invoice = async (co, br, wh, cust, lines, date, viaSO = false) => {
     setToday(date);
     let invId;
-    if (viaSO) {
+    if (viaSO === 'do' || viaSO === 'do-partial') {
+      // SO penuh → surat jalan (penuh, atau dua kali kirim sebagian) → faktur dari surat jalan.
+      const so = await approvedSo(co, br, wh, cust, lines, date);
+      if (viaSO === 'do') {
+        const doId = await deliver(co, so, date);
+        invId = (await run(maker, co, 'delivery_orders', doId, 'to_invoice')).redirect.id;
+      } else {
+        const d1 = await deliver(co, so, date, 0.6);
+        const date2 = addDays(date, 3);
+        const d2 = await deliver(co, so, date2);
+        setToday(date2);
+        invId = db.tx(() => invoiceFromDeliveries(at(maker, co), [d1, d2], { date: date2 })).id;
+      }
+    } else if (viaSO) {
       const { so } = await quote(maker, co, br, cust, lines, date, { wh });
       await run(maker, co, 'sales_orders', so, 'submit');
       if (db.get('SELECT status FROM sales_orders WHERE id = ?', so).status === 'menunggu') await run(checker, co, 'sales_orders', so, 'approve');
@@ -379,13 +413,13 @@ async function seedDemo() {
     }
 
     // Penjualan Jakarta
-    await invoice('KNM', 'JKT', 'WH-JKT', 'C001', [tradeLine('FG-101', rint(45, 55)), tradeLine('FG-102', rint(40, 50)), tradeLine('SV-301', rint(30, 50))], d(m, 11), true);
+    await invoice('KNM', 'JKT', 'WH-JKT', 'C001', [tradeLine('FG-101', rint(45, 55)), tradeLine('FG-102', rint(40, 50)), tradeLine('SV-301', rint(30, 50))], d(m, 11), ['do-partial', 'do', true][m % 3]);
     await invoice('KNM', 'JKT', 'WH-JKT', 'C002', [tradeLine('FG-101', rint(30, 40)), tradeLine('FG-103', rint(600, 700))], d(m, 13), m % 2 === 0);
     await invoice('KNM', 'JKT', 'WH-JKT', 'C004', [tradeLine('FG-102', rint(60, 75)), tradeLine('SV-303', 1)], d(m, 16));
     await invoice('KNM', 'JKT', 'WH-JKT', 'C008', [tradeLine('FG-103', rint(500, 650)), tradeLine('FG-102', rint(20, 25))], d(m, 21));
     await invoice('KNM', 'JKT', 'WH-JKT', 'C001', [tradeLine('FG-101', rint(20, 25)), tradeLine('SV-303', 1)], d(m, 24));
     // Penjualan Surabaya
-    await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('FG-102', rint(50, 60)), tradeLine('FG-103', rint(600, 700)), tradeLine('TG-202', rint(150, 180)), tradeLine('TG-203', rint(300, 350))], d(m, 12), true);
+    await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('FG-102', rint(50, 60)), tradeLine('FG-103', rint(600, 700)), tradeLine('TG-202', rint(150, 180)), tradeLine('TG-203', rint(300, 350))], d(m, 12), m % 2 ? 'do' : true);
     await invoice('KNM', 'SBY', 'WH-SBY', 'C006', [tradeLine('FG-101', rint(35, 42)), tradeLine('FG-102', rint(30, 40)), tradeLine('FG-103', rint(450, 520)), tradeLine('TG-201', rint(30, 40))], d(m, 18));
     await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('TG-203', rint(250, 290)), tradeLine('TG-204', rint(400, 480)), tradeLine('TG-202', rint(120, 140))], d(m, 26));
     // Medan: faktur + POS
@@ -669,6 +703,20 @@ async function seedDemo() {
   await quote(sari, 'KNM', 'SBY', 'C003', [tradeLine('FG-103', 500)], '2026-08-20', { stage: 'kirim' });  // lewat masa berlaku → kedaluwarsa
   // Penjualan & pembelian awal Oktober (belum jatuh tempo)
   await invoice('KNM', 'JKT', 'WH-JKT', 'C001', [tradeLine('FG-101', 40), tradeLine('FG-102', 30)], '2026-10-02');
+  // Surat jalan Oktober: (3) dua SO dikirim penuh lalu digabung dalam satu faktur; DO terkirim belum difakturkan; SO dikirim sebagian.
+  {
+    const soA = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C002', [tradeLine('FG-102', 20)], '2026-10-01');
+    const soB = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C002', [tradeLine('FG-103', 300)], '2026-10-02');
+    const dA = await deliver('KNM', soA, '2026-10-01');
+    const dB = await deliver('KNM', soB, '2026-10-03');
+    setToday('2026-10-04');
+    const inv = db.tx(() => invoiceFromDeliveries(at(maker, 'KNM'), [dA, dB], { date: '2026-10-04' })).id;
+    await run(checker, 'KNM', 'sales_invoices', inv, 'post');
+    const soC = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C008', [tradeLine('FG-101', 10)], '2026-10-05');
+    await deliver('KNM', soC, '2026-10-05');
+    const soD = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C004', [tradeLine('FG-102', 30), tradeLine('SV-301', 24)], '2026-10-06');
+    await deliver('KNM', soD, '2026-10-06', 0.4);
+  }
   await invoice('KNM', 'SBY', 'WH-SBY', 'C003', [tradeLine('FG-103', 400), tradeLine('TG-203', 200)], '2026-10-03');
   const wo = await mk(maker, 'KNM', 'CKR', 'work_orders', { date: '2026-10-05', bom_id: BOM['FG-101'], qty: 180, warehouse_id: WH['WH-CKR'], line: 'Lini A', due_date: '2026-10-09', pic: 'Budi Santoso', progress: 35 });
   await run(maker, 'KNM', 'work_orders', wo, 'start');

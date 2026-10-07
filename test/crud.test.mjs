@@ -66,6 +66,11 @@ const CUSTOM = {
     b.product_id = db.get('SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_locations WHERE warehouse_id = ?) LIMIT 1', bin.warehouse_id).id;
   },
   budgets: async (b) => { b.amount = 12_000_000; },
+  // Surat jalan dari SO yang masih punya sisa kirim; baris kosong = seluruh sisa.
+  delivery_orders: async (b) => {
+    const so = db.get("SELECT id FROM sales_orders WHERE company_id = 1 AND branch_id = (SELECT id FROM branches WHERE code = 'JKT') AND status IN ('disetujui','dikirim_sebagian') ORDER BY id DESC LIMIT 1");
+    b.sales_order_id = so.id; b.lines = [];
+  },
   purchase_bills: async (b) => { b.lines = [{ account_id: (await admin.get('/api/lookup/accounts?f_is_header=0')).body[0].id, qty: 1, price: 1000 }]; },
 };
 
@@ -109,7 +114,7 @@ for (const key of [
   'purchase_orders', 'purchase_bills', 'supplier_payments', 'stock_adjustments', 'stock_transfers', 'shipments', 'boms', 'work_orders',
   'projects', 'project_tasks', 'employees', 'attendance', 'leave_requests', 'payroll_runs', 'documents', 'workflows', 'compliance_items',
   'risks', 'security_incidents', 'currencies', 'exchange_rates', 'sales_returns', 'purchase_returns', 'bank_reconciliations', 'pos_shifts',
-  'warehouse_bins', 'product_locations', 'bsc_metrics',
+  'warehouse_bins', 'product_locations', 'bsc_metrics', 'delivery_orders',
 ]) {
   test(`CRUD ${key}: buat → baca → ubah → konflik versi → hapus`, async () => {
     const e = meta.entities[key];

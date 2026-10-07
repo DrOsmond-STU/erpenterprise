@@ -47,6 +47,7 @@ export const COA = [
   ['1-1320', 'Persediaan Barang Dalam Proses', 'asset', '1-1300', 0, 'inventory'],
   ['1-1330', 'Persediaan Barang Jadi', 'asset', '1-1300', 0, 'inventory'],
   ['1-1340', 'Persediaan Barang Dagangan', 'asset', '1-1300', 0, 'inventory'],
+  ['1-1350', 'Persediaan Terkirim Belum Difakturkan', 'asset', '1-1300', 0, 'unbilled_delivery'],
   ['1-1400', 'PPN Masukan', 'asset', '1-1000', 0, 'current_asset'],
   ['1-1500', 'Uang Muka & Biaya Dibayar Dimuka', 'asset', '1-1000', 0, 'current_asset'],
   ['1-1600', 'Piutang Antar Perusahaan', 'asset', '1-1000', 0, 'current_asset', 'operating', 1],

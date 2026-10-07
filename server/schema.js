@@ -98,7 +98,8 @@ const EXTRA = {
 };
 const LINE_EXTRA = {
   journal_lines: ['company_id INTEGER', 'partner_type TEXT', 'partner_id INTEGER', 'is_system INTEGER NOT NULL DEFAULT 0'],
-  sales_invoice_lines: ['unit_cost REAL'],
+  sales_invoice_lines: ['unit_cost REAL', 'delivery_line_id INTEGER'],
+  delivery_order_lines: ['so_line_id INTEGER', 'unit_cost REAL', 'cost REAL'],
   pos_sale_lines: ['unit_cost REAL'],
   sales_return_lines: ['unit_cost REAL'],
   purchase_return_lines: ['unit_cost REAL'],

@@ -41,11 +41,11 @@
     purchase_bills: 'TAGIHAN PEMASOK', customer_receipts: 'KUITANSI PENERIMAAN', supplier_payments: 'BUKTI PEMBAYARAN', cash_transactions: 'BUKTI KAS / BANK',
     journals: 'BUKTI JURNAL UMUM', sales_returns: 'NOTA RETUR PENJUALAN (NOTA KREDIT)', purchase_returns: 'NOTA RETUR PEMBELIAN (NOTA DEBIT)', pos_sales: 'STRUK PENJUALAN',
     purchase_requests: 'PERMINTAAN PEMBELIAN', stock_transfers: 'SURAT JALAN TRANSFER STOK', stock_adjustments: 'BERITA ACARA PENYESUAIAN STOK', work_orders: 'PERINTAH KERJA',
-    bank_transfers: 'BUKTI PEMINDAHBUKUAN', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
+    bank_transfers: 'BUKTI PEMINDAHBUKUAN', delivery_orders: 'SURAT JALAN', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
   };
   const SIGN = {
     sales_invoices: ['Hormat kami', 'Penerima'], customer_receipts: ['Penerima kas', 'Penyetor'], supplier_payments: ['Dibuat oleh', 'Disetujui oleh', 'Penerima'],
-    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
+    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], delivery_orders: ['Bagian gudang', 'Pengemudi', 'Diterima baik oleh (nama, tanggal & cap)'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
   };
 
   function companyHeader() {
@@ -77,7 +77,7 @@
     const dl = (fs) => `<dl class="ps-dl">${fs.map((f) => `<dt>${esc(f.label)}</dt><dd>${fieldHtml(f, r)}</dd>`).join('')}</dl>`;
     let linesHtml = '';
     if (e.lines && r.lines?.length) {
-      const lf = e.lines.fields.filter((f) => !f.sensitive);
+      const lf = e.lines.fields.filter((f) => !f.sensitive && !f.internal);
       linesHtml = `<table class="ps-table"><thead><tr><th>No</th>${lf.map((f) => `<th class="${['money', 'number', 'int', 'pct'].includes(f.type) ? 'ta-r' : ''}">${esc(f.label)}</th>`).join('')}</tr></thead>
         <tbody>${r.lines.map((l, i) => `<tr><td>${i + 1}</td>${lf.map((f) => `<td class="${['money', 'number', 'int', 'pct'].includes(f.type) ? 'ta-r' : ''}">${fieldHtml(f, l)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     }
@@ -86,7 +86,7 @@
       ? `<div class="ps-totals"><div><span>Subtotal</span><b>${esc(curCode)} ${esc(num(r.subtotal))}</b></div><div><span>PPN ${esc(num(r.tax_rate))}%</span><b>${esc(curCode)} ${esc(num(r.tax))}</b></div><div class="ps-grand"><span>Total</span><b>${esc(curCode)} ${esc(num(r.total))}</b></div>${r.paid ? `<div><span>Terbayar / dikreditkan</span><b>${esc(curCode)} ${esc(num(r.paid))}</b></div><div><span>Sisa</span><b>${esc(curCode)} ${esc(num(r.total - r.paid))}</b></div>` : ''}</div>`
       : total != null ? `<div class="ps-totals"><div class="ps-grand"><span>Jumlah</span><b>${esc(curCode)} ${esc(num(total))}</b></div></div>` : '';
     const words = total != null && curCode === 'IDR' ? `<p class="ps-words"><span>Terbilang:</span> <i>${esc(terbilangRupiah(total))}</i></p>` : total != null && r.exchange_rate > 1 ? `<p class="ps-words"><span>Setara IDR (kurs ${esc(num(r.exchange_rate))}):</span> <b>${esc(FMT.rp(total * r.exchange_rate))}</b></p>` : '';
-    const notes = (r.notes || r.description || r.reason ? `<p class="ps-notes"><span>Keterangan:</span> ${esc(r.notes || r.description || r.reason)}</p>` : '') + (key === 'quotations' ? quoteTerms(r) : '');
+    const notes = (r.notes || r.description || r.reason ? `<p class="ps-notes"><span>Keterangan:</span> ${esc(r.notes || r.description || r.reason)}</p>` : '') + (key === 'quotations' ? quoteTerms(r) : '') + (key === 'delivery_orders' && r.ship_to ? `<p class="ps-notes"><span>Alamat kirim:</span> ${esc(r.ship_to)}</p><p class="ps-notes"><span>Catatan penerima:</span> barang diterima dalam keadaan baik & jumlah sesuai, kecuali dicatat di bawah ini.</p>` : '');
     const signs = (SIGN[key] || ['Dibuat oleh', 'Disetujui oleh']).map((s) => `<div class="ps-sign"><span>${esc(s)}</span><i></i><span>(&nbsp;${'&nbsp;'.repeat(30)}&nbsp;)</span></div>`).join('');
     openPrint(sheet(`<header class="ps-head">${companyHeader()}<div class="ps-title"><h1>${esc(title)}</h1><b class="code">${esc(r.number || r.code || `#${r.id}`)}</b>${e.statusField ? pill(r[e.statusField]) : ''}</div></header>
       <div class="ps-meta">${dl(left)}${dl(right)}</div>${linesHtml}${totals}${words}${notes}<div class="ps-signs">${signs}</div>`), `${title} ${r.number || ''}`);

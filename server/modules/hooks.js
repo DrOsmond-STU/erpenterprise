@@ -32,6 +32,44 @@ function defaultDue(row, partyTable, partyField) {
   row.due_date = d.toISOString().slice(0, 10);
 }
 
+/** Surat jalan: pelanggan & gudang dari SO, baris dipetakan ke baris SO (harga/diskon SO), qty ≤ sisa pesanan. */
+function deliveryCompute(_ctx, row, lines) {
+  const so = db.get('SELECT * FROM sales_orders WHERE id = ?', row.sales_order_id);
+  if (!so || so.company_id !== row.company_id) throw bad('Pesanan penjualan tidak ditemukan pada perusahaan ini.');
+  if (!['disetujui', 'dikirim_sebagian'].includes(so.status) && row.status !== 'dikirim') throw bad(`Pesanan ${so.number} belum disetujui atau sudah terkirim penuh.`);
+  row.customer_id = so.customer_id;
+  row.warehouse_id = row.warehouse_id || so.warehouse_id;
+  const wh = db.get('SELECT company_id FROM warehouses WHERE id = ?', row.warehouse_id);
+  if (!wh || wh.company_id !== so.company_id) throw bad('Gudang asal harus milik perusahaan pesanan.');
+  if (!lines) return;
+  // Sisa per baris SO (tidak termasuk surat jalan ini).
+  const soLines = db.all('SELECT * FROM sales_order_lines WHERE parent_id = ? ORDER BY line_no, id', so.id).map((l) => ({
+    ...l, left: l.qty - db.get(`SELECT COALESCE(SUM(dl.qty),0) q FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id
+      WHERE dl.so_line_id = ? AND d.status IN ('draf','dikirim','difakturkan') AND d.id <> ?`, l.id, row.id || 0).q,
+  }));
+  if (!lines.length) for (const l of soLines) if (l.left > 1e-9) lines.push({ product_id: l.product_id, description: l.description, qty: l.left });
+  const out = [];
+  for (const l of lines) {
+    let need = Number(l.qty) || 0;
+    if (need <= 0) continue;
+    const cands = soLines.filter((x) => x.product_id === l.product_id);
+    if (!cands.length) throw bad('Barang pada surat jalan harus ada di pesanan penjualan.');
+    for (const c of cands) {
+      if (need <= 1e-9) break;
+      const take = Math.min(need, Math.max(0, c.left));
+      if (take <= 1e-9) continue;
+      c.left -= take; need -= take;
+      out.push({ product_id: l.product_id, description: l.description || c.description, qty: round2(take * 10000) / 10000, so_line_id: c.id, price: c.price, discount_pct: c.discount_pct || 0, amount: round2(take * c.price * (1 - (c.discount_pct || 0) / 100)) });
+    }
+    if (need > 1e-9) {
+      const p = db.get('SELECT code FROM products WHERE id = ?', l.product_id);
+      throw bad(`Qty kirim ${p?.code} melebihi sisa pesanan yang belum dikirim.`);
+    }
+  }
+  lines.splice(0, lines.length, ...out);
+  row.value = sum(out, (l) => l.amount);
+}
+
 /** Penawaran: total, masa berlaku & termin bawaan, serta indikator harga internal (diskon tertinggi, estimasi HPP & margin). */
 function quotationCompute(ctx, row, lines) {
   applyFx(row, 'customers', 'customer_id');
@@ -91,7 +129,16 @@ const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75,
 export const HOOKS = {
   quotations: { compute: quotationCompute },
   purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
-  sales_invoices: { compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; } },
+  sales_invoices: {
+    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
+    // Faktur dari surat jalan: baris terkunci (qty & barang mengikuti surat jalan); hapus draf → surat jalan dapat difakturkan lagi.
+    beforeUpdate: (_c, row, existing, body) => {
+      if (body.lines !== undefined && db.get('SELECT id FROM delivery_orders WHERE invoice_id = ?', existing.id)) throw bad('Baris faktur dari surat jalan tidak dapat diubah. Hapus draf faktur lalu buat ulang dari surat jalan yang benar.');
+      if (row.customer_id && row.customer_id !== existing.customer_id && db.get('SELECT id FROM delivery_orders WHERE invoice_id = ?', existing.id)) throw bad('Pelanggan faktur dari surat jalan tidak dapat diubah.');
+    },
+    beforeDelete: (_c, inv) => { db.run("UPDATE delivery_orders SET invoice_id = NULL WHERE invoice_id = ? AND status = 'dikirim'", inv.id); },
+  },
+  delivery_orders: { compute: deliveryCompute },
   sales_returns: { compute: returnFrom('sales_invoices', 'sales_invoice_id', 'sales_invoice_lines', 'customer_id') },
   purchase_returns: { compute: returnFrom('purchase_bills', 'purchase_bill_id', 'purchase_bill_lines', 'supplier_id') },
   bank_reconciliations: {

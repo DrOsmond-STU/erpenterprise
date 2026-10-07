@@ -135,6 +135,7 @@
       const msg = { draf: 'Lengkapi baris, lalu "Ajukan" — harga diperiksa terhadap kebijakan diskon, margin, dan nilai.', menunggu: 'Menunggu persetujuan harga oleh penyetuju penjualan.', disetujui: `Harga disetujui — kirim ke pelanggan sebelum ${ERP.date(r.valid_until)}.`, terkirim: `Menunggu tanggapan pelanggan (portal atau dicatat tenaga penjual) — berlaku sampai ${ERP.date(r.valid_until)}.`, diterima: 'Diterima pelanggan — buat pesanan penjualan.', kedaluwarsa: 'Masa berlaku habis — buat revisi untuk menawarkan kembali.' }[r.status];
       if (msg) extra = `<div class="section"><div class="notice" data-tone="${r.status === 'diterima' ? 'ok' : exp || r.status === 'kedaluwarsa' ? 'danger' : 'info'}">${icon(r.status === 'diterima' ? 'check' : 'clock')} ${esc(msg)}</div></div>`;
     }
+    if (key === 'sales_orders') extra = await ERP.sales.soDrawer(r);
     if (key === 'roles') extra = `<div class="section"><button class="btn" data-nav="peran">${icon('shield')} Buka matriks izin</button></div>`;
     if (key === 'bank_reconciliations') extra = `<div class="section"><button class="btn btn-primary" data-recon-open="${r.id}">${icon('check')} Cocokkan mutasi dengan rekening koran</button></div>`;
 

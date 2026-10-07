@@ -9,6 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
+import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
 
 const setStatus = (table, id, status, extra = {}) => db.update(table, id, { status, ...extra });
@@ -96,7 +97,15 @@ function postSalesInvoice(ctx, inv) {
   for (const l of ls) {
     const p = product(l.product_id);
     jl.push({ account_id: ic ? acct('ic_sales') : productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
-    if (isStockable(p)) {
+    if (l.delivery_line_id) {
+      // Barang sudah keluar saat surat jalan dikirim: HPP diakui sekarang dari akun persediaan terkirim belum difakturkan.
+      const dl = db.get('SELECT dl.*, w.branch_id wb FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id JOIN warehouses w ON w.id = d.warehouse_id WHERE dl.id = ?', l.delivery_line_id);
+      db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', dl.unit_cost || 0, l.id);
+      if (dl.cost > 0) {
+        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: dl.cost, branch_id: dl.wb, memo: `HPP ${p.code} (surat jalan)`, project_id: inv.project_id });
+        jl.push({ account_id: acct('goods_delivered'), credit: dl.cost, branch_id: dl.wb, memo: `Barang terkirim ${p.code} difakturkan` });
+      }
+    } else if (isStockable(p)) {
       const { value, unitCost } = stockOut(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, date: inv.date, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number });
       db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', unitCost, l.id);
       if (value > 0) {
@@ -110,16 +119,141 @@ function postSalesInvoice(ctx, inv) {
   arLine.debit = round2(jl.filter((x) => x.credit && !x.branch_id).reduce((a, x) => a + x.credit, 0));
   postJournal(ctx, { companyId: inv.company_id, branchId: inv.branch_id, date: inv.date, description: `Faktur ${inv.number} — ${cust.name}`, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number, lines: jl });
   setStatus('sales_invoices', inv.id, 'terbit');
+  const dos = db.all('SELECT id, sales_order_id FROM delivery_orders WHERE invoice_id = ?', inv.id);
+  for (const d of dos) setStatus('delivery_orders', d.id, 'difakturkan');
+  for (const so of new Set(dos.map((d) => d.sales_order_id))) refreshSoStatus(so);
 }
 
 function voidSalesInvoice(ctx, inv) {
   if (inv.paid > 0) throw conflict('Faktur yang sudah menerima pembayaran tidak dapat dibatalkan; batalkan penerimaannya terlebih dahulu.');
   for (const l of lines('sales_invoice_lines', inv.id)) {
     const p = product(l.product_id);
+    if (l.delivery_line_id) continue; // barang tetap di pelanggan; surat jalan kembali "dikirim" (belum difakturkan)
     if (isStockable(p)) stockIn(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, unitCost: l.unit_cost || 0, date: today(), sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: `${inv.number} (batal)` });
   }
   reverseDocumentJournals(ctx, 'sales_invoices', inv.id, today(), `Pembatalan faktur ${inv.number}`);
   setStatus('sales_invoices', inv.id, 'batal');
+  const dos = db.all('SELECT id, sales_order_id FROM delivery_orders WHERE invoice_id = ?', inv.id);
+  for (const d of dos) setStatus('delivery_orders', d.id, 'dikirim', { invoice_id: null });
+  for (const so of new Set(dos.map((d) => d.sales_order_id))) refreshSoStatus(so);
+}
+
+/* --- Surat jalan (delivery order) ------------------------------------------------ */
+/** Sisa qty per baris SO = dipesan − terkirim (DO dikirim/difakturkan) − DO draf lain (dipesan untuk dikirim). */
+export function soOutstanding(soId, excludeDoId = 0) {
+  return lines('sales_order_lines', soId).map((l) => {
+    const sent = db.get(`SELECT COALESCE(SUM(dl.qty),0) q FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id
+      WHERE dl.so_line_id = ? AND d.status IN ('draf','dikirim','difakturkan') AND d.id <> ?`, l.id, excludeDoId).q;
+    return { ...l, delivered: sent, outstanding: round2(l.qty - sent) };
+  });
+}
+
+/** Status SO dari pemenuhan: disetujui → dikirim sebagian → terkirim (belum seluruhnya difakturkan) → selesai. */
+export function refreshSoStatus(soId) {
+  const so = db.get('SELECT id, status FROM sales_orders WHERE id = ?', soId);
+  if (!so || ['draf', 'menunggu', 'batal'].includes(so.status)) return;
+  const ls = lines('sales_order_lines', soId);
+  let ordered = 0, delivered = 0;
+  for (const l of ls) {
+    ordered += l.qty;
+    delivered += Math.min(l.qty, db.get(`SELECT COALESCE(SUM(dl.qty),0) q FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id WHERE dl.so_line_id = ? AND d.status IN ('dikirim','difakturkan')`, l.id).q);
+  }
+  const pendingInvoice = db.get("SELECT COUNT(*) n FROM delivery_orders WHERE sales_order_id = ? AND status = 'dikirim'", soId).n;
+  const full = delivered >= ordered - 1e-9;
+  const next = full ? (pendingInvoice ? 'terkirim' : 'selesai') : delivered > 1e-9 ? 'dikirim_sebagian' : 'disetujui';
+  if (next !== so.status) setStatus('sales_orders', soId, next);
+}
+
+/** Kirim: stok keluar dari gudang; nilai pokok dipindah ke "persediaan terkirim belum difakturkan". Piutang belum diakui. */
+function shipDelivery(ctx, d) {
+  db.run('DELETE FROM delivery_order_lines WHERE parent_id = ? AND NOT (qty > 0)', d.id);
+  const ls = lines('delivery_order_lines', d.id);
+  if (!ls.length) throw bad('Isi qty kirim minimal satu barang sebelum mengirim.');
+  const so = db.get('SELECT * FROM sales_orders WHERE id = ?', d.sales_order_id);
+  if (!['disetujui', 'dikirim_sebagian'].includes(so.status)) throw conflict(`Pesanan ${so.number} berstatus "${so.status}" — tidak dapat dikirim.`);
+  const cust = db.get('SELECT name, status FROM customers WHERE id = ?', so.customer_id);
+  if (cust.status === 'ditahan') throw bad(`Pelanggan ${cust.name} sedang ditahan; pengiriman tidak diizinkan.`);
+  const wh = warehouse(d.warehouse_id);
+  if (wh.company_id !== d.company_id) throw bad('Gudang harus milik perusahaan yang sama.');
+  const out = soOutstanding(so.id, d.id);
+  const jl = [];
+  let cost = 0;
+  for (const l of ls) {
+    const sl = out.find((x) => x.id === l.so_line_id);
+    if (!sl) throw bad('Baris surat jalan tidak terkait dengan baris pesanan.');
+    if (l.qty > sl.outstanding + 1e-9) throw bad(`Qty kirim ${product(l.product_id).code} (${l.qty}) melebihi sisa pesanan (${sl.outstanding}).`);
+    const p = product(l.product_id);
+    let unit = 0, value = 0;
+    if (isStockable(p)) {
+      ({ unitCost: unit, value } = stockOut(ctx, { warehouseId: wh.id, productId: p.id, qty: l.qty, date: d.date, sourceType: 'delivery_orders', sourceId: d.id, sourceNo: d.number }));
+      if (value > 0) {
+        jl.push({ account_id: acct('goods_delivered'), debit: value, branch_id: wh.branch_id, memo: `Kirim ${p.code} → ${cust.name}`, project_id: so.project_id });
+        jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), credit: value, branch_id: wh.branch_id, memo: `Persediaan keluar ${p.code}` });
+      }
+    }
+    db.run('UPDATE delivery_order_lines SET unit_cost = ?, cost = ? WHERE id = ?', unit, value, l.id);
+    cost += value;
+  }
+  if (jl.length) postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date: d.date, description: `Surat jalan ${d.number} — ${cust.name} (${so.number})`, sourceType: 'delivery_orders', sourceId: d.id, sourceNo: d.number, lines: jl });
+  setStatus('delivery_orders', d.id, 'dikirim', { cost: round2(cost) });
+  refreshSoStatus(so.id);
+  return { message: `Barang keluar dari ${wh.name}. Piutang diakui saat faktur diterbitkan.` };
+}
+
+function voidDelivery(ctx, d) {
+  if (d.invoice_id) throw conflict('Surat jalan sudah masuk faktur; batalkan/hapus fakturnya terlebih dahulu.');
+  for (const l of lines('delivery_order_lines', d.id)) {
+    const p = product(l.product_id);
+    if (isStockable(p)) stockIn(ctx, { warehouseId: d.warehouse_id, productId: p.id, qty: l.qty, unitCost: l.unit_cost || 0, date: today(), sourceType: 'delivery_orders', sourceId: d.id, sourceNo: `${d.number} (batal)` });
+  }
+  reverseDocumentJournals(ctx, 'delivery_orders', d.id, today(), `Pembatalan surat jalan ${d.number}`);
+  setStatus('delivery_orders', d.id, 'batal');
+  refreshSoStatus(d.sales_order_id);
+}
+
+/**
+ * Faktur dari satu atau beberapa surat jalan (pelanggan sama, mata uang & tarif PPN sama).
+ * Baris faktur = baris surat jalan dengan harga & diskon dari pesanan penjualan. Faktur draf
+ * mengunci surat jalan agar tidak tertagih dua kali; piutang diakui saat faktur diterbitkan.
+ */
+export function invoiceFromDeliveries(ctx, deliveryIds, { date = null } = {}) {
+  const ids = [...new Set((deliveryIds || []).map(Number).filter(Boolean))];
+  if (!ids.length) throw bad('Pilih minimal satu surat jalan.');
+  if (ids.length > 50) throw bad('Maksimal 50 surat jalan per faktur.');
+  const dos = ids.map((id) => db.get('SELECT * FROM delivery_orders WHERE id = ?', id));
+  if (dos.some((d) => !d)) throw bad('Surat jalan tidak ditemukan.');
+  for (const d of dos) {
+    if (d.status !== 'dikirim') throw conflict(`Surat jalan ${d.number} berstatus "${d.status}" — hanya surat jalan terkirim yang dapat difakturkan.`);
+    if (d.invoice_id) throw conflict(`Surat jalan ${d.number} sudah masuk faktur lain.`);
+  }
+  const first = dos[0];
+  if (dos.some((d) => d.company_id !== first.company_id || d.customer_id !== first.customer_id)) throw bad('Faktur gabungan hanya untuk surat jalan dengan pelanggan & perusahaan yang sama.');
+  const sos = new Map(dos.map((d) => [d.sales_order_id, db.get('SELECT * FROM sales_orders WHERE id = ?', d.sales_order_id)]));
+  const so1 = sos.get(first.sales_order_id);
+  for (const so of sos.values()) {
+    if ((so.currency_id || null) !== (so1.currency_id || null)) throw bad('Surat jalan dengan mata uang pesanan berbeda tidak dapat digabung dalam satu faktur.');
+    if (Number(so.tax_rate) !== Number(so1.tax_rate)) throw bad('Surat jalan dengan tarif PPN berbeda tidak dapat digabung dalam satu faktur.');
+  }
+  const projects = new Set([...sos.values()].map((so) => so.project_id || null));
+  const invLines = [];
+  for (const d of dos.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)) {
+    for (const l of lines('delivery_order_lines', d.id)) {
+      invLines.push({ product_id: l.product_id, description: [d.number, l.description].filter(Boolean).join(' · '), qty: l.qty, price: l.price, discount_pct: l.discount_pct || 0, amount: l.amount, delivery_line_id: l.id });
+    }
+  }
+  const subtotal = sum(invLines, (l) => l.amount), tax = round2(subtotal * (so1.tax_rate ?? 11) / 100);
+  const invDate = date || today();
+  const terms = db.get('SELECT terms_days FROM customers WHERE id = ?', first.customer_id)?.terms_days ?? 30;
+  const due = new Date(invDate + 'T00:00:00Z'); due.setUTCDate(due.getUTCDate() + terms);
+  const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', {
+    company_id: first.company_id, branch_id: so1.branch_id, date: invDate, due_date: due.toISOString().slice(0, 10), customer_id: first.customer_id, warehouse_id: first.warehouse_id,
+    sales_order_id: sos.size === 1 ? so1.id : null, project_id: projects.size === 1 ? [...projects][0] : null, ...fxCopy(so1),
+    notes: `Surat jalan: ${dos.map((d) => d.number).join(', ')}${sos.size > 1 ? ` · Pesanan: ${[...sos.values()].map((s2) => s2.number).join(', ')}` : ''}`,
+    subtotal, tax_rate: so1.tax_rate ?? 11, tax, total: round2(subtotal + tax), paid: 0, status: 'draf',
+  }, invLines, 'sales_invoice_lines');
+  for (const d of dos) db.update('delivery_orders', d.id, { invoice_id: id });
+  audit.log(ctx, 'invoice.from_deliveries', { entity: 'sales_invoices', entityId: id, companyId: first.company_id, detail: { deliveries: dos.map((d) => d.number), number } });
+  return { id, number, deliveries: dos.length };
 }
 
 function settle(table, id, delta) {
@@ -758,8 +892,24 @@ export const ACTIONS = {
     },
     approve: (_c, so) => setStatus('sales_orders', so.id, 'disetujui'),
     reject: (_c, so, p) => setStatus('sales_orders', so.id, 'batal', { approval_note: `Ditolak: ${p.reason}` }),
-    cancel: to('sales_orders', 'batal'),
+    cancel: (_c, so) => {
+      if (db.get("SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status <> 'batal'", so.id)) throw conflict('Pesanan sudah memiliki surat jalan; batalkan surat jalannya terlebih dahulu.');
+      setStatus('sales_orders', so.id, 'batal');
+    },
+    to_delivery: (ctx, so, p) => {
+      const out = soOutstanding(so.id).filter((l) => l.outstanding > 1e-9);
+      if (!out.length) throw conflict('Seluruh qty pesanan sudah dijadwalkan/dikirim pada surat jalan lain.');
+      const cust = db.get('SELECT name, address, pic FROM customers WHERE id = ?', so.customer_id);
+      const qtyOf = (l) => (p.mode === 'kosong' ? 0 : l.outstanding);
+      const dl = out.map((l) => ({ product_id: l.product_id, description: l.description, qty: qtyOf(l), price: l.price, discount_pct: l.discount_pct || 0, amount: round2(qtyOf(l) * l.price * (1 - (l.discount_pct || 0) / 100)), so_line_id: l.id }));
+      const { id, number } = createDoc(ctx, 'delivery_orders', 'DO', {
+        company_id: so.company_id, branch_id: so.branch_id, date: p.date || today(), sales_order_id: so.id, customer_id: so.customer_id, warehouse_id: so.warehouse_id,
+        recipient: cust.pic, ship_to: cust.address, value: sum(dl, (l) => l.amount), status: 'draf', notes: so.customer_po ? `PO pelanggan ${so.customer_po}` : null,
+      }, dl, 'delivery_order_lines');
+      return { redirect: { entity: 'delivery_orders', id }, message: p.mode === 'kosong' ? `Surat jalan ${number} dibuat — isi qty yang dikirim (sebagian), lalu "Kirim & posting stok".` : `Surat jalan ${number} dibuat untuk seluruh sisa pesanan. Periksa lalu "Kirim & posting stok".` };
+    },
     to_invoice: (ctx, so) => {
+      if (db.get("SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status <> 'batal'", so.id)) throw conflict('Pesanan ini sudah memakai surat jalan — buat faktur dari surat jalan.');
       const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', {
         company_id: so.company_id, branch_id: so.branch_id, date: today(), customer_id: so.customer_id, warehouse_id: so.warehouse_id, sales_order_id: so.id, project_id: so.project_id ?? null, ...fxCopy(so),
         subtotal: so.subtotal, tax_rate: so.tax_rate, tax: so.tax, total: so.total, paid: 0, status: 'draf',
@@ -772,6 +922,11 @@ export const ACTIONS = {
     },
   },
   sales_invoices: { post: postSalesInvoice, void: voidSalesInvoice },
+  delivery_orders: {
+    ship: shipDelivery,
+    void: voidDelivery,
+    to_invoice: (ctx, d) => { const r = invoiceFromDeliveries(ctx, [d.id]); return { redirect: { entity: 'sales_invoices', id: r.id }, message: `Faktur ${r.number} dibuat (draf) dari ${d.number}. Terbitkan untuk mengakui piutang.` }; },
+  },
   customer_receipts: { post: postReceipt, void: voidReceipt },
   pos_sales: { pay: postPos, void: voidPos },
 

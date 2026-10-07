@@ -22,7 +22,7 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 
 | Area | Isi |
 | --- | --- |
-| CRUD | 55 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
+| CRUD | 56 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
 | Integrasi buku besar | Faktur, penerimaan, POS, tagihan, pembayaran, kas/bank, transfer, stok (penyesuaian/transfer), produksi (BOM), penggajian, aset (perolehan, penyusutan, pelepasan), pemeliharaan, jurnal manual — semuanya diposting otomatis, pembatalan memakai jurnal pembalik |
 | Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Laporan Proyek, Dasbor |
 | Penganggaran | Anggaran per akun COA × cabang × pusat biaya dengan pola bulanan (merata / pola tahun lalu / manual), persetujuan maker–checker, salin dari tahun lalu, kolom anggaran di Bagan Akun; laporan realisasi & variance YTD, bulanan, per pusat biaya; kontrol anggaran (peringatan/blokir) |
@@ -30,6 +30,7 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 | Cabang & konsolidasi | Laporan berkolom per cabang (RAK otomatis menjaga neraca tiap cabang seimbang) dan konsolidasi grup dengan eliminasi antar perusahaan, eliminasi investasi, goodwill, dan kepentingan non-pengendali |
 | Fitur lanjutan | Multi-mata uang & selisih kurs, retur penjualan/pembelian, rekonsiliasi bank, shift kasir, lokasi rak, tutup buku tahunan, MRP, analitik & Balanced Scorecard, asisten data, notifikasi, pencarian global, lampiran terenkripsi, impor CSV, cetak dokumen (terbilang), aksi massal, widget dasbor, portal pelanggan & pemasok |
 | Penawaran → SO | Penawaran ke pelanggan dengan kebijakan harga (diskon/margin/nilai) & persetujuan, kirim, terima/tolak langsung di portal pelanggan, revisi (-R1, -R2), kedaluwarsa otomatis, konversi ke SO; SO wajib dari penawaran diterima; Analisis Penawaran (corong, tingkat menang, alasan kalah) |
+| Surat jalan & penagihan | SO → surat jalan penuh/sebagian (stok keluar, nilai ke *Persediaan Terkirim Belum Difakturkan*) → faktur dari satu atau beberapa surat jalan (lintas SO pelanggan yang sama); piutang diakui saat faktur terbit; laporan Pemenuhan Pesanan terekonsiliasi dengan buku besar |
 | Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
 | Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 18 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
 
@@ -64,6 +65,6 @@ Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
 ## Pengujian
 
 ```bash
-npm test           # 128 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, CRUD 55 entitas
+npm test           # 133 uji: keamanan, RBAC, SoD, posting, valas, retur, rekonsiliasi, portal, laporan, konsolidasi, anggaran & proyek, penawaran, surat jalan, CRUD 55 entitas
 npm install && npm run test:e2e   # Playwright: menu × tema terang/gelap, alur transaksi, fitur lanjutan, anggaran & laporan proyek, portal, peran terbatas, layar 390 px
 ```

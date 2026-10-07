@@ -235,7 +235,21 @@ try {
   check(/Syarat & ketentuan/.test(sheetText) && !/margin|HPP|persetujuan/i.test(sheetText), 'cetak penawaran: syarat tampil, data internal tersembunyi');
   await page.click('.print-toolbar [data-close]');
 
-  // Tampilan sempit (ponsel).
+  // Surat jalan → faktur dari surat jalan; pemenuhan pesanan terekonsiliasi dengan buku besar.
+  await page.evaluate(() => { location.hash = '#/pemenuhan'; });
+  await page.waitForSelector('.notice');
+  check(/cocok dengan saldo akun Persediaan Terkirim/.test(await page.textContent('.view-root')), 'pemenuhan pesanan: DO belum difakturkan cocok dengan buku besar');
+  await page.screenshot({ path: join(shots, 'pemenuhan-pesanan.png'), fullPage: true });
+  const fb = await page.$('button[data-do-invoice]:not([data-do-invoice=""])');
+  if (fb) {
+    await fb.click();
+    await page.waitForSelector('[data-doinv-id]', { timeout: 8000 });
+    await page.click('[data-doinv-run]');
+    await page.waitForSelector('.drawer', { timeout: 8000 });
+    check(/Surat jalan: DO-/.test(await page.textContent('.drawer')), 'faktur dibuat dari surat jalan (draf)');
+    await page.keyboard.press('Escape');
+  } else check(false, 'ada surat jalan belum difakturkan di data demo');
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { location.hash = '#/dasbor'; });
   await page.waitForTimeout(900);

@@ -90,6 +90,18 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 5. Pantau **Penjualan → Analisis Penawaran** mingguan: penawaran yang segera
    berakhir, tingkat menang, dan alasan kalah. Penawaran kedaluwarsa dapat direvisi.
 
+## Pengiriman & penagihan (surat jalan)
+
+1. Dari pesanan penjualan disetujui pilih **Buat surat jalan (DO)** — "seluruh sisa"
+   untuk kirim penuh atau "isi manual" untuk kirim sebagian — lalu **Kirim & posting
+   stok** (cetak surat jalan untuk pengemudi & tanda terima pelanggan).
+2. Tagih dengan **Faktur dari surat jalan** (menu Surat Jalan, Faktur Penjualan, atau
+   Pemenuhan Pesanan): pilih pelanggan, centang satu atau beberapa surat jalan
+   (dapat dari beberapa pesanan), lalu terbitkan faktur — piutang diakui saat itu.
+3. Akhir bulan, buka **Penjualan → Pemenuhan Pesanan**: pastikan indikator hijau
+   (DO belum difakturkan = saldo akun 1-1350) dan tindak lanjuti DO berumur > 30 hari
+   serta pesanan yang terlambat dikirim.
+
 ## Siklus anggaran tahunan
 
 1. **Keuangan → Realisasi & Variance → Salin anggaran**: salin anggaran tahun
@@ -135,6 +147,6 @@ dan nonaktifkan akun saat hubungan bisnis berakhir (ISO 27001 A.5.20).
 ## Pengujian
 
 ```bash
-npm test            # 128 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, CRUD 55 entitas)
+npm test            # 133 uji integrasi API (keamanan, RBAC, posting, valas, retur, rekonsiliasi, portal, laporan, anggaran & proyek, penawaran, surat jalan, CRUD 55 entitas)
 npm run test:e2e    # uji peramban: 78 menu × 2 tema, alur transaksi, cetak, lampiran, asisten, rekonsiliasi, portal, peran terbatas
 ```
