@@ -1,0 +1,44 @@
+# Unit systemd dengan pengerasan (hardening) — ISO 27001 A.8.9 konfigurasi aman.
+#   sudo useradd --system --home /var/lib/erp --shell /usr/sbin/nologin erp
+#   sudo install -d -o erp -g erp -m 0700 /var/lib/erp /var/backups/erp
+#   sudo cp deploy/erp.service /etc/systemd/system/ && sudo systemctl enable --now erp
+[Unit]
+Description=ERP Enterprise
+After=network.target
+
+[Service]
+Type=simple
+User=erp
+Group=erp
+WorkingDirectory=/opt/erp
+EnvironmentFile=/etc/erp/erp.env
+ExecStart=/usr/bin/node --no-warnings server/index.js
+Restart=on-failure
+RestartSec=5
+
+# Pengerasan
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/erp /var/backups/erp
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

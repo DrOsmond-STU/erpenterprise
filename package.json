@@ -1,12 +1,17 @@
 {
   "name": "erpenterprise",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Purwarupa UI/UX untuk aplikasi ERP Enterprise",
+  "description": "ERP Enterprise — aplikasi ERP multi-perusahaan & multi-cabang dengan buku besar terintegrasi, laporan cabang & konsolidasi, serta kontrol keamanan ISO/IEC 27001",
   "type": "module",
   "scripts": {
-    "build": "node tools/build.mjs",
-    "test": "node tools/build.mjs && node tools/smoke.mjs"
+    "start": "node --no-warnings server/index.js",
+    "dev": "node --no-warnings --watch server/index.js",
+    "test": "node --no-warnings --test --test-concurrency=3 test/*.test.mjs",
+    "test:e2e": "node tools/e2e.mjs",
+    "backup": "node --no-warnings tools/backup.mjs",
+    "build:prototype": "node tools/build.mjs",
+    "smoke:prototype": "node tools/build.mjs && node tools/smoke.mjs"
   },
   "repository": {
     "type": "git",
@@ -15,5 +20,8 @@
   "license": "UNLICENSED",
   "devDependencies": {
     "playwright": "^1.49.1"
+  },
+  "engines": {
+    "node": ">=22.5"
   }
 }
