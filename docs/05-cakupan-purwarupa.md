@@ -1,5 +1,12 @@
 # 5 — Cakupan & batas purwarupa
 
+> **Pembaruan:** purwarupa ini telah dilanjutkan menjadi aplikasi yang berjalan
+> penuh (`server/` + `web/`) dengan data tersimpan di server, autentikasi, CRUD
+> seluruh entitas, integrasi buku besar, laporan keuangan per cabang &
+> konsolidasi. Batas-batas di bawah ini hanya berlaku untuk berkas di
+> `prototype/` dan `dist/`. Lihat [dokumen 8](08-arsitektur-aplikasi.md) dan
+> [dokumen 9](09-keamanan-iso27001.md).
+
 Dokumen ini memisahkan apa yang **benar-benar berjalan** dari apa yang
 **dirancang tetapi belum dibuat**, supaya tidak ada yang salah menduga saat
 mencoba.

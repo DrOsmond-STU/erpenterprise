@@ -1,65 +1,65 @@
-# ERP Enterprise — Purwarupa UI/UX
+# ERP Enterprise
 
-Purwarupa antarmuka untuk aplikasi ERP terpadu: dasbor, penjualan, pembelian,
-inventaris, produksi, keuangan, SDM, dan administrasi sistem. Purwarupa berjalan
-di peramban tanpa peladen, tanpa pustaka pihak ketiga, dan tanpa proses build
-wajib — cukup buka satu berkas.
-
-Repositori ini berisi **desain**, bukan aplikasi produksi. Seluruh data bersifat
-fiktif dan disimpan di memori; menyegarkan halaman mengembalikan keadaan awal.
+Aplikasi ERP multi-perusahaan & multi-cabang: penjualan, POS, pembelian,
+persediaan, produksi, proyek, keuangan, SDM & penggajian, aset tetap, CRM,
+dokumen, serta kepatuhan & keamanan informasi. **Seluruh transaksi memposting
+jurnal ke satu buku besar**, sehingga Neraca, Laba Rugi, dan Arus Kas — per
+perusahaan, per cabang, maupun **konsolidasi grup** — selalu konsisten dengan
+modul operasional. Kontrol keamanan diselaraskan dengan **ISO/IEC 27001:2022**.
 
 ## Menjalankan
 
 ```bash
-# Cara tercepat — berkas tunggal hasil build
-open dist/prototipe.html
-
-# Atau layani berkas sumbernya
-python3 -m http.server -d prototype 8080   # lalu buka http://localhost:8080
+npm start          # Node.js ≥ 22.5, tanpa npm install — http://127.0.0.1:8080
 ```
 
-## Isi repositori
+Basis data demo dibuat otomatis di `data/` (3 perusahaan, 7 cabang, transaksi
+Jan–Okt 2026). Masuk dengan `admin` / `Erp#Demo2026!` — daftar akun demo per
+peran ada di [dokumen 9](docs/09-keamanan-iso27001.md#akun-demo).
+Untuk produksi lihat [panduan operasional](docs/10-operasional.md).
+
+## Fitur utama
+
+| Area | Isi |
+| --- | --- |
+| CRUD | 46 entitas dengan cari, saring status, urut, paginasi server, formulir & editor baris, penguncian optimistis, ekspor CSV, jejak audit per rekaman |
+| Integrasi buku besar | Faktur, penerimaan, POS, tagihan, pembayaran, kas/bank, transfer, stok (penyesuaian/transfer), produksi (BOM), penggajian, aset (perolehan, penyusutan, pelepasan), pemeliharaan, jurnal manual — semuanya diposting otomatis, pembatalan memakai jurnal pembalik |
+| Laporan | Neraca, Laba Rugi, Arus Kas, Neraca Saldo, Buku Besar, Umur Piutang/Hutang, Valuasi Persediaan, Anggaran vs Realisasi, Dasbor |
+| Cabang & konsolidasi | Laporan berkolom per cabang (RAK otomatis menjaga neraca tiap cabang seimbang) dan konsolidasi grup dengan eliminasi antar perusahaan, eliminasi investasi, goodwill, dan kepentingan non-pengendali |
+| Alur kerja | Plafon kredit, ambang PO, maker–checker jurnal & pembayaran, Kotak Persetujuan lintas modul, pemisahan tugas |
+| Keamanan | scrypt + kebijakan sandi, penguncian akun, MFA TOTP, sesi HttpOnly/SameSite + CSRF, RBAC 17 modul × 5 tingkat, cakupan data per perusahaan/cabang, penyamaran PII, jejak audit berantai hash, cadangan AES-256-GCM, header keamanan & CSP, pembatas laju |
+
+## Struktur repositori
 
 | Jalur | Isi |
 | --- | --- |
-| `prototype/index.html` | Kerangka halaman |
-| `prototype/assets/tokens.css` | Token desain: warna, tipografi, ruang, radius, tema terang/gelap |
-| `prototype/assets/app.css` | Shell dan seluruh komponen |
-| `prototype/assets/data.js` | Data contoh (tenant peraga PT Karya Nusantara Mandiri) |
-| `prototype/assets/charts.js` | Pemformat angka id-ID dan mesin grafik SVG |
-| `prototype/assets/app.js` | Perutean, layar, register, laci rekaman, overlay |
-| `docs/` | Dokumen desain — produk, arsitektur informasi, alur, sistem desain |
-| `tools/build.mjs` | Menggabungkan purwarupa menjadi berkas tunggal di `dist/` |
-| `tools/smoke.mjs` | Uji asap: 15 layar × 2 tema + interaksi + tampilan sempit |
+| `server/` | Server HTTP, API, mesin posting, laporan, keamanan (tanpa dependensi runtime) |
+| `server/modules/entities.js` | Definisi seluruh entitas — sumber skema, validasi, dan formulir |
+| `server/ledger/` | Posting jurnal, persediaan rata-rata bergerak, aksi dokumen, laporan |
+| `server/security/` | Autentikasi, sesi, MFA, RBAC, jejak audit, kriptografi |
+| `web/` | Aplikasi peramban (SPA) — memakai token & komponen sistem desain purwarupa |
+| `test/` | Uji integrasi API (`npm test`) |
+| `tools/e2e.mjs` | Uji end-to-end peramban (`npm run test:e2e`) |
+| `deploy/`, `Dockerfile`, `.env.example` | Unit systemd terkeras, konfigurasi nginx TLS, citra kontainer |
+| `prototype/`, `dist/` | Purwarupa UI/UX awal (acuan desain) |
+| `docs/` | Dokumen produk, desain, arsitektur, keamanan, operasional |
 
-## Dokumen desain
+## Dokumen
 
 1. [Ringkasan produk & persona](docs/01-ringkasan-produk.md)
 2. [Arsitektur informasi](docs/02-arsitektur-informasi.md)
 3. [Alur pengguna utama](docs/03-alur-pengguna.md)
 4. [Sistem desain](docs/04-sistem-desain.md)
 5. [Cakupan & batas purwarupa](docs/05-cakupan-purwarupa.md)
+6. [Model data](docs/06-model-data.md)
+7. [Spesifikasi fungsional](docs/07-spesifikasi-fungsional.md)
+8. [Arsitektur aplikasi & integrasi buku besar](docs/08-arsitektur-aplikasi.md)
+9. [Keamanan informasi & pemetaan ISO 27001](docs/09-keamanan-iso27001.md)
+10. [Operasional & deployment](docs/10-operasional.md)
 
-## Perkakas
+## Pengujian
 
 ```bash
-npm install                 # hanya untuk uji asap (Playwright)
-node tools/build.mjs        # -> dist/prototipe.html, dist/artifact.html
-node tools/smoke.mjs        # -> lulus/gagal + tangkapan layar di dist/shots/
+npm test           # 86 uji: keamanan, RBAC, SoD, posting, rekonsiliasi, laporan, konsolidasi, CRUD semua entitas
+npm install && npm run test:e2e   # Playwright: semua menu × tema terang/gelap + alur transaksi + layar 390 px
 ```
-
-Uji asap membuka setiap layar pada tema terang dan gelap, menangkap galat
-konsol, memastikan tidak ada luapan horizontal pada badan halaman, lalu menguji
-laci rekaman, palet perintah, modal, dan toast.
-
-## Yang sudah dapat dicoba
-
-- Navigasi 15 layar, tertaut lewat URL (`#/pesanan-penjualan`, `#/piutang`, …)
-- Register: cari, saring status, urutkan kolom, pilih baris, aksi massal, paginasi
-- Laci rekaman pesanan penjualan lengkap dengan baris barang, posisi kredit
-  pelanggan, linimasa, serta tindakan setujui/tolak yang benar-benar mengubah data
-- Papan produksi dengan saringan lini
-- Matriks izin yang dapat diklik (ubah & setujui → lihat saja → tanpa akses)
-- Palet perintah (`Ctrl/Cmd + K` atau `/`) untuk melompat ke halaman dan rekaman
-- Modal pesanan baru yang menambahkan baris nyata ke daftar
-- Tema terang/gelap/ikut sistem, papan ketik penuh, dan tata letak responsif
