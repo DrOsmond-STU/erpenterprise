@@ -7,7 +7,7 @@ import { hashPassword } from '../security/crypto.js';
 import { clearPermCache, can, LEVEL } from '../security/rbac.js';
 import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
-import { termDueDate, validateTerm } from '../ledger/payments.js';
+import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
@@ -67,6 +67,31 @@ function noteCompute(partyTable, partyField, docTable, docField, reduces) {
   };
 }
 
+/**
+ * Faktur uang muka: mitra & pesanan cocok, pesanan IDR, nilai dari % DPP pesanan atau diisi langsung,
+ * total uang muka per pesanan ≤ DPP pesanan, PPN mengikuti pesanan bila kosong.
+ */
+function advanceCompute(table) {
+  const cfg = ADVANCE[table];
+  return (_c, row) => {
+    row.currency_id = null; row.exchange_rate = 1;
+    const o = row[cfg.order] ? db.get(`SELECT * FROM "${cfg.orderTable}" WHERE id = ?`, row[cfg.order]) : null;
+    if (!o) return;
+    if (o[cfg.party] !== row[cfg.party]) throw bad('Pesanan bukan milik mitra yang dipilih.');
+    if ((Number(o.exchange_rate) || 1) !== 1) throw bad('Faktur uang muka hanya untuk pesanan IDR.');
+    if (row.tax_rate == null || row.tax_rate === '') row.tax_rate = o.tax_rate ?? 11;
+    if (Number(row.percent) > 0) row.amount = round2(o.subtotal * Number(row.percent) / 100);
+    row.amount = round2(Number(row.amount) || 0);
+    if (!(row.amount > 0)) throw bad('Isi persentase atau nilai uang muka (DPP).');
+    const other = db.get(`SELECT COALESCE(SUM(amount),0) v FROM "${table}" WHERE ${cfg.order} = ? AND status <> 'batal' AND id IS NOT ?`, o.id, row.id ?? null).v;
+    if (round2(other + row.amount) > round2(o.subtotal) + 0.005) throw bad(`Total uang muka pesanan ${o.number} melebihi DPP pesanan (${round2(o.subtotal).toLocaleString('id-ID')}; sudah ada ${round2(other).toLocaleString('id-ID')}).`);
+    row.tax = round2(row.amount * Number(row.tax_rate) / 100);
+    row.total = round2(row.amount + row.tax);
+    row.paid = row.paid || 0; row.applied = row.applied || 0;
+    if (!row.due_date) row.due_date = row.date;
+  };
+}
+
 /** Penerimaan/pembayaran: jenis, total kas/uang muka, total pelunasan, validasi rekening & potongan. */
 function settlementTotals(row, lines) {
   row.mode = row.mode || 'pelunasan';
@@ -80,8 +105,8 @@ function settlementTotals(row, lines) {
     row.advance = 0;
     if (lines) {
       for (const l of lines) {
-        const targets = ['invoice_id', 'debit_note_id', 'bill_id', 'credit_note_id'].filter((k) => l[k]);
-        if (targets.length !== 1) throw bad('Setiap baris harus memilih tepat satu dokumen yang dilunasi (faktur/tagihan atau nota).');
+        const targets = ['invoice_id', 'debit_note_id', 'bill_id', 'credit_note_id', 'advance_id'].filter((k) => l[k]);
+        if (targets.length !== 1) throw bad('Setiap baris harus memilih tepat satu dokumen yang dilunasi (faktur/tagihan, nota, atau uang muka).');
         for (const k of ['amount', 'discount', 'pph23']) if ((Number(l[k]) || 0) < 0) throw bad('Nilai pembayaran/potongan tidak boleh negatif.');
         l.discount = Number(l.discount) || 0; l.pph23 = Number(l.pph23) || 0;
         l.settled = round2((Number(l.amount) || 0) + l.discount + l.pph23);
@@ -199,7 +224,7 @@ export const HOOKS = {
   quotations: { compute: quotationCompute },
   purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
   sales_invoices: {
-    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); applyTerm(row, 'customers', 'customer_id'); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
+    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'sales_invoices'); applyTerm(row, 'customers', 'customer_id'); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
     // Faktur dari surat jalan: baris terkunci (qty & barang mengikuti surat jalan); hapus draf → surat jalan dapat difakturkan lagi.
     beforeUpdate: (_c, row, existing, body) => {
       if (body.lines !== undefined && db.get('SELECT id FROM delivery_orders WHERE invoice_id = ?', existing.id)) throw bad('Baris faktur dari surat jalan tidak dapat diubah. Hapus draf faktur lalu buat ulang dari surat jalan yang benar.');
@@ -242,7 +267,7 @@ export const HOOKS = {
   purchase_bills: {
     compute: (ctx, row, lines) => {
       if (lines) for (const l of lines) if (!l.product_id && !l.account_id) throw bad('Setiap baris tagihan harus memilih barang atau akun.');
-      applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); applyTerm(row, 'suppliers', 'supplier_id'); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
+      applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'purchase_bills'); applyTerm(row, 'suppliers', 'supplier_id'); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
     },
   },
   pos_sales: {
@@ -258,6 +283,8 @@ export const HOOKS = {
   customer_debit_notes: { compute: noteCompute('customers', 'customer_id', 'sales_invoices', 'invoice_id', false) },
   supplier_debit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', true) },
   supplier_credit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', false) },
+  sales_advances: { compute: advanceCompute('sales_advances') },
+  purchase_advances: { compute: advanceCompute('purchase_advances') },
   cash_transactions: { compute: amountTotal },
   journals: {
     compute: (_c, row, lines) => {

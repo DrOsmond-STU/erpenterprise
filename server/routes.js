@@ -13,7 +13,7 @@ import { copyBudgets } from './ledger/budget.js';
 import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
 import { invoiceFromDeliveries } from './ledger/documents.js';
 import { fulfillmentReport } from './ledger/fulfillment.js';
-import { installmentsOf, installmentSchedule, advanceBalance, giroRegister } from './ledger/payments.js';
+import { installmentsOf, installmentSchedule, advanceBalance, giroRegister, advanceRegister } from './ledger/payments.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -199,6 +199,7 @@ const REPORTS = {
   penawaran: (ctx, r) => quotationReport(ctx, r),
   pemenuhan: (ctx, r) => fulfillmentReport(ctx, r),
   giro: (ctx, r, q) => giroRegister(ctx, { ...r, side: q.side === 'out' ? 'out' : 'in', from: isDate(q.from) ? q.from : null }),
+  'uang-muka': (ctx, r, q) => advanceRegister(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar' }),
   angsuran: (ctx, r, q) => installmentSchedule(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar', days: q.days }),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
   'kartu-mitra': (ctx, r, q) => reports.partnerStatement(ctx, { ...r, partnerType: q.partner_type === 'supplier' ? 'supplier' : 'customer', partnerId: q.partner }),
@@ -209,7 +210,7 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
   const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales' }[p.name]
-    || (p.name === 'angsuran' ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
+    || (['angsuran', 'uang-muka'].includes(p.name) ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
     || (p.name === 'giro' ? (q.side === 'out' ? 'purchasing' : 'sales') : null)
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
@@ -234,10 +235,10 @@ route('POST', '/api/budgets/copy', (ctx, body, _p, q) => {
 /* Jadwal angsuran & riwayat pembayaran satu faktur/tagihan (cakupan diperiksa lewat crud.read). */
 route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
   scoped(ctx, q);
-  const LINEF = { sales_invoices: 'invoice_id', customer_debit_notes: 'debit_note_id', purchase_bills: 'bill_id', supplier_credit_notes: 'credit_note_id' };
+  const LINEF = { sales_invoices: 'invoice_id', customer_debit_notes: 'debit_note_id', sales_advances: 'advance_id', purchase_bills: 'bill_id', supplier_credit_notes: 'credit_note_id', purchase_advances: 'advance_id' };
   if (!LINEF[p.entity]) throw notFound();
   const doc = crud.read(ctx, p.entity, p.id);
-  const ar = ['sales_invoices', 'customer_debit_notes'].includes(p.entity);
+  const ar = ['sales_invoices', 'customer_debit_notes', 'sales_advances'].includes(p.entity);
   const lf = LINEF[p.entity];
   const payments = db.all(ar
     ? `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'customer_receipts' entity FROM customer_receipt_lines l JOIN customer_receipts r ON r.id = l.parent_id WHERE l.${lf} = ? AND r.status <> 'draf' ORDER BY r.date, r.id`
@@ -249,7 +250,11 @@ route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
       ? db.all("SELECT id, number, date, total settled, 'purchase_returns' entity FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'supplier_debit_notes' FROM supplier_debit_notes WHERE bill_id = ? AND status = 'diposting'", doc.id, doc.id)
       : [];
   const partyType = ar ? 'customer' : 'supplier';
-  return { installments: installmentsOf(p.entity, doc.id), payments, credits, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
+  // Uang muka: faktur/tagihan akhir yang memotong DPP uang muka ini.
+  const applications = ['sales_advances', 'purchase_advances'].includes(p.entity)
+    ? db.all(`SELECT id, number, date, subtotal, advance_amount, total, status, '${ar ? 'sales_invoices' : 'purchase_bills'}' entity FROM ${ar ? 'sales_invoices' : 'purchase_bills'} WHERE advance_id = ? AND status <> 'batal' ORDER BY date, id`, doc.id)
+    : [];
+  return { installments: installmentsOf(p.entity, doc.id), payments, credits, applications, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
 });
 /* Saldo uang muka mitra (untuk formulir penerimaan/pembayaran). */
 route('GET', '/api/advance/:type/:id', (ctx, _b, p, q) => {

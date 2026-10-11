@@ -110,8 +110,9 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    **Terima pembayaran** (penuh atau sebagian; isi potongan, PPh 23 yang dipotong
    pelanggan, dan biaya bank bila ada). Dari tagihan pilih **Ajukan pembayaran** —
    disetujui & diposting oleh penyetuju lain.
-3. Uang muka sebelum faktur/tagihan: buat Penerimaan/Pembayaran jenis **Uang muka
-   (DP)**; saat faktur/tagihan terbit, lunasi dengan sumber dana **Saldo uang muka**.
+3. Titipan tanpa faktur pajak: buat Penerimaan/Pembayaran jenis **Titipan / uang muka
+   tanpa faktur**; saat faktur/tagihan terbit, lunasi dengan sumber dana **Saldo uang
+   muka**. Uang muka atas pesanan dengan PPN memakai dokumen Uang Muka (bagian berikut).
 4. Pantau **Jadwal Angsuran Piutang/Hutang** mingguan (terlambat, jatuh tempo 7 & 30
    hari) dan rekonsiliasi akun 1-1410 (PPh 23 dibayar di muka — kumpulkan bukti
    potong), 2-1330 (setor PPh 23 paling lambat tanggal 15 bulan berikutnya),
@@ -130,6 +131,24 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    **Giro cair**.
 4. Harian: periksa notifikasi giro jatuh tempo ≤ 3 hari; akhir bulan pastikan
    indikator register hijau (giro belum cair = saldo akun 1-1250 / 2-1150).
+
+## Uang muka penjualan & pembelian
+
+1. DP dari pelanggan: buka **Pesanan Penjualan** yang disetujui → **Buat uang muka (DP)**
+   (mis. 30% atau nilai tertentu) → periksa draf di **Penjualan → Uang Muka Penjualan**
+   → **Terbitkan faktur uang muka** (PPN keluaran tercatat) → kirim ke pelanggan.
+2. Saat dana masuk: **Terima pembayaran** (transfer/giro, boleh sebagian). Setelah lunas,
+   status menjadi *siap dipotong*.
+3. Saat barang dikirim dan faktur dibuat dari surat jalan/SO, potongan uang muka terisi
+   otomatis (proporsional; faktur terakhir memotong seluruh sisa). Periksa kolom
+   *Potong uang muka* lalu terbitkan faktur.
+4. DP ke pemasok: dari **PO** yang disetujui → **Buat uang muka (DP)** → isi *No. faktur
+   uang muka pemasok* → **Posting uang muka** → **Ajukan pembayaran** (disetujui orang
+   lain). Saat barang diterima (*Terima barang & buat tagihan*), tagihan memotong uang
+   muka otomatis.
+5. Akhir bulan: **Keuangan → Register Uang Muka** — tagih/bayar uang muka yang belum
+   dibayar, tindak lanjuti uang muka lama yang belum dipotong, dan pastikan indikator
+   hijau (sisa DPP = saldo akun 2-1610 / 1-1520).
 
 ## Nota debet & nota kredit
 

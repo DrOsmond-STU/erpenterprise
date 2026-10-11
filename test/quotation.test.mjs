@@ -4,6 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { start, stop, as, db } from './helpers.mjs';
+import { setToday } from '../server/lib/util.js';
 
 let admin, osmond, sari, portal;
 const id = (table, code, field = 'code') => db.get(`SELECT id FROM ${table} WHERE ${field} = ?`, code).id;
@@ -16,8 +17,9 @@ before(async () => {
   sari = await as('sari.sales');
   portal = await as('portal.astra');
   await admin.put('/api/settings/security_policy', { apiRateLimitPerMinute: 100000, loginRateLimitPerMinute: 1000 });
+  setToday('2026-10-07'); // tanggal kirim/kedaluwarsa dihitung dari "hari ini" aplikasi
 });
-after(stop);
+after(() => { setToday(null); return stop(); });
 
 const newQuote = (who, body = {}) => who.post('/api/e/quotations', { date: '2026-10-07', customer_id: id('customers', 'C001'), tax_rate: 11, lines: [{ product_id: prod('FG-102'), qty: 10, price: 2_250_000 }], ...body });
 const act = (who, qid, a, p = {}) => who.post(`/api/e/quotations/${qid}/actions/${a}`, p);

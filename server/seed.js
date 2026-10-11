@@ -773,6 +773,52 @@ async function seedDemo() {
     if (sb) await note('supplier_debit_notes', 'CKR', { supplier_id: SU.S002, bill_id: sb.id, reason: 'klaim', reference: 'BA klaim resin', description: 'Klaim resin tidak sesuai spesifikasi 50 kg', tax_rate: 11, lines: [{ account_id: A('7-1300'), amount: 1_900_000 }] }, true);
     await note('supplier_credit_notes', 'JKT', { supplier_id: SU.S004, reason: 'ongkos', reference: 'JPC-ADD-77', description: 'Biaya angkut tambahan pengiriman cat powder', tax_rate: 11, lines: [{ account_id: A('6-2300'), amount: 2_400_000 }] }, false);
 
+    // Uang muka penjualan & pembelian (faktur uang muka atas SO/PO, dipotong pada faktur/tagihan akhir).
+    {
+      const dpSo = async (soId, date, pct, pay) => {
+        setToday(date);
+        const a = (await run(maker, 'KNM', 'sales_orders', soId, 'to_advance', { date, percent: pct })).redirect.id;
+        await run(checker, 'KNM', 'sales_advances', a, 'post');
+        if (pay) await run(checker, 'KNM', 'sales_advances', a, 'receive', { date, source: 'bank', bank_account_id: BA['BCA-JKT'], amount: db.get('SELECT total FROM sales_advances WHERE id = ?', a).total, discount: 0, pph23: 0, bank_charge: 0, reference: 'Transfer DP' });
+        return a;
+      };
+      // 1) DP 30% lunas → kirim sebagian → faktur memotong DP proporsional → kirim sisa → faktur akhir memotong sisa DP.
+      const soA = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C005', [tradeLine('FG-101', 6), tradeLine('SV-301', 10)], '2026-10-01');
+      await dpSo(soA, '2026-10-01', 30, true);
+      const d1 = await deliver('KNM', soA, '2026-10-02', 0.5);
+      const f1 = db.tx(() => invoiceFromDeliveries(at(maker, 'KNM'), [d1], { date: '2026-10-02' })).id;
+      await run(checker, 'KNM', 'sales_invoices', f1, 'post');
+      const d2 = await deliver('KNM', soA, '2026-10-05');
+      setToday('2026-10-05');
+      const f2 = db.tx(() => invoiceFromDeliveries(at(maker, 'KNM'), [d2], { date: '2026-10-05' })).id;
+      await run(checker, 'KNM', 'sales_invoices', f2, 'post');
+      // 2) DP 50% sudah dibayar, barang belum dikirim (siap dipotong). 3) DP 20% ditagih, belum dibayar.
+      const soB = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C002', [tradeLine('FG-102', 12)], '2026-10-03');
+      await dpSo(soB, '2026-10-03', 50, true);
+      const soC = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C004', [tradeLine('FG-101', 4)], '2026-10-04');
+      await dpSo(soC, '2026-10-04', 20, false);
+      // 4) Uang muka pembelian 30% dibayar (SoD) → terima barang & tagihan memotong DP. 5) DP pembelian belum dibayar.
+      const dpPo = async (sup, wh, lines, date, pct, pay) => {
+        setToday(date);
+        const po = await mk(maker, 'KNM', 'JKT', 'purchase_orders', { date, eta: date, supplier_id: SU[sup], warehouse_id: WH[wh], buyer: 'Agus Setiawan', tax_rate: 11, lines });
+        await run(maker, 'KNM', 'purchase_orders', po, 'submit');
+        if (db.get('SELECT status FROM purchase_orders WHERE id = ?', po).status === 'menunggu') await run(checker, 'KNM', 'purchase_orders', po, 'approve');
+        const a = (await run(maker, 'KNM', 'purchase_orders', po, 'to_advance', { date, percent: pct })).redirect.id;
+        await crud.update(at(maker, 'KNM'), 'purchase_advances', a, { supplier_invoice_no: `FUM-${sup}-${date.replace(/-/g, '')}` });
+        await run(checker, 'KNM', 'purchase_advances', a, 'post');
+        if (pay) {
+          const r = await run(maker, 'KNM', 'purchase_advances', a, 'pay', { date, source: 'bank', bank_account_id: BA['BCA-JKT'], amount: db.get('SELECT total FROM purchase_advances WHERE id = ?', a).total, discount: 0, pph23: 0, bank_charge: 6_500, reference: 'DP PO' });
+          await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
+        }
+        return po;
+      };
+      const poA = await dpPo('S001', 'WH-JKT', [tradeLine('RM-001', 120, 285_000)], '2026-10-02', 30, true);
+      setToday('2026-10-06');
+      const bA = (await run(maker, 'KNM', 'purchase_orders', poA, 'to_bill', { supplier_invoice_no: 'F-S001-20261006' })).redirect.id;
+      await run(checker, 'KNM', 'purchase_bills', bA, 'post');
+      await dpPo('S005', 'WH-JKT', [tradeLine('RM-004', 100, 92_000)], '2026-10-05', 25, false);
+    }
+
     // Giro mundur: masuk dari pelanggan (cair, belum cair, ditolak) & keluar ke pemasok (cair, belum cair).
     const giroIn = async (cust, date, due, no, bankName, share) => {
       const inv = openInv(cust);

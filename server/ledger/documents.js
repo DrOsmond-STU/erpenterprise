@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { createInstallments, syncInstallments, deleteInstallments, advanceBalance } from './payments.js';
+import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
 
@@ -116,8 +116,11 @@ function postSalesInvoice(ctx, inv) {
     }
   }
   if (inv.tax > 0) jl.push({ account_id: acct('vat_out'), credit: toBase(inv.tax, inv), memo: 'PPN keluaran' });
+  // Potongan uang muka: DPP uang muka (sudah dikenai PPN saat faktur uang muka) mengurangi piutang.
+  const adv = applyAdvance('sales_advances', inv, 1);
+  if (adv) jl.push({ account_id: acct('sales_dp'), debit: round2(inv.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'customer', partner_id: cust.id });
   // Piutang (IDR) = jumlah pendapatan + PPN yang sudah dikonversi — menghindari selisih pembulatan.
-  arLine.debit = round2(jl.filter((x) => x.credit && !x.branch_id).reduce((a, x) => a + x.credit, 0));
+  arLine.debit = round2(jl.filter((x) => x.credit && !x.branch_id).reduce((a, x) => a + x.credit, 0) - (adv ? inv.advance_amount : 0));
   postJournal(ctx, { companyId: inv.company_id, branchId: inv.branch_id, date: inv.date, description: `Faktur ${inv.number} — ${cust.name}`, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number, lines: jl });
   setStatus('sales_invoices', inv.id, 'terbit');
   createInstallments('sales_invoices', db.get('SELECT * FROM sales_invoices WHERE id = ?', inv.id));
@@ -133,6 +136,7 @@ function voidSalesInvoice(ctx, inv) {
     if (l.delivery_line_id) continue; // barang tetap di pelanggan; surat jalan kembali "dikirim" (belum difakturkan)
     if (isStockable(p)) stockIn(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, unitCost: l.unit_cost || 0, date: today(), sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: `${inv.number} (batal)` });
   }
+  applyAdvance('sales_advances', inv, -1);
   reverseDocumentJournals(ctx, 'sales_invoices', inv.id, today(), `Pembatalan faktur ${inv.number}`);
   setStatus('sales_invoices', inv.id, 'batal');
   deleteInstallments('sales_invoices', inv.id);
@@ -248,19 +252,22 @@ export function invoiceFromDeliveries(ctx, deliveryIds, { date = null } = {}) {
   const invDate = date || today();
   const terms = db.get('SELECT terms_days FROM customers WHERE id = ?', first.customer_id)?.terms_days ?? 30;
   const due = new Date(invDate + 'T00:00:00Z'); due.setUTCDate(due.getUTCDate() + terms);
-  const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', {
+  // Faktur terakhir pesanan (seluruh qty terkirim & tidak ada surat jalan lain yang belum difakturkan) memotong seluruh sisa uang muka.
+  const lastBilling = sos.size === 1 && so1.status === 'terkirim' && !db.get(`SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status = 'dikirim' AND invoice_id IS NULL AND id NOT IN (${ids.map(() => '?').join(',')})`, so1.id, ...ids);
+  const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', withAdvance({
     company_id: first.company_id, branch_id: so1.branch_id, date: invDate, due_date: due.toISOString().slice(0, 10), customer_id: first.customer_id, warehouse_id: first.warehouse_id,
     sales_order_id: sos.size === 1 ? so1.id : null, project_id: projects.size === 1 ? [...projects][0] : null, ...fxCopy(so1),
     notes: `Surat jalan: ${dos.map((d) => d.number).join(', ')}${sos.size > 1 ? ` · Pesanan: ${[...sos.values()].map((s2) => s2.number).join(', ')}` : ''}`,
     subtotal, tax_rate: so1.tax_rate ?? 11, tax, total: round2(subtotal + tax), paid: 0, status: 'draf',
-  }, invLines, 'sales_invoice_lines');
+  }, 'sales_invoices', sos.size === 1 ? so1.id : null, lastBilling), invLines, 'sales_invoice_lines');
   for (const d of dos) db.update('delivery_orders', d.id, { invoice_id: id });
   audit.log(ctx, 'invoice.from_deliveries', { entity: 'sales_invoices', entityId: id, companyId: first.company_id, detail: { deliveries: dos.map((d) => d.number), number } });
   return { id, number, deliveries: dos.length };
 }
 
 function settle(table, id, delta) {
-  const d = db.get(`SELECT total, paid FROM "${table}" WHERE id = ?`, id);
+  const d = db.get(`SELECT * FROM "${table}" WHERE id = ?`, id);
+  if (ADVANCE[table] && delta < 0 && d.applied > 0.005) throw conflict(`Uang muka ${d.number} sudah dipotongkan ke faktur/tagihan; batalkan dokumen tersebut terlebih dahulu.`);
   const paid = round2((d.paid || 0) + delta);
   if (paid - d.total > 0.005) throw bad('Pembayaran melebihi sisa tagihan.');
   if (paid < -0.005) throw bad('Saldo pembayaran negatif.');
@@ -271,8 +278,8 @@ function settle(table, id, delta) {
 
 /* --- Penerimaan & pembayaran bertahap ------------------------------------------- */
 /* Baris penerimaan/pembayaran melunasi faktur/tagihan atau nota debet pelanggan / nota kredit pemasok. */
-export const AR_TARGETS = [['invoice_id', 'sales_invoices', 'Faktur'], ['debit_note_id', 'customer_debit_notes', 'Nota debet']];
-export const AP_TARGETS = [['bill_id', 'purchase_bills', 'Tagihan'], ['credit_note_id', 'supplier_credit_notes', 'Nota kredit']];
+export const AR_TARGETS = [['invoice_id', 'sales_invoices', 'Faktur'], ['debit_note_id', 'customer_debit_notes', 'Nota debet'], ['advance_id', 'sales_advances', 'Uang muka']];
+export const AP_TARGETS = [['bill_id', 'purchase_bills', 'Tagihan'], ['credit_note_id', 'supplier_credit_notes', 'Nota kredit'], ['advance_id', 'purchase_advances', 'Uang muka']];
 function targetOf(l, targets) {
   const t = targets.find(([f]) => l[f]);
   if (!t) throw bad('Setiap baris harus memilih dokumen yang dilunasi.');
@@ -411,7 +418,10 @@ function postBill(ctx, bill) {
   }
   const warnings = budgetCheck({ companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, excludePoId: bill.purchase_order_id, lines: jl.map((x) => ({ account_id: x.account_id, amount: x.debit, branch_id: x.branch_id, project_id: x.project_id })) });
   if (bill.tax > 0) jl.push({ account_id: acct('vat_in'), debit: toBase(bill.tax, bill), memo: 'PPN masukan' });
-  jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), credit: round2(jl.reduce((a, x) => a + (x.debit || 0), 0)), memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
+  const adv = applyAdvance('purchase_advances', bill, 1);
+  const apAmount = round2(jl.reduce((a, x) => a + (x.debit || 0), 0) - (adv ? bill.advance_amount : 0));
+  if (adv) jl.push({ account_id: acct('purchase_dp'), credit: round2(bill.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'supplier', partner_id: sup.id });
+  jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), credit: apAmount, memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
   postJournal(ctx, { companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, description: `Tagihan ${bill.number} (${bill.supplier_invoice_no || '-'}) — ${sup.name}`, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number, lines: jl });
   setStatus('purchase_bills', bill.id, 'terbit');
   createInstallments('purchase_bills', db.get('SELECT * FROM purchase_bills WHERE id = ?', bill.id));
@@ -425,6 +435,7 @@ function voidBill(ctx, bill) {
     const p = l.product_id ? product(l.product_id) : null;
     if (p && isStockable(p)) stockOut(ctx, { warehouseId: bill.warehouse_id, productId: p.id, qty: l.qty, date: today(), sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: `${bill.number} (batal)` });
   }
+  applyAdvance('purchase_advances', bill, -1);
   reverseDocumentJournals(ctx, 'purchase_bills', bill.id, today(), `Pembatalan tagihan ${bill.number}`);
   setStatus('purchase_bills', bill.id, 'batal');
   deleteInstallments('purchase_bills', bill.id);
@@ -611,6 +622,99 @@ function noteActions(table) {
     post: postNote(table), void: voidNote(table),
     [cfg.ar ? 'receive' : 'pay']: (ctx, n, p) => quickSettle(ctx, cfg.ar ? 'customer_receipts' : 'supplier_payments', n, p, table),
   };
+}
+
+/* --- Faktur uang muka penjualan & pembelian ---------------------------------------- */
+const ADV_ORDER_OPEN = { sales_advances: ['disetujui', 'dikirim_sebagian', 'terkirim'], purchase_advances: ['disetujui'] };
+
+/** Potongan uang muka pada faktur/tagihan akhir: sign +1 saat posting (validasi ulang), −1 saat dibatalkan. */
+function applyAdvance(advTable, doc, sign) {
+  if (!doc.advance_id || !(doc.advance_amount > 0)) return null;
+  const cfg = ADVANCE[advTable];
+  const a = db.get(`SELECT * FROM "${advTable}" WHERE id = ?`, doc.advance_id);
+  if (sign > 0) {
+    if (!a || a[cfg.party] !== doc[cfg.party]) throw bad('Uang muka yang dipotong bukan milik mitra dokumen ini.');
+    if (a.status !== 'lunas') throw bad(`Uang muka ${a.number} belum lunas atau sudah habis dipotongkan.`);
+    if (!isBaseDoc(doc)) throw bad('Potongan uang muka hanya untuk dokumen IDR.');
+    if (doc.advance_amount > round2(a.amount - (a.applied || 0)) + 0.005) throw bad(`Potongan melebihi sisa uang muka ${a.number} (${round2(a.amount - (a.applied || 0)).toLocaleString('id-ID')}).`);
+  }
+  const applied = round2((a.applied || 0) + sign * doc.advance_amount);
+  db.update(advTable, a.id, { applied, status: applied >= a.amount - 0.005 ? 'diterapkan' : 'lunas' });
+  return a;
+}
+
+/**
+ * Posting faktur uang muka. Penjualan: Dr Piutang · Cr Uang Muka Penjualan (DPP) & PPN Keluaran.
+ * Pembelian: Dr Uang Muka Pembelian (DPP) & PPN Masukan · Cr Hutang. Dokumen menjadi piutang/hutang
+ * terbuka yang dilunasi lewat penerimaan/pembayaran.
+ */
+function postAdvance(table) {
+  return (ctx, a) => {
+    const cfg = ADVANCE[table];
+    const party = db.get(`SELECT * FROM ${cfg.ar ? 'customers' : 'suppliers'} WHERE id = ?`, a[cfg.party]);
+    const o = db.get(`SELECT * FROM "${cfg.orderTable}" WHERE id = ?`, a[cfg.order]);
+    if (!o || o[cfg.party] !== party.id) throw bad('Pesanan uang muka tidak ditemukan untuk mitra ini.');
+    if (!ADV_ORDER_OPEN[table].includes(o.status)) throw bad(`Pesanan ${o.number} berstatus "${o.status}" — uang muka hanya untuk pesanan yang disetujui dan belum selesai.`);
+    if (cfg.ar && party.status === 'ditahan') throw bad(`Pelanggan ${party.name} sedang ditahan.`);
+    if (!(a.amount > 0) || !(a.total > 0)) throw bad('Nilai uang muka belum diisi.');
+    const ic = !!party.related_company_id;
+    const ref = { partner_type: cfg.ar ? 'customer' : 'supplier', partner_id: party.id };
+    const jl = cfg.ar
+      ? [
+        { account_id: acct(ic ? 'ic_receivable' : 'ar'), debit: round2(a.total), memo: `Piutang uang muka ${o.number}`, ...ref },
+        { account_id: acct('sales_dp'), credit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
+        ...(a.tax > 0 ? [{ account_id: acct('vat_out'), credit: round2(a.tax), memo: `PPN keluaran uang muka ${a.number}` }] : []),
+      ]
+      : [
+        { account_id: acct('purchase_dp'), debit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
+        ...(a.tax > 0 ? [{ account_id: acct('vat_in'), debit: round2(a.tax), memo: `PPN masukan uang muka ${a.supplier_invoice_no || a.number}` }] : []),
+        { account_id: acct(ic ? 'ic_payable' : 'ap'), credit: round2(a.total), memo: `Hutang uang muka ${o.number}`, ...ref },
+      ];
+    postJournal(ctx, { companyId: a.company_id, branchId: a.branch_id, date: a.date, description: `Uang muka ${a.number} atas ${o.number} — ${party.name}`, sourceType: table, sourceId: a.id, sourceNo: a.number, lines: jl });
+    setStatus(table, a.id, 'terbit');
+    createInstallments(table, db.get(`SELECT * FROM "${table}" WHERE id = ?`, a.id));
+    return { message: `Uang muka ${a.number} terbit — ${cfg.ar ? 'tagih ke pelanggan' : 'ajukan pembayaran ke pemasok'} Rp ${round2(a.total).toLocaleString('id-ID')}; setelah lunas, DPP-nya dipotongkan pada ${cfg.ar ? 'faktur' : 'tagihan'} akhir.` };
+  };
+}
+
+function voidAdvance(table) {
+  return (ctx, a) => {
+    if (a.paid > 0) throw conflict('Uang muka yang sudah dibayar tidak dapat dibatalkan; batalkan pembayarannya terlebih dahulu.');
+    if (a.applied > 0) throw conflict('Uang muka sudah dipotongkan ke faktur/tagihan.');
+    reverseDocumentJournals(ctx, table, a.id, today(), `Pembatalan uang muka ${a.number}`);
+    deleteInstallments(table, a.id);
+    setStatus(table, a.id, 'batal');
+  };
+}
+
+/** Buat draf faktur uang muka dari SO/PO: persentase DPP pesanan atau nilai langsung. */
+function advanceFromOrder(table) {
+  return (ctx, o, p) => {
+    const cfg = ADVANCE[table];
+    if (!isBaseDoc(o)) throw bad('Uang muka hanya untuk pesanan IDR.');
+    const pct = Number(p.percent) || 0;
+    const amount = pct > 0 ? round2(o.subtotal * pct / 100) : round2(Number(p.amount) || 0);
+    if (!(amount > 0)) throw bad('Isi persentase atau nilai uang muka.');
+    const used = db.get(`SELECT COALESCE(SUM(amount),0) v FROM "${table}" WHERE ${cfg.order} = ? AND status <> 'batal'`, o.id).v;
+    if (round2(used + amount) > round2(o.subtotal) + 0.005) throw bad(`Total uang muka melebihi DPP pesanan (sudah ada ${round2(used).toLocaleString('id-ID')} dari ${round2(o.subtotal).toLocaleString('id-ID')}).`);
+    const rate = o.tax_rate ?? 11, tax = round2(amount * rate / 100), date = p.date || today();
+    const { id, number } = createDoc(ctx, table, cfg.ar ? 'UMJ' : 'UMB', {
+      company_id: o.company_id, branch_id: o.branch_id, date, due_date: date, [cfg.party]: o[cfg.party], [cfg.order]: o.id,
+      percent: pct || null, amount, tax_rate: rate, tax, total: round2(amount + tax), paid: 0, applied: 0, currency_id: null, exchange_rate: 1, status: 'draf',
+      description: `Uang muka ${pct ? `${pct}% ` : ''}atas ${o.number}${o.customer_po ? ` (PO pelanggan ${o.customer_po})` : ''}`,
+    }, [], null);
+    return { redirect: { entity: table, id }, message: `Draf uang muka ${number} dibuat (DPP Rp ${amount.toLocaleString('id-ID')}). ${cfg.ar ? 'Terbitkan untuk menagih pelanggan.' : 'Isi no. faktur uang muka pemasok lalu posting.'}` };
+  };
+}
+
+/** Header faktur/tagihan dari pesanan: usulkan potongan uang muka lunas dan hitung ulang PPN & total. */
+function withAdvance(header, docTable, orderId, finalBilling) {
+  if (!orderId || (Number(header.exchange_rate) || 1) !== 1) return header;
+  const prop = proposeAdvance(docTable === 'sales_invoices' ? 'sales_advances' : 'purchase_advances', orderId, header.subtotal, finalBilling);
+  if (!prop.advance_id) return header;
+  const h = { ...header, ...prop };
+  applyAdvanceDeduction(h, docTable);
+  return h;
 }
 
 /* --- Giro mundur: cair & ditolak ------------------------------------------------ */
@@ -1156,6 +1260,7 @@ export const ACTIONS = {
     reject: (_c, so, p) => setStatus('sales_orders', so.id, 'batal', { approval_note: `Ditolak: ${p.reason}` }),
     cancel: (_c, so) => {
       if (db.get("SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status <> 'batal'", so.id)) throw conflict('Pesanan sudah memiliki surat jalan; batalkan surat jalannya terlebih dahulu.');
+      if (db.get("SELECT id FROM sales_advances WHERE sales_order_id = ? AND status NOT IN ('batal','draf')", so.id)) throw conflict('Pesanan sudah memiliki uang muka; batalkan atau kembalikan uang mukanya terlebih dahulu.');
       setStatus('sales_orders', so.id, 'batal');
     },
     to_delivery: (ctx, so, p) => {
@@ -1170,12 +1275,13 @@ export const ACTIONS = {
       }, dl, 'delivery_order_lines');
       return { redirect: { entity: 'delivery_orders', id }, message: p.mode === 'kosong' ? `Surat jalan ${number} dibuat — isi qty yang dikirim (sebagian), lalu "Kirim & posting stok".` : `Surat jalan ${number} dibuat untuk seluruh sisa pesanan. Periksa lalu "Kirim & posting stok".` };
     },
+    to_advance: advanceFromOrder('sales_advances'),
     to_invoice: (ctx, so) => {
       if (db.get("SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status <> 'batal'", so.id)) throw conflict('Pesanan ini sudah memakai surat jalan — buat faktur dari surat jalan.');
-      const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', {
+      const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', withAdvance({
         company_id: so.company_id, branch_id: so.branch_id, date: today(), customer_id: so.customer_id, warehouse_id: so.warehouse_id, sales_order_id: so.id, project_id: so.project_id ?? null, ...fxCopy(so),
         subtotal: so.subtotal, tax_rate: so.tax_rate, tax: so.tax, total: so.total, paid: 0, status: 'draf',
-      }, tradeCopy(lines('sales_order_lines', so.id)), 'sales_invoice_lines');
+      }, 'sales_invoices', so.id, true), tradeCopy(lines('sales_order_lines', so.id)), 'sales_invoice_lines');
       const c = db.get('SELECT terms_days FROM customers WHERE id = ?', so.customer_id);
       const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (c?.terms_days ?? 30));
       db.update('sales_invoices', id, { due_date: d.toISOString().slice(0, 10) });
@@ -1187,6 +1293,8 @@ export const ACTIONS = {
   customer_debit_notes: noteActions('customer_debit_notes'),
   supplier_debit_notes: noteActions('supplier_debit_notes'),
   supplier_credit_notes: noteActions('supplier_credit_notes'),
+  sales_advances: { post: postAdvance('sales_advances'), void: voidAdvance('sales_advances'), receive: (ctx, a, p) => quickSettle(ctx, 'customer_receipts', a, p, 'sales_advances') },
+  purchase_advances: { post: postAdvance('purchase_advances'), void: voidAdvance('purchase_advances'), pay: (ctx, a, p) => quickSettle(ctx, 'supplier_payments', a, p, 'purchase_advances') },
   sales_invoices: { post: postSalesInvoice, void: voidSalesInvoice, receive: (ctx, inv, p) => quickSettle(ctx, 'customer_receipts', inv, p) },
   delivery_orders: {
     ship: shipDelivery,
@@ -1232,12 +1340,16 @@ export const ACTIONS = {
     },
     approve: to('purchase_orders', 'disetujui'),
     reject: (_c, po, p) => setStatus('purchase_orders', po.id, 'batal', { notes: `${po.notes || ''}\nDitolak: ${p.reason}`.trim() }),
-    cancel: to('purchase_orders', 'batal'),
+    cancel: (_c, po) => {
+      if (db.get("SELECT id FROM purchase_advances WHERE purchase_order_id = ? AND status NOT IN ('batal','draf')", po.id)) throw conflict('PO sudah memiliki uang muka; batalkan uang mukanya terlebih dahulu.');
+      setStatus('purchase_orders', po.id, 'batal');
+    },
+    to_advance: advanceFromOrder('purchase_advances'),
     to_bill: (ctx, po, p) => {
-      const { id, number } = createDoc(ctx, 'purchase_bills', 'BILL', {
+      const { id, number } = createDoc(ctx, 'purchase_bills', 'BILL', withAdvance({
         company_id: po.company_id, branch_id: po.branch_id, date: today(), supplier_id: po.supplier_id, warehouse_id: po.warehouse_id, purchase_order_id: po.id, project_id: po.project_id ?? null, ...fxCopy(po),
         supplier_invoice_no: p.supplier_invoice_no, subtotal: po.subtotal, tax_rate: po.tax_rate, tax: po.tax, total: po.total, paid: 0, status: 'draf',
-      }, tradeCopy(lines('purchase_order_lines', po.id)), 'purchase_bill_lines');
+      }, 'purchase_bills', po.id, true), tradeCopy(lines('purchase_order_lines', po.id)), 'purchase_bill_lines');
       const s = db.get('SELECT terms_days FROM suppliers WHERE id = ?', po.supplier_id);
       const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (s?.terms_days ?? 30));
       db.update('purchase_bills', id, { due_date: d.toISOString().slice(0, 10) });

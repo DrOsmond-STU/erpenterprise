@@ -340,13 +340,15 @@ tahap terakhir.
 | Jenis | Jurnal penerimaan pelanggan | Jurnal pembayaran pemasok |
 | --- | --- | --- |
 | Pelunasan (penuh/sebagian) | Dr Bank (neto biaya bank), Beban adm. bank, Potongan penjualan (4-1900), PPh 23 dibayar di muka (1-1410) · Cr Piutang | Dr Hutang · Cr Bank (+ biaya transfer), Potongan pembelian (7-1300), Hutang PPh 23 (2-1330); Dr Beban adm. bank |
-| Uang muka (DP) sebelum faktur | Dr Bank · Cr Uang Muka Pelanggan (2-1600, per pelanggan) | Dr Uang Muka Pembelian (1-1510, per pemasok) · Cr Bank |
+| Titipan / uang muka tanpa faktur | Dr Bank · Cr Uang Muka Pelanggan (2-1600, per pelanggan) | Dr Uang Muka Pembelian (1-1510, per pemasok) · Cr Bank |
 | Pakai saldo uang muka | Dr Uang Muka Pelanggan · Cr Piutang | Dr Hutang · Cr Uang Muka Pembelian |
 
 Nilai yang melunasi faktur/tagihan = kas/uang muka + potongan + PPh 23 (tidak boleh
 melebihi sisa). Selisih kurs dibukukan otomatis untuk dokumen valas; uang muka
 dicatat dalam IDR. Pemakaian uang muka tidak boleh melebihi saldonya; uang muka
 yang sudah dipakai tidak dapat dibatalkan sebelum pemakaiannya dibatalkan.
+Titipan ini tanpa faktur pajak; uang muka atas pesanan dengan PPN memakai dokumen
+**Uang Muka Penjualan / Pembelian** (bagian berikut).
 
 **Aksi cepat**: *Terima pembayaran* di faktur (langsung diposting) dan *Ajukan
 pembayaran* di tagihan (masuk Kotak Persetujuan — pemisahan tugas) dengan nilai
@@ -381,6 +383,40 @@ efektif ≤ 7 hari, lewat tanggal efektif, cair & ditolak 90 hari terakhir — s
 giro belum cair **direkonsiliasi dengan akun 1-1250 / 2-1150**. Notifikasi: giro
 masuk jatuh tempo ≤ 3 hari (setor kliring) dan giro keluar efektif ≤ 3 hari
 (siapkan saldo).
+
+## Uang muka penjualan & pembelian (faktur uang muka atas SO/PO)
+
+Uang muka atas pesanan dicatat sebagai dokumen tersendiri — **Uang Muka Penjualan**
+(`sales_advances`, nomor UMJ) dan **Uang Muka Pembelian** (`purchase_advances`, UMB) —
+dibuat dari SO/PO (aksi *Buat uang muka (DP)*: persentase DPP pesanan atau nilai) atau
+langsung. PPN terutang saat uang muka ditagih; DPP uang muka kemudian **dipotongkan**
+pada faktur/tagihan akhir sehingga PPN akhir hanya atas sisa DPP.
+
+| Kejadian | Penjualan | Pembelian |
+| --- | --- | --- |
+| Uang muka terbit/diposting | Dr Piutang · Cr 2-1610 Uang Muka Penjualan (DPP, per pelanggan), PPN Keluaran | Dr 1-1520 Uang Muka Pembelian (DPP, per pemasok), PPN Masukan · Cr Hutang |
+| Uang muka dibayar (penuh/sebagian, transfer/giro) | Penerimaan: Dr Bank · Cr Piutang | Pembayaran (persetujuan SoD): Dr Hutang · Cr Bank |
+| Faktur/tagihan akhir memotong uang muka | Dr Piutang (neto), Dr 2-1610 (potongan) · Cr Pendapatan (DPP penuh), PPN Keluaran (atas DPP − potongan) | Dr Persediaan/Beban (DPP penuh), PPN Masukan (atas DPP − potongan) · Cr Hutang (neto), Cr 1-1520 |
+
+Aturan:
+
+* Pesanan harus IDR dan berstatus disetujui (SO: disetujui/dikirim sebagian/terkirim;
+  PO: disetujui); total uang muka per pesanan ≤ DPP pesanan; PPN mengikuti pesanan.
+* Hanya uang muka **lunas** milik mitra yang sama yang dapat dipotong; potongan ≤ sisa
+  DPP uang muka dan ≤ DPP dokumen. Faktur dari surat jalan/SO dan tagihan dari PO
+  mengusulkan potongan otomatis: proporsional (DPP dokumen × uang muka ÷ DPP pesanan),
+  dan **seluruh sisa** pada penagihan terakhir pesanan. Potongan dapat diubah pada draf.
+* Status uang muka: draf → terbit → dibayar sebagian → lunas (*siap dipotong*) →
+  diterapkan (*habis dipotong*). Uang muka belum dibayar tampil di umur piutang/hutang,
+  jadwal angsuran, dan saldo mitra; dapat dilunasi lewat aksi cepat atau baris
+  `advance_id` pada penerimaan/pembayaran.
+* Pembatalan: uang muka hanya dapat dibatalkan bila belum dibayar; pembayaran uang
+  muka yang sudah dipotongkan tidak dapat dibatalkan; membatalkan faktur/tagihan akhir
+  mengembalikan sisa uang muka. SO/PO yang memiliki uang muka tidak dapat dibatalkan.
+
+**Register Uang Muka** (`GET /api/reports/uang-muka?side=ar|ap`): belum dibayar, siap
+dipotong, sudah dipotong per dokumen & pesanan — sisa DPP belum dipotong
+**direkonsiliasi dengan akun 2-1610 / 1-1520**.
 
 ## Nota debet & nota kredit
 

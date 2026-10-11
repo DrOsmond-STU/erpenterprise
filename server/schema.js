@@ -104,6 +104,7 @@ const EXTRA = {
   // Nota debet/kredit dicatat dalam IDR; kolom kurs menjaga kueri piutang/hutang tetap seragam.
   customer_credit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'], customer_debit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'],
   supplier_debit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'], supplier_credit_notes: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'],
+  sales_advances: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'], purchase_advances: ['currency_id INTEGER', 'exchange_rate REAL DEFAULT 1'],
 };
 const LINE_EXTRA = {
   journal_lines: ['company_id INTEGER', 'partner_type TEXT', 'partner_id INTEGER', 'is_system INTEGER NOT NULL DEFAULT 0'],

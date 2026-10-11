@@ -162,18 +162,25 @@
     if (['draf', 'batal'].includes(r.status)) return '';
     let s;
     try { s = await api('GET', `/api/settlement/${key}/${r.id}`); } catch { return ''; }
-    const ar = ['sales_invoices', 'customer_debit_notes'].includes(key);
+    const ar = ['sales_invoices', 'customer_debit_notes', 'sales_advances'].includes(key);
+    const isAdv = ['sales_advances', 'purchase_advances'].includes(key);
     const act = (r.__actions || []).find((a) => a.name === (ar ? 'receive' : 'pay'));
+    // Uang muka: pemotongan DPP pada faktur/tagihan akhir.
+    const apps = isAdv ? `<div class="section"><span class="section-title">Pemotongan pada ${ar ? 'faktur' : 'tagihan'} akhir</span>
+      ${s.applications.length ? `<div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>${ar ? 'Faktur' : 'Tagihan'}</th><th>Tanggal</th><th class="ta-r">DPP dokumen</th><th class="ta-r">Potongan uang muka</th><th class="ta-r">Total ditagih</th><th>Status</th></tr></thead><tbody>
+        ${s.applications.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td class="ta-r">${money(x.subtotal)}</td><td class="ta-r">${money(x.advance_amount)}</td><td class="ta-r">${money(x.total)}</td><td>${pill(x.status)}</td></tr>`).join('')}
+      </tbody><tfoot><tr class="row-total"><td colspan="3">Sisa DPP belum dipotong</td><td class="ta-r">${money((r.amount || 0) - (r.applied || 0))}</td><td colspan="2"></td></tr></tfoot></table></div>`
+      : `<p class="muted">${r.status === 'lunas' ? `Siap dipotong — pilih uang muka ini pada ${ar ? 'faktur' : 'tagihan'} (otomatis saat dibuat dari ${ar ? 'surat jalan/SO' : 'PO'}).` : `Dapat dipotong setelah uang muka lunas.`}</p>`}</div>` : '';
     return `<div class="section"><span class="section-title">Jadwal angsuran & pembayaran</span>
       <div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>Tahap</th><th>Jatuh tempo</th><th class="ta-r">Jumlah</th><th class="ta-r">Dibayar</th><th class="ta-r">Sisa</th><th>Status</th></tr></thead><tbody>
         ${s.installments.map((i) => `<tr><td>${esc(i.label)}</td><td class="num ${i.status === 'terlambat' ? 'neg' : ''}">${esc(ERP.date(i.due_date))}</td><td class="ta-r">${money(i.amount)}</td><td class="ta-r">${money(i.paid)}</td><td class="ta-r">${money(i.open)}</td><td>${pill(i.status)}</td></tr>`).join('')}
-      </tbody><tfoot><tr class="row-total"><td colspan="4">Sisa ${ar ? 'faktur' : 'tagihan'}</td><td class="ta-r">${money(s.open)}</td><td></td></tr></tfoot></table></div>
+      </tbody><tfoot><tr class="row-total"><td colspan="4">Sisa ${isAdv ? 'tagihan uang muka' : ar ? 'faktur' : 'tagihan'}</td><td class="ta-r">${money(s.open)}</td><td></td></tr></tfoot></table></div>
       ${s.payments.length || s.credits.length ? `<div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>${ar ? 'Penerimaan' : 'Pembayaran'}</th><th>Tanggal</th><th>Jenis</th><th class="ta-r">Kas/uang muka</th><th class="ta-r">Potongan</th><th class="ta-r">PPh 23</th><th class="ta-r">Melunasi</th><th>Status</th></tr></thead><tbody>
         ${s.payments.map((p) => `<tr data-open="${p.entity}:${p.id}" tabindex="0"><td class="code">${esc(p.number)}</td><td class="num">${esc(ERP.date(p.date))}</td><td>${esc(MODE[p.mode] || 'Pelunasan')}</td><td class="ta-r">${money(p.amount)}</td><td class="ta-r">${p.discount ? money(p.discount) : ''}</td><td class="ta-r">${p.pph23 ? money(p.pph23) : ''}</td><td class="ta-r">${money(p.settled)}</td><td>${pill(p.status)}</td></tr>`).join('')}
         ${s.credits.map((c) => `<tr data-open="${c.entity}:${c.id}" tabindex="0"><td class="code">${esc(c.number)}</td><td class="num">${esc(ERP.date(c.date))}</td><td>${esc({ sales_returns: 'Retur penjualan', purchase_returns: 'Retur pembelian', customer_credit_notes: 'Nota kredit', supplier_debit_notes: 'Nota debet' }[c.entity] || 'Pengurang')}</td><td></td><td></td><td></td><td class="ta-r">${money(c.settled)}</td><td>${pill('diposting')}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted">Belum ada pembayaran.</p>'}
       <p class="field-hint">Saldo uang muka ${ar ? 'pelanggan' : 'ke pemasok'}: <b>${esc(FMT.rp(s.advance))}</b>${s.advance > 0 && s.open > 0 ? ' — dapat dipakai melunasi (sumber dana "Saldo uang muka").' : ''}</p>
-      ${act && s.open > 0 ? `<button class="btn btn-sm btn-primary" data-action-run="${key}:${r.id}:${act.name}">${icon('wallet')} ${esc(act.label)} (penuh / sebagian)</button>` : ''}</div>`;
+      ${act && s.open > 0 ? `<button class="btn btn-sm btn-primary" data-action-run="${key}:${r.id}:${act.name}">${icon('wallet')} ${esc(act.label)} (penuh / sebagian)</button>` : ''}</div>${apps}`;
   }
 
   /** Jadwal angsuran piutang/hutang: terlambat, jatuh tempo 7/30 hari, saldo uang muka. */
@@ -248,5 +255,45 @@
     if (el) { state.giroSide = el.dataset.giroSide; ERP.app.renderView(); }
   });
 
-  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro };
+  /* ======================================================================== */
+  /* Register uang muka penjualan / pembelian                                 */
+  /* ======================================================================== */
+  const ADV_STATE = { terbit: ['Belum dibayar', 'warn'], sebagian: ['Dibayar sebagian', 'warn'], lunas: ['Siap dipotong', 'accent'], diterapkan: ['Habis dipotong', 'ok'] };
+  async function advances(root) {
+    state.advSide = state.advSide || (state.me.permissions.sales ? 'ar' : 'ap');
+    const side = state.advSide, ar = side === 'ar';
+    const table = ar ? 'sales_advances' : 'purchase_advances';
+    const head = (sub, tools = '') => V().pageHead('Register Uang Muka', sub, tools);
+    const tabs = `<div class="segmented" role="group" aria-label="Jenis uang muka"><button data-adv-side="ar" aria-pressed="${ar}">Penjualan (dari pelanggan)</button><button data-adv-side="ap" aria-pressed="${!ar}">Pembelian (ke pemasok)</button></div>`;
+    root.innerHTML = head('') + '<div class="loading-cell">Memuat…</div>';
+    let r;
+    try { r = await api('GET', `/api/reports/uang-muka${qs({ side })}`); } catch (e) { root.innerHTML = head('Faktur uang muka atas pesanan.', tabs) + `<p class="pad neg">${esc(e.message)}</p>`; return; }
+    const t = r.totals;
+    const canPay = R().ent(table) && (state.me.permissions[ar ? 'sales' : 'purchasing'] || 0) >= (ar ? 3 : 2);
+    const canNew = R().ent(table)?.canWrite;
+    root.innerHTML = head(ar
+      ? 'Faktur uang muka atas pesanan penjualan: PPN keluaran terutang saat uang muka ditagih; setelah lunas, DPP uang muka dipotongkan pada faktur akhir (PPN akhir hanya atas sisa DPP).'
+      : 'Uang muka atas pesanan pembelian: PPN masukan dari faktur uang muka pemasok; setelah dibayar (dengan persetujuan), DPP-nya dipotongkan pada tagihan saat barang diterima.',
+    `${tabs}${canNew ? `<button class="btn btn-primary" data-nav="${ar ? 'pesanan-penjualan' : 'pesanan-pembelian'}">${icon('plus')} Buat dari ${ar ? 'SO' : 'PO'}</button>` : ''}<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
+      `<section class="kpi-grid-erp">
+        ${kpi('Belum dibayar', esc(FMT.rpCompact(t.unpaid)), `${t.unpaidCount} dokumen · ${ar ? 'tagih pelanggan' : 'ajukan pembayaran'}`, t.unpaidCount ? 'neg' : '')}
+        ${kpi('Siap dipotong', esc(FMT.rpCompact(t.ready)), `${t.readyCount} dokumen lunas`)}
+        ${kpi('Sisa DPP belum dipotong', esc(FMT.rpCompact(t.remaining)), `akun ${ar ? '2-1610' : '1-1520'}`)}
+        ${kpi('Sudah dipotong', esc(FMT.rpCompact(t.applied)), `pada ${ar ? 'faktur' : 'tagihan'} akhir`, 'pos')}
+      </section>
+      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Sisa uang muka cocok dengan saldo akun ${ar ? '2-1610 Uang Muka Penjualan' : '1-1520 Uang Muka Pembelian'} (${FMT.rp(r.glBalance)}).` : `Tidak cocok: register ${FMT.rp(t.remaining)} vs buku besar ${FMT.rp(r.glBalance)}.`)}</div>
+      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Uang muka</th><th>${ar ? 'Pelanggan' : 'Pemasok'}</th><th>Pesanan</th><th class="ta-r">DPP</th><th class="ta-r">Total + PPN</th><th class="ta-r">Dipotong</th><th class="ta-r">Sisa DPP</th><th>Status</th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr><td class="code"><button class="link" data-open="${table}:${x.id}">${esc(x.number)}</button><span class="cell-sub">${esc(ERP.date(x.date))}</span></td><td>${esc(x.party)}</td>
+          <td class="code"><button class="link" data-open="${ar ? 'sales_orders' : 'purchase_orders'}:${x.order_id}">${esc(x.order_no)}</button>${x.pct != null ? `<span class="cell-sub">${esc(num(x.pct))}% dari DPP ${money(x.order_dpp)}</span>` : ''}</td>
+          <td class="ta-r">${money(x.amount)}</td><td class="ta-r">${money(x.total)}${x.paid > 0 && x.paid < x.total - 0.005 ? `<span class="cell-sub">dibayar ${money(x.paid)}</span>` : ''}</td><td class="ta-r">${x.applied ? money(x.applied) : ''}</td><td class="ta-r">${money(x.remaining)}</td>
+          <td><span class="pill" data-tone="${ADV_STATE[x.status]?.[1] || 'neutral'}"><i class="pill-dot"></i>${esc(ADV_STATE[x.status]?.[0] || x.status)}</span>${['terbit', 'sebagian'].includes(x.status) && canPay ? ` <button class="btn btn-sm" data-action-run="${table}:${x.id}:${ar ? 'receive' : 'pay'}">${ar ? 'Terima' : 'Bayar'}</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Belum ada uang muka.</td></tr>'}
+      </tbody><tfoot><tr class="row-total"><td colspan="6">Total sisa DPP</td><td class="ta-r">${money(t.remaining)}</td><td></td></tr></tfoot></table></div></div></article>
+      <p class="field-hint">Buat dari ${ar ? 'pesanan penjualan' : 'pesanan pembelian'}: aksi <b>Buat uang muka (DP)</b> (persentase atau nilai). ${ar ? 'Faktur dari surat jalan/SO' : 'Tagihan dari PO'} otomatis memotong uang muka lunas secara proporsional; ${ar ? 'faktur' : 'tagihan'} terakhir memotong seluruh sisa. Titipan tanpa faktur pajak tetap dicatat lewat ${ar ? 'Penerimaan' : 'Pembayaran'} jenis "titipan / uang muka tanpa faktur".</p>`;
+  }
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-adv-side]');
+    if (el) { state.advSide = el.dataset.advSide; ERP.app.renderView(); }
+  });
+
+  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro, advances };
 })();

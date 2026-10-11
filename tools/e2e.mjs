@@ -275,6 +275,15 @@ try {
   await page.waitForTimeout(1200);
   check(/Giro belum cair cocok/.test(await page.textContent('.view-root')), 'giro keluar: register cocok dengan buku besar');
 
+  // Register uang muka: sisa DPP uang muka cocok dengan akun 2-1610 / 1-1520.
+  await page.evaluate(() => { location.hash = '#/register-uang-muka'; });
+  await page.waitForSelector('.notice', { timeout: 8000 });
+  check(/Sisa uang muka cocok/.test(await page.textContent('.view-root')) && (await page.$$('[data-open^="sales_advances:"]')).length >= 1, 'uang muka penjualan: register cocok dengan buku besar');
+  await page.screenshot({ path: join(shots, 'uang-muka.png') });
+  await page.click('[data-adv-side="ap"]');
+  await page.waitForTimeout(1200);
+  check(/Sisa uang muka cocok/.test(await page.textContent('.view-root')), 'uang muka pembelian: register cocok dengan buku besar');
+
   // Nota debet pelanggan: dokumen piutang terbuka yang dapat dilunasi.
   await page.evaluate(() => { location.hash = '#/nota-debet-pelanggan'; });
   await page.waitForSelector('tr[data-open^="customer_debit_notes:"]', { timeout: 8000 });

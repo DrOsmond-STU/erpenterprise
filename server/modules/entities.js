@@ -120,11 +120,50 @@ function noteEntity({ label, one, module, number, party, doc, reduces, defaultHe
       : [act('post', 'Terbitkan & posting', { from: ['draf'] }), act(module === 'sales' ? 'receive' : 'pay', module === 'sales' ? 'Terima pembayaran' : 'Ajukan pembayaran', { from: ['terbit', 'sebagian'], level: module === 'sales' ? 3 : 2, params: PAY_PARAMS(module === 'sales' ? 'Diterima di' : 'Dibayar dari', module === 'sales' ? 'PPh 23 dipotong pelanggan' : 'PPh 23 dipotong (disetor kita)') }), act('void', 'Batalkan (jurnal balik)', { from: ['terbit'] })],
   };
 }
+/**
+ * Uang muka penjualan / pembelian (faktur uang muka atas SO/PO). PPN terutang saat uang muka ditagih;
+ * dokumen dilunasi seperti faktur/tagihan (penuh/sebagian, transfer/giro), lalu DPP-nya dipotongkan
+ * pada faktur/tagihan akhir (PPN akhir hanya atas sisa DPP).
+ */
+function advanceEntity({ label, one, module, number, party, order, ar }) {
+  return {
+    label, one, module, scope: 'branch', title: 'number', number, sort: 'date', sortDir: 'desc', editable: ['draf'],
+    fields: [
+      F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
+      F.date('due_date', 'Jatuh tempo', { list: true, help: 'Kosong = tanggal dokumen (uang muka dibayar di depan).' }),
+      F.ref(party[0], party[1], party[2], { required: true, list: true, search: true }),
+      F.ref(order[0], order[1], order[2], { required: true, list: true, refParent: party[0], refFilter: { status: order[3] }, help: 'Pesanan IDR yang sudah disetujui.' }),
+      ...(ar ? [] : [F.text('supplier_invoice_no', 'No. faktur uang muka pemasok', { max: 60, search: true })]),
+      F.pct('percent', 'Persentase dari DPP pesanan', { help: 'Isi % agar nilai dihitung dari DPP pesanan; kosongkan untuk mengisi nilai langsung.' }),
+      F.money('amount', 'Nilai uang muka (DPP)', { help: 'Total uang muka per pesanan tidak boleh melebihi DPP pesanan.' }),
+      F.pct('tax_rate', 'PPN (%)', { help: 'Kosong = tarif PPN pesanan.' }),
+      F.money('tax', 'PPN', { readonly: true }),
+      F.money('total', 'Total ditagih', { readonly: true, list: true }),
+      F.money('paid', 'Terbayar', { readonly: true, list: true }),
+      F.money('applied', 'Sudah dipotongkan (DPP)', { readonly: true }),
+      F.area('description', 'Keterangan', { search: true }),
+      F.status(['draf', 'terbit', 'sebagian', 'lunas', 'diterapkan', 'batal'], 'draf'),
+    ],
+    computed: {
+      remaining: { label: 'Sisa DPP belum dipotong', type: 'money', list: true, sql: `(CASE WHEN t.status IN ('terbit','sebagian','lunas','diterapkan') THEN ROUND(t.amount - COALESCE(t.applied,0),2) ELSE 0 END)` },
+    },
+    actions: [
+      act('post', ar ? 'Terbitkan faktur uang muka' : 'Posting uang muka', { from: ['draf'] }),
+      act(ar ? 'receive' : 'pay', ar ? 'Terima pembayaran' : 'Ajukan pembayaran', { from: ['terbit', 'sebagian'], level: ar ? 3 : 2, params: PAY_PARAMS(ar ? 'Diterima di' : 'Dibayar dari', ar ? 'PPh 23 dipotong pelanggan' : 'PPh 23 dipotong (disetor kita)') }),
+      act('void', 'Batalkan (jurnal balik)', { from: ['terbit'], confirm: 'Uang muka dibatalkan dan jurnalnya dibalik.' }),
+    ],
+  };
+}
+/* Potongan uang muka pada faktur/tagihan akhir. */
+const advanceDeductFields = (ref) => [
+  F.ref('advance_id', 'Potong uang muka', ref, { refParent: ref === 'sales_advances' ? 'customer_id' : 'supplier_id', refFilter: { status: ['lunas'] }, help: 'Uang muka lunas atas pesanan ini — DPP-nya mengurangi DPP & PPN dokumen.' }),
+  F.money('advance_amount', 'Potongan uang muka (DPP)', { help: 'Kosong = seluruh sisa uang muka (maks. DPP dokumen).' }),
+];
 const NOTE_REASONS = [['harga', 'Koreksi harga'], ['potongan', 'Potongan / rabat'], ['klaim', 'Klaim kerusakan / kekurangan'], ['ongkos', 'Ongkos kirim / biaya tambahan'], ['denda', 'Denda / bunga keterlambatan'], ['lainnya', 'Lainnya']];
 
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
-const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
-const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar uang muka (DP)'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima titipan / uang muka tanpa faktur'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar titipan / uang muka tanpa faktur'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
 /* Aksi giro hanya untuk giro yang belum cair; pembatalan biasa tidak berlaku untuk giro yang sudah cair. */
 const giroOpen = (r) => r.method === 'giro' && r.giro_status === 'beredar';
 const notCleared = (r) => !(r.method === 'giro' && r.giro_status === 'cair');
@@ -494,7 +533,7 @@ export const ENTITIES = {
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((i.total - i.paid) * COALESCE(i.exchange_rate,1)),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM customer_debit_notes n WHERE n.customer_id = t.id AND n.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Piutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((i.total - i.paid) * COALESCE(i.exchange_rate,1)),0),2) FROM sales_invoices i WHERE i.customer_id = t.id AND i.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM customer_debit_notes n WHERE n.customer_id = t.id AND n.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(a.total - a.paid),0) FROM sales_advances a WHERE a.customer_id = t.id AND a.status IN ('terbit','sebagian'))` },
     },
   },
   quotations: {
@@ -559,6 +598,7 @@ export const ENTITIES = {
     ],
     lines: tradeLines('sales_order_lines'),
     computed: {
+      advance_dpp: { label: 'Uang muka (DPP)', type: 'money', sql: `(SELECT COALESCE(SUM(a.amount),0) FROM sales_advances a WHERE a.sales_order_id = t.id AND a.status IN ('terbit','sebagian','lunas','diterapkan'))` },
       delivered_pct: { label: 'Terkirim', type: 'pct', list: true, sql: `(CASE WHEN t.status = 'selesai' THEN 100 ELSE (SELECT CASE WHEN SUM(sl.qty) > 0 THEN ROUND(100.0 * (SELECT COALESCE(SUM(dl.qty),0) FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id WHERE d.sales_order_id = t.id AND d.status IN ('dikirim','difakturkan')) / SUM(sl.qty), 1) ELSE 0 END FROM sales_order_lines sl WHERE sl.parent_id = t.id) END)` },
     },
     actions: [
@@ -566,6 +606,7 @@ export const ENTITIES = {
       act('approve', 'Setujui', { from: ['menunggu'], sod: true }),
       act('reject', 'Tolak', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
       act('to_delivery', 'Buat surat jalan (DO)', { from: ['disetujui', 'dikirim_sebagian'], level: 2, params: [{ name: 'date', label: 'Tanggal kirim', type: 'date', required: true }, { name: 'mode', label: 'Kuantitas', type: 'select', options: [['sisa', 'Seluruh sisa pesanan (kirim penuh)'], ['kosong', 'Isi manual (kirim sebagian)']], default: 'sisa', required: true }] }),
+      act('to_advance', 'Buat uang muka (DP)', { from: ['disetujui', 'dikirim_sebagian', 'terkirim'], level: 2, params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'percent', label: 'Persentase dari DPP pesanan', type: 'pct', help: 'Mis. 30 untuk DP 30%.' }, { name: 'amount', label: 'atau Nilai DPP', type: 'money', help: 'Diisi bila tidak memakai persentase.' }] }),
       act('to_invoice', 'Kirim & faktur langsung (tanpa DO)', { from: ['disetujui'], level: 2 }),
       act('cancel', 'Batalkan', { from: ['draf', 'disetujui'], level: 2 }),
     ],
@@ -614,6 +655,7 @@ export const ENTITIES = {
       F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Kosong = termin pelanggan/pemasok. Angsuran dibentuk saat posting.' }),
       F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
+      ...advanceDeductFields('sales_advances'),
       ...fx(),
       ...docTotals(),
       F.money('paid', 'Terbayar', { readonly: true, list: true }),
@@ -641,7 +683,7 @@ export const ENTITIES = {
       F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
-      F.money('advance', 'Uang muka diterima', { help: 'Hanya untuk jenis "Terima uang muka (DP)" — dicatat sebagai Uang Muka Pelanggan.' }),
+      F.money('advance', 'Uang muka diterima', { help: 'Hanya untuk jenis "Terima titipan / uang muka tanpa faktur" — dicatat sebagai Uang Muka Pelanggan.' }),
       F.money('bank_charge', 'Biaya bank (dipotong bank)', { default: 0 }),
       F.text('reference', 'Referensi', { max: 60 }),
       F.money('total', 'Total kas/uang muka', { readonly: true, list: true }),
@@ -653,6 +695,7 @@ export const ENTITIES = {
       fields: [
         F.ref('invoice_id', 'Faktur', 'sales_invoices', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
         F.ref('debit_note_id', 'atau Nota debet', 'customer_debit_notes', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
+        F.ref('advance_id', 'atau Uang muka penjualan', 'sales_advances', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'customer_id' }),
         F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
         F.money('discount', 'Potongan / diskon', { default: 0 }),
         F.money('pph23', 'PPh 23 dipotong pelanggan', { default: 0 }),
@@ -694,7 +737,7 @@ export const ENTITIES = {
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {
-      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM supplier_credit_notes n WHERE n.supplier_id = t.id AND n.status IN ('terbit','sebagian'))` },
+      outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM supplier_credit_notes n WHERE n.supplier_id = t.id AND n.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(a.total - a.paid),0) FROM purchase_advances a WHERE a.supplier_id = t.id AND a.status IN ('terbit','sebagian'))` },
     },
   },
   purchase_requests: {
@@ -752,11 +795,15 @@ export const ENTITIES = {
       ...docTotals(),
       F.status(['draf', 'menunggu', 'disetujui', 'diterima', 'batal'], 'draf'),
     ],
+    computed: {
+      advance_dpp: { label: 'Uang muka (DPP)', type: 'money', sql: `(SELECT COALESCE(SUM(a.amount),0) FROM purchase_advances a WHERE a.purchase_order_id = t.id AND a.status IN ('terbit','sebagian','lunas','diterapkan'))` },
+    },
     lines: tradeLines('purchase_order_lines'),
     actions: [
       act('submit', 'Ajukan', { from: ['draf'], level: 2 }),
       act('approve', 'Setujui', { from: ['menunggu'], sod: true }),
       act('reject', 'Tolak', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
+      act('to_advance', 'Buat uang muka (DP)', { from: ['disetujui'], level: 2, params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'percent', label: 'Persentase dari DPP pesanan', type: 'pct', help: 'Mis. 30 untuk DP 30%.' }, { name: 'amount', label: 'atau Nilai DPP', type: 'money', help: 'Diisi bila tidak memakai persentase.' }] }),
       act('to_bill', 'Terima barang & buat tagihan', { from: ['disetujui'], level: 2, params: [{ name: 'supplier_invoice_no', label: 'No. faktur pemasok', type: 'text', required: true }] }),
       act('cancel', 'Batalkan', { from: ['draf', 'disetujui'], level: 2 }),
     ],
@@ -773,6 +820,7 @@ export const ENTITIES = {
       F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Kosong = termin pelanggan/pemasok. Angsuran dibentuk saat posting.' }),
       F.ref('project_id', 'Proyek', 'projects', { help: 'Biaya/pendapatan dokumen ini dibebankan ke proyek (anggaran & laporan proyek).' }),
       F.area('notes', 'Catatan'),
+      ...advanceDeductFields('purchase_advances'),
       ...fx(),
       ...docTotals(),
       F.money('paid', 'Terbayar', { readonly: true, list: true }),
@@ -809,7 +857,7 @@ export const ENTITIES = {
       F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
       ...fx(),
-      F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar uang muka (DP)" — dicatat sebagai Uang Muka Pembelian.' }),
+      F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar titipan / uang muka tanpa faktur" — dicatat sebagai Uang Muka Pembelian.' }),
       F.money('bank_charge', 'Biaya transfer (ditanggung kita)', { default: 0 }),
       F.text('reference', 'Referensi', { max: 60 }),
       F.money('total', 'Total kas/uang muka', { readonly: true, list: true }),
@@ -821,6 +869,7 @@ export const ENTITIES = {
       fields: [
         F.ref('bill_id', 'Tagihan', 'purchase_bills', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
         F.ref('credit_note_id', 'atau Nota kredit', 'supplier_credit_notes', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
+        F.ref('advance_id', 'atau Uang muka pembelian', 'purchase_advances', { refFilter: { status: ['terbit', 'sebagian'] }, refParent: 'supplier_id' }),
         F.money('amount', 'Dibayar (kas/uang muka)', { required: true }),
         F.money('discount', 'Potongan diterima', { default: 0 }),
         F.money('pph23', 'PPh 23 dipotong (disetor kita)', { default: 0 }),
@@ -1119,6 +1168,8 @@ export const ENTITIES = {
   customer_debit_notes: noteEntity({ label: 'Nota Debet Pelanggan', one: 'nota debet', module: 'sales', number: 'ND', party: ['customer_id', 'Pelanggan', 'customers'], doc: ['invoice_id', 'Faktur terkait', 'sales_invoices'], reduces: false, defaultHelp: 'Mis. akun pendapatan/penggantian ongkos kirim, denda keterlambatan, kurang tagih.' }),
   supplier_debit_notes: noteEntity({ label: 'Nota Debet Pemasok', one: 'nota debet', module: 'purchasing', number: 'NDB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Terapkan ke tagihan', 'purchase_bills'], reduces: true, defaultHelp: 'Mis. 7-1300 Potongan Pembelian, akun beban/persediaan yang dikoreksi (klaim, lebih tagih).' }),
   supplier_credit_notes: noteEntity({ label: 'Nota Kredit Pemasok', one: 'nota kredit', module: 'purchasing', number: 'NKB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Tagihan terkait', 'purchase_bills'], reduces: false, defaultHelp: 'Mis. beban angkut, biaya tambahan, kurang tagih pemasok.' }),
+  sales_advances: advanceEntity({ label: 'Uang Muka Penjualan', one: 'uang muka penjualan', module: 'sales', number: 'UMJ', party: ['customer_id', 'Pelanggan', 'customers'], order: ['sales_order_id', 'Pesanan penjualan', 'sales_orders', ['disetujui', 'dikirim_sebagian', 'terkirim']], ar: true }),
+  purchase_advances: advanceEntity({ label: 'Uang Muka Pembelian', one: 'uang muka pembelian', module: 'purchasing', number: 'UMB', party: ['supplier_id', 'Pemasok', 'suppliers'], order: ['purchase_order_id', 'Pesanan pembelian', 'purchase_orders', ['disetujui']], ar: false }),
   bank_reconciliations: {
     label: 'Rekonsiliasi Bank', one: 'rekonsiliasi', module: 'finance', scope: 'branch', title: 'number', number: 'REK', sort: 'statement_date', sortDir: 'desc',
     editable: ['draf'],

@@ -86,7 +86,7 @@ export function advanceBalance(partyType, partyId, companyId = null) {
 /** Jadwal angsuran terbuka (piutang/hutang) untuk perencanaan arus kas & penagihan. */
 export function installmentSchedule(ctx, { companyId, branchId, asOf, side = 'ar', days = 60 }) {
   const t = asOf || today();
-  const docTypes = side === 'ap' ? ['purchase_bills', 'supplier_credit_notes'] : ['sales_invoices', 'customer_debit_notes'];
+  const docTypes = side === 'ap' ? ['purchase_bills', 'supplier_credit_notes', 'purchase_advances'] : ['sales_invoices', 'customer_debit_notes', 'sales_advances'];
   const party = side === 'ap' ? ['suppliers', 'supplier_id'] : ['customers', 'customer_id'];
   const until = addDays(t, Math.max(1, Math.min(365, Number(days) || 60)));
   const bf = branchId ? ' AND d.branch_id = ?' : '';
@@ -152,5 +152,82 @@ export function giroRegister(ctx, { companyId, branchId, asOf, side = 'in', from
       cleared: sumBy(rows.filter((r) => r.giro_status === 'cair')), bounced: sumBy(rows.filter((r) => r.giro_status === 'tolak')), bouncedCount: rows.filter((r) => r.giro_status === 'tolak').length,
     },
     glBalance, reconciled: Math.abs(glBalance - openAll) < 1,
+  };
+}
+
+/* --- Faktur uang muka (penjualan/pembelian atas SO/PO) ---------------------------- */
+export const ADVANCE = {
+  sales_advances: { party: 'customer_id', order: 'sales_order_id', orderTable: 'sales_orders', docTable: 'sales_invoices', ar: true },
+  purchase_advances: { party: 'supplier_id', order: 'purchase_order_id', orderTable: 'purchase_orders', docTable: 'purchase_bills', ar: false },
+};
+export const advanceOf = (docTable) => (docTable === 'sales_invoices' ? 'sales_advances' : 'purchase_advances');
+
+/**
+ * Potongan uang muka pada faktur/tagihan akhir: DPP dokumen dikurangi DPP uang muka, PPN dihitung
+ * atas sisa DPP. Hanya uang muka lunas milik mitra yang sama dan dokumen IDR. Mengubah row (tax, total).
+ */
+export function applyAdvanceDeduction(row, docTable) {
+  const advTable = advanceOf(docTable), cfg = ADVANCE[advTable];
+  const rate = Number(row.tax_rate ?? 11) || 0;
+  if (!row.advance_id) row.advance_amount = 0;
+  else {
+    const a = db.get(`SELECT * FROM "${advTable}" WHERE id = ?`, row.advance_id);
+    if (!a || a[cfg.party] !== row[cfg.party]) throw bad('Uang muka yang dipotong bukan milik mitra dokumen ini.');
+    if (a.status !== 'lunas') throw bad(`Uang muka ${a.number} belum lunas atau sudah habis dipotongkan — hanya uang muka yang sudah dibayar yang dapat dipotong.`);
+    if ((Number(row.exchange_rate) || 1) !== 1) throw bad('Potongan uang muka hanya untuk dokumen IDR.');
+    const rem = round2(a.amount - (a.applied || 0));
+    const sub = round2(row.subtotal || 0);
+    if (row.advance_amount == null || row.advance_amount === '' || Number(row.advance_amount) === 0) row.advance_amount = Math.min(rem, sub);
+    row.advance_amount = round2(row.advance_amount);
+    if (row.advance_amount > rem + 0.005) throw bad(`Potongan melebihi sisa uang muka ${a.number} (${rem.toLocaleString('id-ID')}).`);
+    if (row.advance_amount > sub + 0.005) throw bad('Potongan uang muka melebihi DPP dokumen.');
+    if (!(row.advance_amount > 0)) { row.advance_id = null; row.advance_amount = 0; }
+  }
+  const dpp = round2((row.subtotal || 0) - (row.advance_amount || 0));
+  row.tax = round2(dpp * rate / 100);
+  row.total = round2(dpp + row.tax);
+}
+
+/** Usulan potongan uang muka untuk faktur/tagihan dari pesanan: uang muka lunas tertua, proporsional DPP (sisa penuh bila pesanan habis ditagih). */
+export function proposeAdvance(advTable, orderId, subtotal, finalBilling) {
+  const cfg = ADVANCE[advTable];
+  const a = db.get(`SELECT * FROM "${advTable}" WHERE ${cfg.order} = ? AND status = 'lunas' AND amount - COALESCE(applied,0) > 0.005 ORDER BY date, id LIMIT 1`, orderId);
+  if (!a) return {};
+  const o = db.get(`SELECT subtotal FROM "${cfg.orderTable}" WHERE id = ?`, orderId);
+  const rem = round2(a.amount - (a.applied || 0));
+  const prop = o?.subtotal > 0 ? round2(subtotal * a.amount / o.subtotal) : rem;
+  return { advance_id: a.id, advance_amount: round2(Math.min(rem, subtotal, finalBilling ? rem : prop)) };
+}
+
+/**
+ * Register uang muka penjualan / pembelian: belum dibayar, siap dipotong, sudah dipotong.
+ * Sisa DPP belum dipotong (uang muka terposting) direkonsiliasi dengan akun 2-1610 / 1-1520.
+ */
+export function advanceRegister(ctx, { companyId, branchId, side = 'ar' }) {
+  const ar = side !== 'ap';
+  const table = ar ? 'sales_advances' : 'purchase_advances', cfg = ADVANCE[table];
+  const bf = branchId ? ' AND d.branch_id = ?' : '';
+  const rows = db.all(`SELECT d.id, d.number, d.date, d.due_date, d.status, d.amount, d.tax, d.total, d.paid, COALESCE(d.applied,0) applied, ROUND(d.amount - COALESCE(d.applied,0),2) remaining,
+      p.name party, o.id order_id, o.number order_no, o.subtotal order_dpp, b.name branch
+    FROM "${table}" d JOIN "${ar ? 'customers' : 'suppliers'}" p ON p.id = d."${cfg.party}" JOIN "${cfg.orderTable}" o ON o.id = d."${cfg.order}" JOIN branches b ON b.id = d.branch_id
+    WHERE d.company_id = ? AND d.status IN ('terbit','sebagian','lunas','diterapkan')${bf}
+    ORDER BY CASE d.status WHEN 'diterapkan' THEN 2 WHEN 'lunas' THEN 1 ELSE 0 END, d.date DESC, d.number`, companyId, ...(branchId ? [branchId] : []));
+  for (const r of rows) r.pct = r.order_dpp > 0 ? round2(r.amount * 100 / r.order_dpp) : null;
+  const sumBy = (xs, f) => round2(xs.reduce((s, r) => s + f(r), 0));
+  const unpaid = rows.filter((r) => ['terbit', 'sebagian'].includes(r.status));
+  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(ar ? 'sales_dp' : 'purchase_dp')).v;
+  const glBalance = round2(ar ? -glRaw : glRaw);
+  const remainingAll = branchId
+    ? round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(applied,0)),0) v FROM "${table}" WHERE company_id = ? AND status IN ('terbit','sebagian','lunas','diterapkan')`, companyId).v)
+    : sumBy(rows, (r) => r.remaining);
+  return {
+    title: ar ? 'Register Uang Muka Penjualan' : 'Register Uang Muka Pembelian', side: ar ? 'ar' : 'ap',
+    rows,
+    totals: {
+      unpaid: sumBy(unpaid, (r) => r.total - r.paid), unpaidCount: unpaid.length,
+      ready: sumBy(rows.filter((r) => r.status === 'lunas'), (r) => r.remaining), readyCount: rows.filter((r) => r.status === 'lunas').length,
+      remaining: sumBy(rows, (r) => r.remaining), applied: sumBy(rows, (r) => r.applied),
+    },
+    glBalance, reconciled: Math.abs(glBalance - remainingAll) < 1,
   };
 }

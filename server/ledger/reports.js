@@ -341,7 +341,7 @@ function aging(tables, partyTable, partyField, ctx, { companyId, branchId, asOf 
 }
 
 export function arAging(ctx, q) {
-  const r = aging(['sales_invoices', 'customer_debit_notes'], 'customers', 'customer_id', ctx, q);
+  const r = aging(['sales_invoices', 'customer_debit_notes', 'sales_advances'], 'customers', 'customer_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
   r.glBalance = round2(netOf(gl, acct('ar')) + netOf(gl, acct('ic_receivable')));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;
@@ -349,7 +349,7 @@ export function arAging(ctx, q) {
 }
 
 export function apAging(ctx, q) {
-  const r = aging(['purchase_bills', 'supplier_credit_notes'], 'suppliers', 'supplier_id', ctx, q);
+  const r = aging(['purchase_bills', 'supplier_credit_notes', 'purchase_advances'], 'suppliers', 'supplier_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
   r.glBalance = round2(-(netOf(gl, acct('ap')) + netOf(gl, acct('ic_payable'))));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;

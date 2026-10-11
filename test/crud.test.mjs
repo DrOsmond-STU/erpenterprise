@@ -75,6 +75,15 @@ const CUSTOM = {
     const so = db.get("SELECT id FROM sales_orders WHERE company_id = 1 AND branch_id = (SELECT id FROM branches WHERE code = 'JKT') AND status IN ('disetujui','dikirim_sebagian') ORDER BY id DESC LIMIT 1");
     b.sales_order_id = so.id; b.lines = [];
   },
+  // Uang muka atas SO/PO yang disetujui (pelanggan/pemasok mengikuti pesanan).
+  sales_advances: async (b) => {
+    const so = db.get("SELECT id, customer_id FROM sales_orders WHERE company_id = 1 AND status IN ('disetujui','dikirim_sebagian','terkirim') AND COALESCE(exchange_rate,1) = 1 ORDER BY id DESC LIMIT 1");
+    b.sales_order_id = so.id; b.customer_id = so.customer_id; b.amount = 1000; delete b.percent;
+  },
+  purchase_advances: async (b) => {
+    const po = db.get("SELECT id, supplier_id FROM purchase_orders WHERE company_id = 1 AND status = 'disetujui' AND COALESCE(exchange_rate,1) = 1 ORDER BY id DESC LIMIT 1");
+    b.purchase_order_id = po.id; b.supplier_id = po.supplier_id; b.amount = 1000; delete b.percent;
+  },
   purchase_bills: async (b) => { b.lines = [{ account_id: (await admin.get('/api/lookup/accounts?f_is_header=0')).body[0].id, qty: 1, price: 1000 }]; },
 };
 
@@ -119,7 +128,7 @@ for (const key of [
   'projects', 'project_tasks', 'employees', 'attendance', 'leave_requests', 'payroll_runs', 'documents', 'workflows', 'compliance_items',
   'risks', 'security_incidents', 'currencies', 'exchange_rates', 'sales_returns', 'purchase_returns', 'bank_reconciliations', 'pos_shifts',
   'warehouse_bins', 'product_locations', 'bsc_metrics', 'delivery_orders', 'payment_terms',
-  'customer_credit_notes', 'customer_debit_notes', 'supplier_debit_notes', 'supplier_credit_notes',
+  'customer_credit_notes', 'customer_debit_notes', 'supplier_debit_notes', 'supplier_credit_notes', 'sales_advances', 'purchase_advances',
 ]) {
   test(`CRUD ${key}: buat → baca → ubah → konflik versi → hapus`, async () => {
     const e = meta.entities[key];

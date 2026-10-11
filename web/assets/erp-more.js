@@ -41,11 +41,11 @@
     purchase_bills: 'TAGIHAN PEMASOK', customer_receipts: 'KUITANSI PENERIMAAN', supplier_payments: 'BUKTI PEMBAYARAN', cash_transactions: 'BUKTI KAS / BANK',
     journals: 'BUKTI JURNAL UMUM', sales_returns: 'NOTA RETUR PENJUALAN (NOTA KREDIT)', purchase_returns: 'NOTA RETUR PEMBELIAN (NOTA DEBIT)', pos_sales: 'STRUK PENJUALAN',
     purchase_requests: 'PERMINTAAN PEMBELIAN', stock_transfers: 'SURAT JALAN TRANSFER STOK', stock_adjustments: 'BERITA ACARA PENYESUAIAN STOK', work_orders: 'PERINTAH KERJA',
-    bank_transfers: 'BUKTI PEMINDAHBUKUAN', delivery_orders: 'SURAT JALAN', customer_credit_notes: 'NOTA KREDIT', customer_debit_notes: 'NOTA DEBET', supplier_debit_notes: 'NOTA DEBET', supplier_credit_notes: 'NOTA KREDIT (DARI PEMASOK)', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
+    bank_transfers: 'BUKTI PEMINDAHBUKUAN', delivery_orders: 'SURAT JALAN', customer_credit_notes: 'NOTA KREDIT', customer_debit_notes: 'NOTA DEBET', supplier_debit_notes: 'NOTA DEBET', supplier_credit_notes: 'NOTA KREDIT (DARI PEMASOK)', sales_advances: 'FAKTUR UANG MUKA', purchase_advances: 'UANG MUKA PEMBELIAN', depreciation_runs: 'DAFTAR PENYUSUTAN', bank_reconciliations: 'REKONSILIASI BANK', pos_shifts: 'LAPORAN SHIFT KASIR',
   };
   const SIGN = {
     sales_invoices: ['Hormat kami', 'Penerima'], customer_receipts: ['Penerima kas', 'Penyetor'], supplier_payments: ['Dibuat oleh', 'Disetujui oleh', 'Penerima'],
-    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], delivery_orders: ['Bagian gudang', 'Pengemudi', 'Diterima baik oleh (nama, tanggal & cap)'], customer_credit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pelanggan'], customer_debit_notes: ['Hormat kami', 'Diterima pelanggan'], supplier_debit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pemasok'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
+    purchase_orders: ['Pembeli', 'Disetujui oleh', 'Pemasok'], quotations: ['Hormat kami', 'Disetujui pelanggan (nama, tanggal & cap)'], delivery_orders: ['Bagian gudang', 'Pengemudi', 'Diterima baik oleh (nama, tanggal & cap)'], customer_credit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pelanggan'], customer_debit_notes: ['Hormat kami', 'Diterima pelanggan'], supplier_debit_notes: ['Dibuat oleh', 'Disetujui oleh', 'Diterima pemasok'], sales_advances: ['Hormat kami', 'Diterima pelanggan'], purchase_advances: ['Dibuat oleh', 'Disetujui oleh'], journals: ['Dibuat oleh', 'Diperiksa oleh', 'Disetujui oleh'], stock_transfers: ['Pengirim', 'Pengemudi', 'Penerima'],
   };
 
   function companyHeader() {
@@ -72,7 +72,8 @@
     if (key === 'payroll_runs') return printPayslips(e, r);
     const title = PRINT_TITLES[key] || e.label.toUpperCase();
     const curCode = r.currency_id__label ? String(r.currency_id__label).split(' · ')[0] : 'IDR';
-    const headFields = e.fields.filter((f) => !f.hidden && !['number', 'status', 'subtotal', 'tax', 'tax_rate', 'total', 'paid', 'notes', 'description', 'reason'].includes(f.name) && f.type !== 'password' && r[f.name] != null && r[f.name] !== '' && !f.sensitive && !f.internal && f.type !== 'textarea' && !(f.name === 'exchange_rate' && Number(r[f.name]) === 1) && !(key === 'quotations' && ['revision', 'sales_order_id', 'revised_from'].includes(f.name) && !r[f.name]));
+    const isAdv = ['sales_advances', 'purchase_advances'].includes(key);
+    const headFields = e.fields.filter((f) => !f.hidden && !['number', 'status', 'subtotal', 'tax', 'tax_rate', 'total', 'paid', 'notes', 'description', 'reason', 'advance_amount', 'applied', ...(isAdv ? ['amount'] : [])].includes(f.name) && f.type !== 'password' && r[f.name] != null && r[f.name] !== '' && !f.sensitive && !f.internal && f.type !== 'textarea' && !(f.name === 'exchange_rate' && Number(r[f.name]) === 1) && !(key === 'quotations' && ['revision', 'sales_order_id', 'revised_from'].includes(f.name) && !r[f.name]));
     const left = headFields.slice(0, Math.ceil(headFields.length / 2)), right = headFields.slice(Math.ceil(headFields.length / 2));
     const dl = (fs) => `<dl class="ps-dl">${fs.map((f) => `<dt>${esc(f.label)}</dt><dd>${fieldHtml(f, r)}</dd>`).join('')}</dl>`;
     let linesHtml = '';
@@ -82,8 +83,11 @@
         <tbody>${r.lines.map((l, i) => `<tr><td>${i + 1}</td>${lf.map((f) => `<td class="${['money', 'number', 'int', 'pct'].includes(f.type) ? 'ta-r' : ''}">${fieldHtml(f, l)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     }
     const total = r.total ?? r.amount ?? null;
-    const totals = r.subtotal !== undefined && r.tax !== undefined
-      ? `<div class="ps-totals"><div><span>Subtotal</span><b>${esc(curCode)} ${esc(num(r.subtotal))}</b></div><div><span>PPN ${esc(num(r.tax_rate))}%</span><b>${esc(curCode)} ${esc(num(r.tax))}</b></div><div class="ps-grand"><span>Total</span><b>${esc(curCode)} ${esc(num(r.total))}</b></div>${r.paid ? `<div><span>Terbayar / dikreditkan</span><b>${esc(curCode)} ${esc(num(r.paid))}</b></div><div><span>Sisa</span><b>${esc(curCode)} ${esc(num(r.total - r.paid))}</b></div>` : ''}</div>`
+    const sub = isAdv ? r.amount : r.subtotal;
+    const adv = Number(r.advance_amount) || 0;
+    const advRows = adv > 0 ? `<div><span>Potongan uang muka</span><b>(${esc(curCode)} ${esc(num(adv))})</b></div><div><span>DPP</span><b>${esc(curCode)} ${esc(num(sub - adv))}</b></div>` : '';
+    const totals = sub !== undefined && r.tax !== undefined
+      ? `<div class="ps-totals"><div><span>${isAdv ? 'Uang muka (DPP)' : 'Subtotal'}</span><b>${esc(curCode)} ${esc(num(sub))}</b></div>${advRows}<div><span>PPN ${esc(num(r.tax_rate))}%</span><b>${esc(curCode)} ${esc(num(r.tax))}</b></div><div class="ps-grand"><span>Total</span><b>${esc(curCode)} ${esc(num(r.total))}</b></div>${r.paid ? `<div><span>Terbayar / dikreditkan</span><b>${esc(curCode)} ${esc(num(r.paid))}</b></div><div><span>Sisa</span><b>${esc(curCode)} ${esc(num(r.total - r.paid))}</b></div>` : ''}</div>`
       : total != null ? `<div class="ps-totals"><div class="ps-grand"><span>Jumlah</span><b>${esc(curCode)} ${esc(num(total))}</b></div></div>` : '';
     const words = total != null && curCode === 'IDR' ? `<p class="ps-words"><span>Terbilang:</span> <i>${esc(terbilangRupiah(total))}</i></p>` : total != null && r.exchange_rate > 1 ? `<p class="ps-words"><span>Setara IDR (kurs ${esc(num(r.exchange_rate))}):</span> <b>${esc(FMT.rp(total * r.exchange_rate))}</b></p>` : '';
     const notes = (r.notes || r.description || r.reason ? `<p class="ps-notes"><span>Keterangan:</span> ${esc(r.notes || r.description || r.reason)}</p>` : '') + (key === 'quotations' ? quoteTerms(r) : '') + (key === 'delivery_orders' && r.ship_to ? `<p class="ps-notes"><span>Alamat kirim:</span> ${esc(r.ship_to)}</p><p class="ps-notes"><span>Catatan penerima:</span> barang diterima dalam keadaan baik & jumlah sesuai, kecuali dicatat di bawah ini.</p>` : '');
