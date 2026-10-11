@@ -325,7 +325,17 @@ function postReceipt(ctx, r) {
       jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: base, memo: `Pelunasan ${inv.number}${st < inv.total - (inv.paid || 0) - 0.005 ? ' (sebagian)' : ''}`, partner_type: 'customer', partner_id: cust.id });
     }
     let debitBase = 0;
-    if (mode === 'pakai_uang_muka') {
+    if (mode === 'pakai_deposit') {
+      // Deposit pelanggan dipakai melunasi faktur: Dr akun deposit · Cr Piutang.
+      if (!isBaseDoc(r)) throw bad('Pemakaian deposit hanya untuk dokumen IDR.');
+      const dep = db.get('SELECT * FROM customer_deposits WHERE id = ?', r.deposit_id);
+      if (!dep || dep.customer_id !== cust.id) throw bad('Deposit bukan milik pelanggan ini.');
+      if (!['diterima', 'terpakai'].includes(dep.status)) throw bad(`Deposit ${dep.number} tidak bersaldo.`);
+      if (cash > depositRemaining(dep) + 0.005) throw bad(`Saldo deposit ${dep.number} hanya Rp ${Math.round(depositRemaining(dep)).toLocaleString('id-ID')}.`);
+      if (cash > 0) jl.push({ account_id: depositAcct(dep), debit: round2(cash), memo: `Pemakaian deposit ${dep.number}`, partner_type: 'customer', partner_id: cust.id });
+      depositMove(dep.id, 'used', round2(cash));
+      debitBase += round2(cash);
+    } else if (mode === 'pakai_uang_muka') {
       if (!isBaseDoc(r)) throw bad('Pemakaian uang muka hanya untuk faktur IDR.');
       const avail = advanceBalance('customer', cust.id, r.company_id);
       if (cash > avail + 0.005) throw bad(`Saldo uang muka ${cust.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
@@ -349,7 +359,7 @@ function postReceipt(ctx, r) {
     const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
   }
-  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : r.method === 'giro' ? `Giro mundur ${r.giro_no}` : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
+  postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : mode === 'pakai_deposit' ? 'Pemakaian deposit' : r.method === 'giro' ? `Giro mundur ${r.giro_no}` : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
   setStatus('customer_receipts', r.id, 'diposting', r.method === 'giro' && mode === 'pelunasan' ? { giro_status: 'beredar' } : {});
 }
 
@@ -358,6 +368,7 @@ function voidReceipt(ctx, r) {
     const avail = advanceBalance('customer', r.customer_id, r.company_id);
     if (avail + 0.005 < r.advance) throw conflict('Uang muka ini sudah dipakai melunasi faktur; batalkan pemakaian uang mukanya terlebih dahulu.');
   } else for (const l of lines('customer_receipt_lines', r.id)) { const tg = targetOf(l, AR_TARGETS); settle(tg.table, tg.id, -settledOf(l)); }
+  if (r.mode === 'pakai_deposit' && r.deposit_id) depositMove(r.deposit_id, 'used', -round2(r.total));
   if (r.method === 'giro' && r.giro_status === 'cair') throw conflict('Giro sudah cair; koreksi dengan transaksi baru (mis. retur/pengembalian dana).');
   reverseDocumentJournals(ctx, 'customer_receipts', r.id, today(), `Pembatalan penerimaan ${r.number}`);
   setStatus('customer_receipts', r.id, 'batal', r.method === 'giro' ? { giro_status: 'tolak', giro_cleared: today() } : {});
@@ -514,15 +525,23 @@ function quickSettle(ctx, table, doc, p, docTable = table === 'customer_receipts
   const settled = round2((p.amount || 0) + (p.discount || 0) + (p.pph23 || 0));
   if (!(settled > 0)) throw bad('Isi jumlah pembayaran.');
   if (settled > open + 0.005) throw bad(`Melebihi sisa ${ar ? 'faktur' : 'tagihan'} (${open.toLocaleString('id-ID')}).`);
-  const useAdv = p.source === 'uang_muka', giro = p.source === 'giro';
-  if (!useAdv && !p.bank_account_id) throw bad('Pilih rekening kas/bank.');
+  const useAdv = p.source === 'uang_muka', giro = p.source === 'giro', useDep = ar && p.source === 'deposit';
+  let depositId = null;
+  if (useDep) {
+    if (!isBaseDoc(doc)) throw bad('Deposit hanya dapat melunasi dokumen IDR.');
+    const dep = p.deposit_id ? db.get('SELECT * FROM customer_deposits WHERE id = ?', p.deposit_id)
+      : db.get("SELECT * FROM customer_deposits WHERE customer_id = ? AND status IN ('diterima','terpakai') ORDER BY CASE kind WHEN 'saldo' THEN 0 ELSE 1 END, date, id LIMIT 1", doc.customer_id);
+    if (!dep || dep.customer_id !== doc.customer_id) throw bad('Pelanggan ini tidak memiliki deposit bersaldo.');
+    depositId = dep.id;
+  }
+  if (!useAdv && !useDep && !p.bank_account_id) throw bad('Pilih rekening kas/bank.');
   if (giro && (!p.giro_no || !p.giro_due)) throw bad('Isi nomor dan tanggal efektif giro.');
   if (giro && p.giro_due < (p.date || today())) throw bad('Tanggal efektif giro tidak boleh sebelum tanggal pembayaran.');
   if (giro && !isBaseDoc(doc)) throw bad('Giro/cek mundur hanya untuk dokumen IDR.');
   const header = {
     company_id: doc.company_id, branch_id: doc.branch_id, date: p.date || today(), [ar ? 'customer_id' : 'supplier_id']: doc[ar ? 'customer_id' : 'supplier_id'],
-    mode: useAdv ? 'pakai_uang_muka' : 'pelunasan', method: giro ? 'giro' : 'transfer', giro_no: giro ? p.giro_no : null, giro_bank: giro ? p.giro_bank || null : null, giro_due: giro ? p.giro_due : null,
-    bank_account_id: useAdv ? null : p.bank_account_id, ...fxCopy(doc), bank_charge: useAdv || giro ? 0 : (p.bank_charge || 0),
+    mode: useDep ? 'pakai_deposit' : useAdv ? 'pakai_uang_muka' : 'pelunasan', method: giro ? 'giro' : 'transfer', giro_no: giro ? p.giro_no : null, giro_bank: giro ? p.giro_bank || null : null, giro_due: giro ? p.giro_due : null,
+    bank_account_id: useAdv || useDep ? null : p.bank_account_id, ...(ar ? { deposit_id: depositId } : {}), ...fxCopy(doc), bank_charge: useAdv || useDep || giro ? 0 : (p.bank_charge || 0),
     reference: p.reference || null, total: round2(p.amount || 0), settled, status: 'draf',
   };
   const line = { [(ar ? AR_TARGETS : AP_TARGETS).find((t) => t[1] === docTable)[0]]: doc.id, amount: round2(p.amount || 0), discount: p.discount || 0, pph23: p.pph23 || 0, settled };
@@ -718,6 +737,72 @@ function withAdvance(header, docTable, orderId, finalBilling) {
   applyAdvanceDeduction(h, docTable);
   return h;
 }
+
+/* --- Deposit pelanggan (saldo prabayar & uang jaminan) -------------------------------- */
+const depositAcct = (d) => acct(d.kind === 'jaminan' ? 'deposit_guarantee' : 'deposit_saldo');
+const depositRemaining = (d) => round2(d.amount - (d.used || 0) - (d.refunded || 0) - (d.forfeited || 0));
+/** Catat pemakaian/pengembalian/pencairan deposit dan perbarui status (diterima → terpakai → habis). */
+function depositMove(id, field, delta) {
+  const d = db.get('SELECT * FROM customer_deposits WHERE id = ?', id);
+  const next = { ...d, [field]: round2((d[field] || 0) + delta) };
+  if (next[field] < -0.005) throw bad('Saldo pergerakan deposit negatif.');
+  const rem = depositRemaining(next);
+  if (rem < -0.005) throw bad(`Melebihi saldo deposit ${d.number} (Rp ${depositRemaining(d).toLocaleString('id-ID')}).`);
+  const touched = (next.used || 0) + (next.refunded || 0) + (next.forfeited || 0) > 0.005;
+  db.update('customer_deposits', id, { [field]: Math.max(0, next[field]), status: rem <= 0.005 ? 'habis' : touched ? 'terpakai' : 'diterima' });
+}
+const depositParty = (d) => db.get('SELECT * FROM customers WHERE id = ?', d.customer_id);
+
+const DEPOSIT_ACTIONS = {
+  /** Terima deposit: Dr Bank · Cr Deposit Pelanggan (saldo) / Uang Jaminan Pelanggan, per pelanggan. */
+  post: (ctx, d) => {
+    const cust = depositParty(d), b = bank(d.bank_account_id);
+    postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date: d.date, description: `Deposit ${d.kind === 'jaminan' ? 'jaminan' : 'saldo'} ${d.number} — ${cust.name}`, sourceType: 'customer_deposits', sourceId: d.id, sourceNo: d.number, lines: [
+      { account_id: b.account_id, branch_id: b.branch_id, debit: round2(d.amount), memo: `Deposit ${cust.name}${d.reference ? ` · ${d.reference}` : ''}` },
+      { account_id: depositAcct(d), credit: round2(d.amount), memo: `Deposit ${d.number}`, partner_type: 'customer', partner_id: cust.id },
+    ] });
+    setStatus('customer_deposits', d.id, 'diterima');
+    return { message: `Deposit ${d.number} diterima Rp ${round2(d.amount).toLocaleString('id-ID')}.` };
+  },
+  /** Pakai deposit melunasi faktur: membuat & memposting penerimaan jenis "Pakai deposit pelanggan". */
+  apply: (ctx, d, p) => {
+    const inv = db.get('SELECT * FROM sales_invoices WHERE id = ?', p.invoice_id);
+    if (!inv || inv.customer_id !== d.customer_id) throw bad('Faktur bukan milik pelanggan deposit ini.');
+    if (!['terbit', 'sebagian'].includes(inv.status)) throw bad(`Faktur ${inv.number} tidak dalam status terbuka.`);
+    const out = quickSettle(ctx, 'customer_receipts', inv, { date: p.date, source: 'deposit', deposit_id: d.id, amount: p.amount, discount: 0, pph23: 0, bank_charge: 0, reference: `Deposit ${d.number}` });
+    return { message: `Deposit ${d.number} dipakai melunasi ${inv.number}. ${out.message}`, audit: out.audit };
+  },
+  /** Kembalikan deposit: Dr Deposit · Cr Bank (+ biaya transfer). Bersifat final (koreksi dengan transaksi baru). */
+  refund: (ctx, d, p) => {
+    const cust = depositParty(d), b = bank(p.bank_account_id), amount = round2(p.amount), charge = round2(p.bank_charge || 0);
+    if (!(amount > 0)) throw bad('Isi jumlah yang dikembalikan.');
+    if (b.company_id && b.company_id !== d.company_id) throw bad('Rekening harus milik perusahaan yang sama.');
+    depositMove(d.id, 'refunded', amount);
+    postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date: p.date, description: `Pengembalian deposit ${d.number} — ${cust.name}`, sourceType: 'customer_deposits', sourceId: d.id, sourceNo: d.number, lines: [
+      { account_id: depositAcct(d), debit: amount, memo: `Pengembalian deposit ${d.number}${p.reference ? ` · ${p.reference}` : ''}`, partner_type: 'customer', partner_id: cust.id },
+      ...(charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer pengembalian deposit' }] : []),
+      { account_id: b.account_id, branch_id: b.branch_id, credit: round2(amount + charge), memo: `Pengembalian deposit ${cust.name}` },
+    ] });
+    return { message: `Rp ${amount.toLocaleString('id-ID')} dikembalikan ke ${cust.name}.` };
+  },
+  /** Cairkan uang jaminan sebagai kompensasi: Dr Uang Jaminan · Cr pendapatan kompensasi. */
+  forfeit: (ctx, d, p) => {
+    if (d.kind !== 'jaminan') throw bad('Hanya uang jaminan yang dapat dicairkan.');
+    const cust = depositParty(d), amount = round2(p.amount);
+    if (!(amount > 0)) throw bad('Isi jumlah yang dicairkan.');
+    depositMove(d.id, 'forfeited', amount);
+    postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date: p.date, description: `Pencairan jaminan ${d.number} — ${cust.name}: ${String(p.reason).slice(0, 120)}`, sourceType: 'customer_deposits', sourceId: d.id, sourceNo: d.number, lines: [
+      { account_id: depositAcct(d), debit: amount, memo: `Pencairan jaminan ${d.number}`, partner_type: 'customer', partner_id: cust.id },
+      { account_id: p.account_id || acct('deposit_forfeit'), credit: amount, memo: String(p.reason).slice(0, 200) },
+    ] });
+    return { message: `Jaminan Rp ${amount.toLocaleString('id-ID')} dicairkan sebagai kompensasi.` };
+  },
+  void: (ctx, d) => {
+    if ((d.used || 0) + (d.refunded || 0) + (d.forfeited || 0) > 0.005) throw conflict('Deposit sudah dipakai/dikembalikan; batalkan pemakaiannya terlebih dahulu.');
+    reverseDocumentJournals(ctx, 'customer_deposits', d.id, today(), `Pembatalan deposit ${d.number}`);
+    setStatus('customer_deposits', d.id, 'batal');
+  },
+};
 
 /* --- Giro mundur: cair & ditolak ------------------------------------------------ */
 /** Giro cair (efektif di bank): pindahkan dari akun giro belum cair ke rekening bank. */
@@ -1380,6 +1465,7 @@ export const ACTIONS = {
   customer_debit_notes: noteActions('customer_debit_notes'),
   supplier_debit_notes: noteActions('supplier_debit_notes'),
   supplier_credit_notes: noteActions('supplier_credit_notes'),
+  customer_deposits: DEPOSIT_ACTIONS,
   sales_advances: { post: postAdvance('sales_advances'), void: voidAdvance('sales_advances'), receive: (ctx, a, p) => quickSettle(ctx, 'customer_receipts', a, p, 'sales_advances') },
   purchase_advances: { post: postAdvance('purchase_advances'), void: voidAdvance('purchase_advances'), pay: (ctx, a, p) => quickSettle(ctx, 'supplier_payments', a, p, 'purchase_advances') },
   sales_invoices: { post: postSalesInvoice, void: voidSalesInvoice, receive: (ctx, inv, p) => quickSettle(ctx, 'customer_receipts', inv, p) },

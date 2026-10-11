@@ -161,6 +161,18 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    dibayar, tindak lanjuti uang muka lama yang belum dipotong, dan pastikan indikator
    hijau (sisa DPP = saldo akun 2-1610 / 1-1520).
 
+## Deposit pelanggan
+
+1. Terima deposit: **Penjualan → Deposit Pelanggan → baru** — pilih jenis *Deposit saldo
+   (prabayar)* atau *Uang jaminan* (isi no. kontrak & jatuh tempo pengembalian), rekening
+   penerima, nilai → **Terima & posting**. Cetak tanda terima deposit untuk pelanggan.
+2. Pakai deposit: dari deposit → **Pakai untuk melunasi faktur** (pilih faktur pelanggan
+   tersebut), atau dari faktur → **Terima pembayaran** dengan sumber dana *Deposit pelanggan*.
+3. Pengembalian: **Kembalikan deposit** (rekening & biaya transfer). Uang jaminan yang
+   menanggung kerusakan/denda: **Cairkan jaminan (kompensasi)** dengan alasan tertulis.
+4. Bulanan: **Keuangan → Register Deposit** — tindak lanjuti jaminan jatuh tempo ≤ 30 hari
+   dan pastikan indikator hijau (saldo deposit = akun 2-1620 / 2-1630).
+
 ## Nota debet & nota kredit
 
 1. Koreksi harga, rabat, atau klaim pelanggan: **Penjualan → Nota Kredit**, pilih

@@ -136,11 +136,12 @@
       if (msg) extra = `<div class="section"><div class="notice" data-tone="${r.status === 'diterima' ? 'ok' : exp || r.status === 'kedaluwarsa' ? 'danger' : 'info'}">${icon(r.status === 'diterima' ? 'check' : 'clock')} ${esc(msg)}</div></div>`;
     }
     if (key === 'sales_orders') extra = await ERP.sales.soDrawer(r);
+    if (key === 'customer_deposits') extra = await ERP.sales.depositDrawer(r);
     if (['sales_invoices', 'purchase_bills', 'customer_debit_notes', 'supplier_credit_notes', 'sales_advances', 'purchase_advances'].includes(key)) extra = await ERP.sales.settlementDrawer(key, r);
     if (key === 'roles') extra = `<div class="section"><button class="btn" data-nav="peran">${icon('shield')} Buka matriks izin</button></div>`;
     if (key === 'bank_reconciliations') extra = `<div class="section"><button class="btn btn-primary" data-recon-open="${r.id}">${icon('check')} Cocokkan mutasi dengan rekening koran</button></div>`;
 
-    const actions = (r.__actions || []).map((a) => `<button class="btn ${/approve|post|pay|complete|activate/.test(a.name) ? 'btn-primary' : /void|reject|cancel|reverse|dispose/.test(a.name) ? 'btn-danger-ghost' : ''}" data-action-run="${key}:${r.id}:${a.name}" ${a.sodBlocked ? 'disabled title="Pemisahan tugas: pembuat dokumen tidak dapat menyetujui sendiri"' : ''}>${esc(a.label)}</button>`).join('');
+    const actions = (r.__actions || []).map((a) => `<button class="btn ${/approve|post|pay|complete|activate/.test(a.name) ? 'btn-primary' : /void|reject|cancel|reverse|dispose|forfeit/.test(a.name) ? 'btn-danger-ghost' : ''}" data-action-run="${key}:${r.id}:${a.name}" ${a.sodBlocked ? 'disabled title="Pemisahan tugas: pembuat dokumen tidak dapat menyetujui sendiri"' : ''}>${esc(a.label)}</button>`).join('');
     openDrawer({
       eyebrow: `<span class="code">${esc(r.number || r.code || `#${r.id}`)}</span>${e.statusField ? pill(r[e.statusField]) : ''}${r.__masked ? ' <span class="pill" data-tone="warn"><i class="pill-dot"></i>Data sensitif disamarkan</span>' : ''}`,
       title: String(title), subtitle: e.label,
@@ -243,7 +244,7 @@
           foot: `<button class="btn btn-primary" data-ok>${esc(a.label)}</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" data-close>Batal</button>`,
         });
         const form = $('form', m);
-        F().hydrateRefs(form);
+        F().hydrateRefs(form, rec); // rujukan bersyarat (refParent) memakai nilai rekaman, mis. faktur milik pelanggan ini
         $$('[data-close]', ERP.overlays()).forEach((b) => b.addEventListener('click', () => resolve(null), { once: true }));
         $('[data-ok]', m).addEventListener('click', () => {
           const out = {};

@@ -13,7 +13,7 @@ import { copyBudgets } from './ledger/budget.js';
 import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
 import { invoiceFromDeliveries } from './ledger/documents.js';
 import { fulfillmentReport } from './ledger/fulfillment.js';
-import { installmentsOf, installmentSchedule, advanceBalance, giroRegister, advanceRegister } from './ledger/payments.js';
+import { installmentsOf, installmentSchedule, advanceBalance, giroRegister, advanceRegister, depositRegister } from './ledger/payments.js';
 import { verifyPassword } from './security/crypto.js';
 import { createBackup, listBackups } from './lib/backup.js';
 import * as extras from './modules/extras.js';
@@ -199,6 +199,7 @@ const REPORTS = {
   penawaran: (ctx, r) => quotationReport(ctx, r),
   pemenuhan: (ctx, r) => fulfillmentReport(ctx, r),
   giro: (ctx, r, q) => giroRegister(ctx, { ...r, side: q.side === 'out' ? 'out' : 'in', from: isDate(q.from) ? q.from : null }),
+  deposit: (ctx, r) => depositRegister(ctx, r),
   'uang-muka': (ctx, r, q) => advanceRegister(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar' }),
   angsuran: (ctx, r, q) => installmentSchedule(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar', days: q.days }),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
@@ -209,7 +210,7 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales' }[p.name]
+  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales', deposit: 'sales' }[p.name]
     || (['angsuran', 'uang-muka'].includes(p.name) ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
     || (p.name === 'giro' ? (q.side === 'out' ? 'purchasing' : 'sales') : null)
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
@@ -257,6 +258,18 @@ route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
     : [];
   return { installments: installmentsOf(p.entity, doc.id), payments, credits, applications, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
 });
+/* Riwayat deposit pelanggan: pemakaian melunasi faktur (penerimaan), pengembalian & pencairan (jurnal). */
+route('GET', '/api/deposit-history/:id', (ctx, _b, p, q) => {
+  scoped(ctx, q);
+  const d = crud.read(ctx, 'customer_deposits', p.id);
+  const receipts = db.all(`SELECT r.id, r.number, r.date, r.total amount, r.status, 'customer_receipts' entity,
+      (SELECT GROUP_CONCAT(COALESCE(i.number, n.number, a.number), ', ') FROM customer_receipt_lines l LEFT JOIN sales_invoices i ON i.id = l.invoice_id LEFT JOIN customer_debit_notes n ON n.id = l.debit_note_id LEFT JOIN sales_advances a ON a.id = l.advance_id WHERE l.parent_id = r.id) docs
+    FROM customer_receipts r WHERE r.deposit_id = ? AND r.mode = 'pakai_deposit' AND r.status <> 'draf' ORDER BY r.date, r.id`, d.id);
+  const journals = db.all(`SELECT j.id, j.number, j.date, j.description, (SELECT ROUND(SUM(jl.debit),2) FROM journal_lines jl WHERE jl.parent_id = j.id AND jl.partner_type = 'customer') amount, 'journals' entity
+    FROM journals j WHERE j.source_type = 'customer_deposits' AND j.source_id = ? AND j.status = 'diposting' AND (j.description LIKE 'Pengembalian deposit%' OR j.description LIKE 'Pencairan jaminan%') ORDER BY j.date, j.id`, d.id);
+  return { receipts, journals, remaining: Math.round((d.amount - (d.used || 0) - (d.refunded || 0) - (d.forfeited || 0)) * 100) / 100 };
+});
+
 /* Saldo uang muka mitra (untuk formulir penerimaan/pembayaran). */
 route('GET', '/api/advance/:type/:id', (ctx, _b, p, q) => {
   scoped(ctx, q);

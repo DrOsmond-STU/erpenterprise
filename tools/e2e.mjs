@@ -284,6 +284,12 @@ try {
   await page.waitForTimeout(1200);
   check(/Sisa uang muka cocok/.test(await page.textContent('.view-root')), 'uang muka pembelian: register cocok dengan buku besar');
 
+  // Register deposit pelanggan: saldo prabayar & uang jaminan cocok dengan akun 2-1620 / 2-1630.
+  await page.evaluate(() => { location.hash = '#/register-deposit'; });
+  await page.waitForSelector('.notice', { timeout: 8000 });
+  check(/Saldo deposit cocok/.test(await page.textContent('.view-root')) && (await page.$$('[data-open^="customer_deposits:"]')).length >= 1, 'deposit pelanggan: register cocok dengan buku besar');
+  await page.screenshot({ path: join(shots, 'deposit.png') });
+
   // Nota debet pelanggan: dokumen piutang terbuka yang dapat dilunasi.
   await page.evaluate(() => { location.hash = '#/nota-debet-pelanggan'; });
   await page.waitForSelector('tr[data-open^="customer_debit_notes:"]', { timeout: 8000 });

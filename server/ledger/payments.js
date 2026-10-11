@@ -231,3 +231,34 @@ export function advanceRegister(ctx, { companyId, branchId, side = 'ar' }) {
     glBalance, reconciled: Math.abs(glBalance - remainingAll) < 1,
   };
 }
+
+/**
+ * Register deposit pelanggan: saldo per deposit (saldo prabayar & uang jaminan), jaminan yang jatuh
+ * tempo dikembalikan ≤ 30 hari, direkonsiliasi dengan akun 2-1620 / 2-1630.
+ */
+export function depositRegister(ctx, { companyId, branchId, asOf }) {
+  const t = asOf || today();
+  const bf = branchId ? ' AND d.branch_id = ?' : '';
+  const rows = db.all(`SELECT d.id, d.number, d.date, d.kind, d.reference, d.return_date, d.status, d.amount, COALESCE(d.used,0) used, COALESCE(d.refunded,0) refunded, COALESCE(d.forfeited,0) forfeited,
+      ROUND(d.amount - COALESCE(d.used,0) - COALESCE(d.refunded,0) - COALESCE(d.forfeited,0),2) remaining, p.name party, p.id party_id, b.name branch
+    FROM customer_deposits d JOIN customers p ON p.id = d.customer_id JOIN branches b ON b.id = d.branch_id
+    WHERE d.company_id = ? AND d.status IN ('diterima','terpakai','habis')${bf}
+    ORDER BY CASE d.status WHEN 'habis' THEN 1 ELSE 0 END, d.kind, d.date DESC, d.number`, companyId, ...(branchId ? [branchId] : []));
+  for (const r of rows) r.daysToReturn = r.return_date ? Math.round((Date.parse(r.return_date) - Date.parse(t)) / 864e5) : null;
+  const open = rows.filter((r) => r.remaining > 0.005);
+  const sumBy = (xs) => round2(xs.reduce((s, r) => s + r.remaining, 0));
+  const gl = (key) => -db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(key)).v;
+  const all = (kind) => round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM customer_deposits WHERE company_id = ? AND kind = ? AND status IN ('diterima','terpakai','habis')`, companyId, kind).v);
+  const glSaldo = round2(gl('deposit_saldo')), glJaminan = round2(gl('deposit_guarantee'));
+  const dueSoon = open.filter((r) => r.kind === 'jaminan' && r.daysToReturn != null && r.daysToReturn <= 30);
+  return {
+    title: 'Register Deposit Pelanggan', asOf: t,
+    rows,
+    totals: {
+      saldo: sumBy(open.filter((r) => r.kind === 'saldo')), jaminan: sumBy(open.filter((r) => r.kind === 'jaminan')),
+      dueSoon: sumBy(dueSoon), dueSoonCount: dueSoon.length, customers: new Set(open.map((r) => r.party_id)).size,
+      used: round2(rows.reduce((s, r) => s + r.used, 0)), refunded: round2(rows.reduce((s, r) => s + r.refunded, 0)), forfeited: round2(rows.reduce((s, r) => s + r.forfeited, 0)),
+    },
+    glSaldo, glJaminan, reconciled: Math.abs(glSaldo - all('saldo')) < 1 && Math.abs(glJaminan - all('jaminan')) < 1,
+  };
+}

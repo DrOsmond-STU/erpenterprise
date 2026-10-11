@@ -155,7 +155,7 @@
   /* ======================================================================== */
   /* Pembayaran bertahap                                                      */
   /* ======================================================================== */
-  const MODE = { pelunasan: 'Pelunasan', uang_muka: 'Uang muka', pakai_uang_muka: 'Pakai uang muka' };
+  const MODE = { pelunasan: 'Pelunasan', uang_muka: 'Uang muka', pakai_uang_muka: 'Pakai uang muka', pakai_deposit: 'Pakai deposit' };
 
   /** Laci faktur/tagihan: jadwal angsuran, riwayat pembayaran (termasuk potongan), saldo uang muka mitra. */
   async function settlementDrawer(key, r) {
@@ -295,5 +295,48 @@
     if (el) { state.advSide = el.dataset.advSide; ERP.app.renderView(); }
   });
 
-  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro, advances };
+  /* ======================================================================== */
+  /* Deposit pelanggan                                                        */
+  /* ======================================================================== */
+  const DEP_KIND = { saldo: 'Saldo prabayar', jaminan: 'Uang jaminan' };
+  /** Laci deposit: saldo, pemakaian melunasi faktur, pengembalian & pencairan. */
+  async function depositDrawer(r) {
+    if (['draf', 'batal'].includes(r.status)) return '';
+    let h;
+    try { h = await api('GET', `/api/deposit-history/${r.id}`); } catch { return ''; }
+    const rows = [
+      ...h.receipts.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>Melunasi ${esc(x.docs || '—')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill(x.status)}</td></tr>`),
+      ...h.journals.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>${esc(/^Pencairan/.test(x.description) ? 'Dicairkan (kompensasi)' : 'Dikembalikan ke pelanggan')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill('diposting')}</td></tr>`),
+    ];
+    return `<div class="section"><span class="section-title">Riwayat deposit</span>
+      ${rows.length ? `<div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>Dokumen</th><th>Tanggal</th><th>Keterangan</th><th class="ta-r">Jumlah</th><th>Status</th></tr></thead><tbody>${rows.join('')}</tbody>
+        <tfoot><tr class="row-total"><td colspan="3">Saldo deposit</td><td class="ta-r">${money(h.remaining)}</td><td></td></tr></tfoot></table></div>`
+        : `<p class="muted">Belum dipakai. Saldo ${esc(FMT.rp(h.remaining))}.</p>`}
+      <p class="field-hint">${r.kind === 'jaminan' ? 'Uang jaminan dikembalikan saat kontrak berakhir; dapat dikompensasikan ke faktur terbuka atau dicairkan sebagai ganti rugi.' : 'Pakai melunasi faktur dari sini, atau dari faktur → Terima pembayaran → sumber dana "Deposit pelanggan".'}</p></div>`;
+  }
+
+  async function deposits(root) {
+    const head = (sub, tools = '') => V().pageHead('Register Deposit Pelanggan', sub, tools);
+    root.innerHTML = head('') + '<div class="loading-cell">Memuat…</div>';
+    let r;
+    try { r = await api('GET', `/api/reports/deposit${qs({ to: state.to || state.meta.today })}`); } catch (e) { root.innerHTML = head('Deposit saldo prabayar & uang jaminan pelanggan.') + `<p class="pad neg">${esc(e.message)}</p>`; return; }
+    const t = r.totals;
+    const canNew = R().ent('customer_deposits')?.canWrite;
+    root.innerHTML = head('Deposit saldo (prabayar) dipakai melunasi faktur; uang jaminan dikembalikan saat kontrak berakhir atau dicairkan sebagai kompensasi. Deposit adalah liabilitas kepada pelanggan, bukan pendapatan.',
+      `${canNew ? `<button class="btn btn-primary" data-nav="deposit-pelanggan">${icon('plus')} Deposit baru</button>` : ''}<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
+      `<section class="kpi-grid-erp">
+        ${kpi('Saldo prabayar', esc(FMT.rpCompact(t.saldo)), 'akun 2-1620 · dapat melunasi faktur')}
+        ${kpi('Uang jaminan', esc(FMT.rpCompact(t.jaminan)), 'akun 2-1630')}
+        ${kpi('Jaminan jatuh tempo ≤ 30 hari', esc(FMT.rpCompact(t.dueSoon)), `${t.dueSoonCount} deposit · siapkan pengembalian`, t.dueSoonCount ? 'neg' : '')}
+        ${kpi('Dipakai / dikembalikan', esc(FMT.rpCompact(t.used + t.refunded)), `dicairkan ${FMT.rpCompact(t.forfeited)}`)}
+      </section>
+      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Saldo deposit cocok dengan buku besar — 2-1620 ${FMT.rp(r.glSaldo)} · 2-1630 ${FMT.rp(r.glJaminan)}.` : `Tidak cocok dengan buku besar (2-1620 ${FMT.rp(r.glSaldo)}, 2-1630 ${FMT.rp(r.glJaminan)}).`)}</div>
+      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Deposit</th><th>Pelanggan</th><th class="ta-r">Nilai</th><th class="ta-r">Dipakai / dikembalikan</th><th class="ta-r">Saldo</th><th>Pengembalian</th><th>Status</th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr class="${x.kind === 'jaminan' && x.remaining > 0 && x.daysToReturn != null && x.daysToReturn < 0 ? 'row-attn' : ''}"><td class="code"><button class="link" data-open="customer_deposits:${x.id}">${esc(x.number)}</button><span class="cell-sub">${esc(DEP_KIND[x.kind] || x.kind)} · ${esc(ERP.date(x.date))}</span></td><td>${esc(x.party)}${x.reference ? `<span class="cell-sub">${esc(x.reference)}</span>` : ''}</td>
+          <td class="ta-r">${money(x.amount)}</td><td class="ta-r">${x.used + x.refunded + x.forfeited ? money(x.used + x.refunded + x.forfeited) : ''}${[x.used && `dipakai ${money(x.used)}`, x.refunded && `kembali ${money(x.refunded)}`, x.forfeited && `dicairkan ${money(x.forfeited)}`].filter(Boolean).map((t2) => `<span class="cell-sub">${t2}</span>`).join('')}</td><td class="ta-r">${money(x.remaining)}</td>
+          <td class="num">${x.return_date ? `${esc(ERP.date(x.return_date))}${x.remaining > 0 ? `<span class="cell-sub ${x.daysToReturn < 0 ? 'neg' : ''}">${x.daysToReturn >= 0 ? `${x.daysToReturn} hari lagi` : `${-x.daysToReturn} hari lewat`}</span>` : ''}` : '—'}</td><td>${pill(x.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Belum ada deposit.</td></tr>'}
+      </tbody><tfoot><tr class="row-total"><td colspan="4">Total saldo deposit</td><td class="ta-r">${money(t.saldo + t.jaminan)}</td><td colspan="2"></td></tr></tfoot></table></div></div></article>`;
+  }
+
+  ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro, advances, depositDrawer, deposits };
 })();

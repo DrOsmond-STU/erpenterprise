@@ -61,6 +61,8 @@ export function notifications(ctx) {
     if (exp) push('warn', `${exp} penawaran berakhir ≤ 7 hari`, 'Tindak lanjuti pelanggan atau buat revisi.', { view: 'analisis-penawaran' });
     const g = db.get(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM customer_receipts WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar' AND giro_due <= ?${b.sql}`, ctx.companyId, addDays(t, 3), ...b.p);
     if (g.n) push('warn', `${g.n} giro masuk jatuh tempo ≤ 3 hari / lewat`, `Total ${fmt(g.v)} — setor kliring & catat "Giro cair".`, { view: 'giro' });
+    const dj = db.get(`SELECT COUNT(*) n, COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM customer_deposits WHERE company_id = ? AND kind = 'jaminan' AND status IN ('diterima','terpakai') AND return_date <= ?${b.sql}`, ctx.companyId, addDays(t, 30), ...b.p);
+    if (dj.n) push('warn', `${dj.n} uang jaminan pelanggan jatuh tempo ≤ 30 hari`, `Saldo ${fmt(dj.v)} — kembalikan, kompensasikan, atau perpanjang kontrak.`, { view: 'register-deposit' });
   }
   if (can(ctx, 'purchasing', LEVEL.read)) {
     const g = db.get(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM supplier_payments WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar' AND giro_due <= ?${b.sql}`, ctx.companyId, addDays(t, 3), ...b.p);

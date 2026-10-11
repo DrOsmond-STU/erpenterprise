@@ -41,6 +41,7 @@ export const DEFAULT_ACCOUNT_MAP = {
   sales_discount: '4-1900', purchase_discount: '7-1300', bank_charge: '7-2100',
   giro_receivable: '1-1250', giro_payable: '2-1150',
   sales_dp: '2-1610', purchase_dp: '1-1520',
+  deposit_saldo: '2-1620', deposit_guarantee: '2-1630', deposit_forfeit: '7-1400',
 };
 
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });

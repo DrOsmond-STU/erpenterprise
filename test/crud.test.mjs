@@ -128,7 +128,7 @@ for (const key of [
   'projects', 'project_tasks', 'employees', 'attendance', 'leave_requests', 'payroll_runs', 'documents', 'workflows', 'compliance_items',
   'risks', 'security_incidents', 'currencies', 'exchange_rates', 'sales_returns', 'purchase_returns', 'bank_reconciliations', 'pos_shifts',
   'warehouse_bins', 'product_locations', 'bsc_metrics', 'delivery_orders', 'payment_terms',
-  'customer_credit_notes', 'customer_debit_notes', 'supplier_debit_notes', 'supplier_credit_notes', 'sales_advances', 'purchase_advances',
+  'customer_credit_notes', 'customer_debit_notes', 'supplier_debit_notes', 'supplier_credit_notes', 'sales_advances', 'purchase_advances', 'customer_deposits',
 ]) {
   test(`CRUD ${key}: buat → baca → ubah → konflik versi → hapus`, async () => {
     const e = meta.entities[key];

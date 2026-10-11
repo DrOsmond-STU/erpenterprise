@@ -446,6 +446,35 @@ Tagihan lunas dapat diretur; tagihan dengan retur terposting tidak dapat dibatal
 dipotong, sudah dipotong per dokumen & pesanan — sisa DPP belum dipotong
 **direkonsiliasi dengan akun 2-1610 / 1-1520**.
 
+## Deposit pelanggan
+
+Dokumen **Deposit Pelanggan** (`customer_deposits`, nomor DPS) mencatat dana titipan
+pelanggan yang tidak terkait pesanan tertentu — liabilitas, bukan pendapatan.
+
+| Jenis | Akun | Penggunaan |
+| --- | --- | --- |
+| Deposit saldo (prabayar) | 2-1620 Deposit Pelanggan | Dipakai melunasi faktur, nota debet, atau faktur uang muka |
+| Uang jaminan | 2-1630 Uang Jaminan Pelanggan | Dikembalikan saat kontrak berakhir (*jatuh tempo pengembalian*), dikompensasikan ke faktur terbuka, atau dicairkan sebagai ganti rugi |
+
+| Kejadian | Jurnal |
+| --- | --- |
+| Deposit diterima | Dr Bank · Cr 2-1620 / 2-1630 (per pelanggan) |
+| Dipakai melunasi faktur (aksi *Pakai untuk melunasi faktur*, atau dari faktur → *Terima pembayaran* sumber dana "Deposit pelanggan") | Penerimaan jenis *Pakai deposit pelanggan*: Dr 2-1620 / 2-1630 · Cr Piutang |
+| Dikembalikan | Dr 2-1620 / 2-1630, Beban adm. bank · Cr Bank |
+| Jaminan dicairkan (kompensasi) | Dr 2-1630 · Cr 7-1400 Pendapatan Kompensasi (atau akun pilihan) |
+
+Status: draf → diterima → terpakai sebagian → habis. Pemakaian tidak boleh melebihi
+saldo deposit maupun sisa faktur; deposit hanya untuk pelanggan pemiliknya dan dokumen
+IDR. Membatalkan penerimaan pemakaian mengembalikan saldo deposit; deposit hanya dapat
+dibatalkan sebelum dipakai/dikembalikan/dicairkan; pengembalian & pencairan bersifat final
+(koreksi dengan transaksi baru). Bila sumber dana deposit dipilih tanpa nomor deposit,
+dipakai deposit saldo tertua pelanggan.
+
+**Register Deposit** (`GET /api/reports/deposit`): saldo per deposit, saldo prabayar &
+jaminan, jaminan jatuh tempo ≤ 30 hari (juga notifikasi), dipakai/dikembalikan/dicairkan —
+**direkonsiliasi dengan akun 2-1620 dan 2-1630**. Riwayat per deposit:
+`GET /api/deposit-history/:id`. Saldo deposit juga tampil pada data pelanggan.
+
 ## Nota debet & nota kredit
 
 Penyesuaian nilai piutang/hutang tanpa retur barang (koreksi harga, potongan/rabat,
