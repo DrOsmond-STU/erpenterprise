@@ -245,14 +245,15 @@ route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
     : `SELECT r.id, r.number, r.date, r.mode, r.status, l.amount, COALESCE(l.discount,0) discount, COALESCE(l.pph23,0) pph23, COALESCE(l.settled, l.amount) settled, 'supplier_payments' entity FROM supplier_payment_lines l JOIN supplier_payments r ON r.id = l.parent_id WHERE l.${lf} = ? AND r.status <> 'draf' ORDER BY r.date, r.id`, doc.id);
   // Pengurang selain pembayaran: retur & nota pengurang yang diterapkan ke dokumen ini.
   const credits = p.entity === 'sales_invoices'
-    ? db.all("SELECT id, number, date, total settled, 'sales_returns' entity FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'customer_credit_notes' FROM customer_credit_notes WHERE invoice_id = ? AND status = 'diposting'", doc.id, doc.id)
+    ? db.all("SELECT id, number, date, COALESCE(to_invoice, total) settled, 'sales_returns' entity FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'customer_credit_notes' FROM customer_credit_notes WHERE invoice_id = ? AND status = 'diposting'", doc.id, doc.id)
     : p.entity === 'purchase_bills'
       ? db.all("SELECT id, number, date, total settled, 'purchase_returns' entity FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting' UNION ALL SELECT id, number, date, total, 'supplier_debit_notes' FROM supplier_debit_notes WHERE bill_id = ? AND status = 'diposting'", doc.id, doc.id)
       : [];
   const partyType = ar ? 'customer' : 'supplier';
   // Uang muka: faktur/tagihan akhir yang memotong DPP uang muka ini.
   const applications = ['sales_advances', 'purchase_advances'].includes(p.entity)
-    ? db.all(`SELECT id, number, date, subtotal, advance_amount, total, status, '${ar ? 'sales_invoices' : 'purchase_bills'}' entity FROM ${ar ? 'sales_invoices' : 'purchase_bills'} WHERE advance_id = ? AND status <> 'batal' ORDER BY date, id`, doc.id)
+    ? db.all(`SELECT id, number, date, subtotal, advance_amount, total, status, '${ar ? 'sales_invoices' : 'purchase_bills'}' entity FROM ${ar ? 'sales_invoices' : 'purchase_bills'} WHERE advance_id = ? AND status <> 'batal'
+        ${ar ? "UNION ALL SELECT id, number, date, subtotal, -advance_amount, total, status, 'sales_returns' FROM sales_returns WHERE advance_id = ? AND status = 'diposting' AND advance_amount > 0" : ''} ORDER BY 3, 1`, ...(ar ? [doc.id, doc.id] : [doc.id]))
     : [];
   return { installments: installmentsOf(p.entity, doc.id), payments, credits, applications, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
 });

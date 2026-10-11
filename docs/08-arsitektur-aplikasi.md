@@ -414,6 +414,22 @@ Aturan:
   muka yang sudah dipotongkan tidak dapat dibatalkan; membatalkan faktur/tagihan akhir
   mengembalikan sisa uang muka. SO/PO yang memiliki uang muka tidak dapat dibatalkan.
 
+**Retur penjualan atas faktur yang memotong uang muka.** Bagian DPP retur yang dibayar
+dari uang muka = DPP retur × potongan uang muka ÷ DPP faktur (dibatasi sisa potongan yang
+belum diretur). Pilihan *Bagian uang muka* pada retur:
+
+| Mode | Jurnal retur (DPP retur R, bagian uang muka U, tarif PPN t) | Efek |
+| --- | --- | --- |
+| Pulihkan ke uang muka (bawaan) | Dr Retur Penjualan R, PPN Keluaran (R − U)·t · Cr Piutang (R − U)(1 + t), Cr 2-1610 U | Uang muka kembali *siap dipotong* sebesar U — dipotong lagi pada faktur pengganti; PPN uang muka tetap |
+| Jadikan saldo kredit | Dr Retur Penjualan R, PPN Keluaran R·t · Cr Piutang (R − U)(1 + t), Cr 2-1600 U(1 + t) | Bagian uang muka beserta PPN menjadi saldo kredit pelanggan |
+
+Bagian piutang hanya mengurangi **sisa** faktur; kelebihannya (faktur sudah dibayar/lunas)
+menjadi saldo kredit pelanggan (2-1600) atau **dikembalikan lewat rekening** bila
+*Kembalikan kelebihan lewat rekening* diisi. Faktur lunas kini dapat diretur. Retur
+mencatat *mengurangi piutang faktur* dan *kelebihan*; pembatalan retur ditolak bila
+saldo kredit darinya sudah dipakai atau uang muka yang dipulihkan sudah dipotong lagi;
+faktur yang memiliki retur terposting tidak dapat dibatalkan.
+
 **Register Uang Muka** (`GET /api/reports/uang-muka?side=ar|ap`): belum dibayar, siap
 dipotong, sudah dipotong per dokumen & pesanan — sisa DPP belum dipotong
 **direkonsiliasi dengan akun 2-1610 / 1-1520**.

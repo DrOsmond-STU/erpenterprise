@@ -792,6 +792,14 @@ async function seedDemo() {
       setToday('2026-10-05');
       const f2 = db.tx(() => invoiceFromDeliveries(at(maker, 'KNM'), [d2], { date: '2026-10-05' })).id;
       await run(checker, 'KNM', 'sales_invoices', f2, 'post');
+      // Retur atas faktur yang memotong uang muka: bagian uang muka dipulihkan / menjadi saldo kredit.
+      setToday('2026-10-06');
+      const ret = async (inv, code, qty, mode, reason) => {
+        const rid = await mk(maker, 'KNM', 'JKT', 'sales_returns', { date: '2026-10-06', sales_invoice_id: inv, warehouse_id: WH['WH-JKT'], reason, advance_mode: mode, lines: [{ product_id: P[code], qty }] });
+        await run(checker, 'KNM', 'sales_returns', rid, 'post');
+      };
+      await ret(f1, 'FG-101', 1, 'pulihkan', 'Panel cacat fisik — diganti pada pengiriman berikutnya');
+      await ret(f2, 'SV-301', 2, 'saldo', 'Jasa instalasi tidak jadi dikerjakan');
       // 2) DP 50% sudah dibayar, barang belum dikirim (siap dipotong). 3) DP 20% ditagih, belum dibayar.
       const soB = await approvedSo('KNM', 'JKT', 'WH-JKT', 'C002', [tradeLine('FG-102', 12)], '2026-10-03');
       await dpSo(soB, '2026-10-03', 50, true);

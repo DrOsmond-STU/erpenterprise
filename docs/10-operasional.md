@@ -146,7 +146,13 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    uang muka pemasok* → **Posting uang muka** → **Ajukan pembayaran** (disetujui orang
    lain). Saat barang diterima (*Terima barang & buat tagihan*), tagihan memotong uang
    muka otomatis.
-5. Akhir bulan: **Keuangan → Register Uang Muka** — tagih/bayar uang muka yang belum
+5. Retur atas faktur yang memotong uang muka: buat **Retur Penjualan** dari faktur asal
+   (faktur lunas juga bisa). Pilih *Bagian uang muka*: **Pulihkan ke uang muka** bila
+   barang akan diganti (uang muka dipotong lagi pada faktur pengganti — pilih uang muka
+   tersebut di kolom *Potong uang muka*), atau **Jadikan saldo kredit** bila transaksi
+   batal. Isi *Kembalikan kelebihan lewat rekening* bila pelanggan meminta dana kembali;
+   kosongkan agar kelebihan menjadi saldo kredit yang dapat dipakai melunasi faktur lain.
+6. Akhir bulan: **Keuangan → Register Uang Muka** — tagih/bayar uang muka yang belum
    dibayar, tindak lanjuti uang muka lama yang belum dipotong, dan pastikan indikator
    hijau (sisa DPP = saldo akun 2-1610 / 1-1520).
 

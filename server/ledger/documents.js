@@ -131,6 +131,7 @@ function postSalesInvoice(ctx, inv) {
 
 function voidSalesInvoice(ctx, inv) {
   if (inv.paid > 0) throw conflict('Faktur yang sudah menerima pembayaran tidak dapat dibatalkan; batalkan penerimaannya terlebih dahulu.');
+  if (db.get("SELECT id FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting'", inv.id)) throw conflict('Faktur memiliki retur terposting; batalkan returnya terlebih dahulu.');
   for (const l of lines('sales_invoice_lines', inv.id)) {
     const p = product(l.product_id);
     if (l.delivery_line_id) continue; // barang tetap di pelanggan; surat jalan kembali "dikirim" (belum difakturkan)
@@ -1053,10 +1054,41 @@ function postSalesReturn(ctx, r) {
   }
   if (r.tax > 0) jl.push({ account_id: acct('vat_out'), debit: toBase(r.tax, inv), memo: 'Koreksi PPN keluaran' });
   const credit = round2(jl.filter((x) => x.debit && !x.branch_id).reduce((a, x) => a + x.debit, 0));
-  jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit, memo: `Nota kredit ${cust.name}`, partner_type: 'customer', partner_id: cust.id });
-  settle('sales_invoices', inv.id, r.total);
+  const ref = { partner_type: 'customer', partner_id: cust.id };
+  // Bagian retur yang dibayar dari uang muka (faktur yang memotong uang muka).
+  const advPart = round2(r.advance_part || 0), restore = round2(r.advance_amount || 0);
+  if (advPart > 0) {
+    const others = db.get("SELECT COALESCE(SUM(advance_part),0) v FROM sales_returns WHERE sales_invoice_id = ? AND status = 'diposting' AND id <> ?", inv.id, r.id).v;
+    if (others + advPart > (inv.advance_amount || 0) + 0.005) throw conflict('Bagian uang muka faktur ini sudah habis diretur; simpan ulang draf retur untuk menghitung ulang.');
+  }
+  let restoredAdv = null;
+  if (restore > 0) {
+    restoredAdv = db.get('SELECT * FROM sales_advances WHERE id = ?', inv.advance_id);
+    const applied = round2((restoredAdv.applied || 0) - restore);
+    if (applied < -0.005) throw conflict(`Uang muka ${restoredAdv.number} tidak memiliki potongan sebesar ini untuk dipulihkan.`);
+    db.update('sales_advances', restoredAdv.id, { applied: Math.max(0, applied), status: 'lunas' });
+    jl.push({ account_id: acct('sales_dp'), credit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
+  }
+  // Bagian piutang: mengurangi sisa faktur; kelebihannya (faktur sudah dibayar, atau bagian uang muka
+  // pada mode "saldo") menjadi saldo kredit pelanggan atau dikembalikan lewat rekening.
+  const dpPortion = advPart > 0 && r.advance_mode === 'saldo' ? round2(advPart + round2(advPart * (Number(r.tax_rate) || 0) / 100)) : 0;
+  const open = round2(inv.total - (inv.paid || 0));
+  const toInvoice = round2(Math.max(0, Math.min(open, r.total - dpPortion)));
+  const toCredit = round2(r.total - toInvoice);
+  const toCreditBase = toBase(toCredit, inv);
+  if (toCredit > 0.005) {
+    if (r.refund_bank_id) {
+      const b = bank(r.refund_bank_id);
+      jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: toCreditBase, memo: `Pengembalian dana retur ${r.number} — ${cust.name}` });
+    } else jl.push({ account_id: acct('customer_advance'), credit: toCreditBase, memo: `Saldo kredit dari retur ${r.number}`, ...ref });
+  }
+  const arCredit = round2(credit - restore - (toCredit > 0.005 ? toCreditBase : 0));
+  if (arCredit > 0.005) jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: arCredit, memo: `Nota retur ${r.number} atas ${inv.number}`, ...ref });
+  if (toInvoice > 0) settle('sales_invoices', inv.id, toInvoice);
   postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `Retur penjualan ${r.number} atas ${inv.number} — ${cust.name}`, sourceType: 'sales_returns', sourceId: r.id, sourceNo: r.number, lines: jl });
-  setStatus('sales_returns', r.id, 'diposting');
+  setStatus('sales_returns', r.id, 'diposting', { to_invoice: toInvoice, to_credit: toCredit });
+  const parts = [toInvoice > 0 && `piutang ${inv.number} berkurang Rp ${toInvoice.toLocaleString('id-ID')}`, restore > 0 && `DPP Rp ${restore.toLocaleString('id-ID')} dipulihkan ke uang muka ${restoredAdv.number}`, toCredit > 0.005 && (r.refund_bank_id ? `Rp ${toCredit.toLocaleString('id-ID')} dikembalikan ke pelanggan` : `Rp ${toCredit.toLocaleString('id-ID')} menjadi saldo kredit pelanggan`)].filter(Boolean);
+  return { message: `Retur ${r.number} diposting: ${parts.join('; ')}.` };
 }
 
 function voidSalesReturn(ctx, r) {
@@ -1064,7 +1096,19 @@ function voidSalesReturn(ctx, r) {
     const p = product(l.product_id);
     if (isStockable(p)) stockOut(ctx, { warehouseId: r.warehouse_id, productId: p.id, qty: l.qty, date: today(), sourceType: 'sales_returns', sourceId: r.id, sourceNo: `${r.number} (batal)` });
   }
-  settle('sales_invoices', r.sales_invoice_id, -r.total);
+  // Kolom to_invoice/to_credit kosong = retur lama (seluruh nilai mengurangi faktur).
+  const toInvoice = r.to_invoice ?? r.total, toCredit = r.to_credit || 0;
+  if (toCredit > 0.005 && !r.refund_bank_id) {
+    const inv = db.get('SELECT exchange_rate FROM sales_invoices WHERE id = ?', r.sales_invoice_id);
+    if (advanceBalance('customer', r.customer_id, r.company_id) + 0.005 < toBase(toCredit, inv)) throw conflict('Saldo kredit dari retur ini sudah dipakai; batalkan pemakaiannya terlebih dahulu.');
+  }
+  if (r.advance_amount > 0) {
+    const a = db.get('SELECT * FROM sales_advances WHERE id = ?', r.advance_id);
+    if (round2(a.amount - (a.applied || 0)) + 0.005 < r.advance_amount) throw conflict(`Uang muka ${a.number} yang dipulihkan sudah dipotong lagi pada faktur lain; batalkan faktur tersebut terlebih dahulu.`);
+    const applied = round2((a.applied || 0) + r.advance_amount);
+    db.update('sales_advances', a.id, { applied, status: applied >= a.amount - 0.005 ? 'diterapkan' : 'lunas' });
+  }
+  if (toInvoice > 0) settle('sales_invoices', r.sales_invoice_id, -toInvoice);
   reverseDocumentJournals(ctx, 'sales_returns', r.id, today(), `Pembatalan retur ${r.number}`);
   setStatus('sales_returns', r.id, 'batal');
 }
