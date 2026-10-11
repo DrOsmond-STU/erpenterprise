@@ -85,7 +85,7 @@
     const total = r.total ?? r.amount ?? null;
     const sub = isAdv ? r.amount : r.subtotal;
     const adv = Number(r.advance_amount) || 0;
-    const advRows = adv > 0 ? `<div><span>${key === 'sales_returns' ? 'Bagian uang muka (dipulihkan)' : 'Potongan uang muka'}</span><b>(${esc(curCode)} ${esc(num(adv))})</b></div><div><span>DPP</span><b>${esc(curCode)} ${esc(num(sub - adv))}</b></div>` : '';
+    const advRows = adv > 0 ? `<div><span>${/_returns$/.test(key) ? 'Bagian uang muka (dipulihkan)' : 'Potongan uang muka'}</span><b>(${esc(curCode)} ${esc(num(adv))})</b></div><div><span>DPP</span><b>${esc(curCode)} ${esc(num(sub - adv))}</b></div>` : '';
     const totals = sub !== undefined && r.tax !== undefined
       ? `<div class="ps-totals"><div><span>${isAdv ? 'Uang muka (DPP)' : 'Subtotal'}</span><b>${esc(curCode)} ${esc(num(sub))}</b></div>${advRows}<div><span>PPN ${esc(num(r.tax_rate))}%</span><b>${esc(curCode)} ${esc(num(r.tax))}</b></div><div class="ps-grand"><span>Total</span><b>${esc(curCode)} ${esc(num(r.total))}</b></div>${r.paid ? `<div><span>Terbayar / dikreditkan</span><b>${esc(curCode)} ${esc(num(r.paid))}</b></div><div><span>Sisa</span><b>${esc(curCode)} ${esc(num(r.total - r.paid))}</b></div>` : ''}</div>`
       : total != null ? `<div class="ps-totals"><div class="ps-grand"><span>Jumlah</span><b>${esc(curCode)} ${esc(num(total))}</b></div></div>` : '';

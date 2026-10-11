@@ -1,7 +1,8 @@
 /* Uji retur penjualan atas faktur yang memotong uang muka:
    (1) bagian uang muka dipulihkan ke dokumen uang muka (PPN nota retur hanya atas sisa DPP) lalu
        dipotong lagi pada faktur pengganti; (2) bagian uang muka menjadi saldo kredit pelanggan pada
-       faktur yang sudah lunas; (3) kelebihan retur atas faktur lunas dikembalikan lewat rekening. */
+       faktur yang sudah lunas; (3) kelebihan retur atas faktur lunas dikembalikan lewat rekening;
+   serta padanannya untuk retur pembelian atas tagihan yang memotong uang muka pembelian. */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { start, stop, as, db, soViaQuotation } from './helpers.mjs';
@@ -132,5 +133,94 @@ test('retur faktur lunas tanpa uang muka: kelebihan dikembalikan lewat rekening 
   near(gl('1-1130') - bank0, 0, 'bank kembali');
   assert.equal((await admin.get(`/api/e/sales_invoices/${inv.id}`)).body.paid, 2_000_000);
   await reconciled();
+  balanced();
+});
+
+/* --- Retur pembelian atas tagihan yang memotong uang muka ------------------------------- */
+/** PO RM-002 100 × 38.000 → uang muka 1.000.000 dibayar (SoD) → tagihan memotong 1.000.000 → posting. */
+async function billWithAdvance() {
+  const rina = await as('rina.akuntan');
+  const po = ok(await rina.post('/api/e/purchase_orders', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', 'S002'), warehouse_id: WH(), tax_rate: 11, lines: [{ product_id: prod('RM-002'), qty: 100, price: 38_000 }] }));
+  await rina.post(`/api/e/purchase_orders/${po.id}/actions/submit`);
+  if ((await admin.get(`/api/e/purchase_orders/${po.id}`)).body.status === 'menunggu') await osmond.post(`/api/e/purchase_orders/${po.id}/actions/approve`);
+  const advId = ok(await rina.post(`/api/e/purchase_orders/${po.id}/actions/to_advance`, { date: '2026-10-07', amount: 1_000_000 })).redirect.id;
+  ok(await osmond.post(`/api/e/purchase_advances/${advId}/actions/post`));
+  const pay = ok(await rina.post(`/api/e/purchase_advances/${advId}/actions/pay`, { date: '2026-10-07', source: 'bank', bank_account_id: BCA(), amount: 1_110_000, discount: 0, pph23: 0, bank_charge: 0 }));
+  ok(await osmond.post(`/api/e/supplier_payments/${pay.redirect.id}/actions/post`));
+  const billId = ok(await rina.post(`/api/e/purchase_orders/${po.id}/actions/to_bill`, { supplier_invoice_no: `F-RET-${po.id}` })).redirect.id;
+  ok(await osmond.post(`/api/e/purchase_bills/${billId}/actions/post`));
+  const bill = (await admin.get(`/api/e/purchase_bills/${billId}`)).body;
+  assert.equal(bill.advance_amount, 1_000_000); assert.equal(bill.total, 3_108_000);
+  return { bill, advId, rina };
+}
+const newPurchaseReturn = (bill, qty, extra = {}) => admin.post('/api/e/purchase_returns', { branch_id: JKT(), date: '2026-10-07', purchase_bill_id: bill.id, warehouse_id: WH(), reason: 'Uji retur pembelian', lines: [{ product_id: prod('RM-002'), qty }], ...extra });
+async function reconciledAp() {
+  const x = (await admin.get('/api/reports/umur-hutang?to=2026-12-31')).body;
+  assert.ok(x.reconciled, `umur hutang ${x.totals.total} = buku besar ${x.glBalance}`);
+  const u = (await admin.get('/api/reports/uang-muka?side=ap')).body;
+  assert.ok(u.reconciled, `register uang muka pembelian ${u.totals.remaining} = buku besar ${u.glBalance}`);
+}
+
+test('retur pembelian atas tagihan dengan uang muka: DPP uang muka dipulihkan, PPN masukan dikoreksi atas sisa DPP', async () => {
+  const { bill, advId } = await billWithAdvance();
+  assert.equal((await admin.get(`/api/e/purchase_advances/${advId}`)).body.status, 'diterapkan');
+  const dp0 = gl('1-1520'), vin0 = gl('1-1400'), ap0 = gl('2-1100');
+  const r = ok(await newPurchaseReturn(bill, 20), 'draf retur');
+  assert.equal(r.advance_part, 200_000); assert.equal(r.advance_amount, 200_000);
+  assert.equal(r.tax, 61_600); assert.equal(r.total, 621_600);
+  const p = ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/post`), 'posting');
+  assert.equal(p.record.to_invoice, 621_600); assert.equal(p.record.to_credit, 0);
+  assert.match(p.message, /dipulihkan ke uang muka/);
+  near(gl('1-1520') - dp0, 200_000, 'uang muka pembelian dipulihkan');
+  near(gl('1-1400') - vin0, -61_600, 'PPN masukan dikoreksi atas sisa DPP');
+  near(gl('2-1100') - ap0, 621_600, 'hutang tagihan berkurang');
+  const adv = (await admin.get(`/api/e/purchase_advances/${advId}`)).body;
+  assert.equal(adv.status, 'lunas'); assert.equal(adv.remaining, 200_000);
+  const st = (await admin.get(`/api/settlement/purchase_advances/${advId}`)).body;
+  assert.ok(st.applications.some((x) => x.entity === 'purchase_returns' && x.advance_amount === -200_000));
+  assert.equal((await osmond.post(`/api/e/purchase_bills/${bill.id}/actions/void`)).status, 409, 'tagihan dengan retur tidak dapat dibatalkan');
+  await reconciledAp();
+  ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/void`), 'batal retur');
+  assert.equal((await admin.get(`/api/e/purchase_advances/${advId}`)).body.status, 'diterapkan');
+  near(gl('1-1520') - dp0, 0, 'kembali');
+  await reconciledAp();
+  balanced();
+});
+
+test('retur pembelian atas tagihan lunas, mode saldo: nilai + PPN menjadi saldo uang muka ke pemasok', async () => {
+  const { bill, rina } = await billWithAdvance();
+  const pay = ok(await rina.post(`/api/e/purchase_bills/${bill.id}/actions/pay`, { date: '2026-10-07', source: 'bank', bank_account_id: BCA(), amount: bill.total, discount: 0, pph23: 0, bank_charge: 0 }));
+  ok(await osmond.post(`/api/e/supplier_payments/${pay.redirect.id}/actions/post`));
+  const sup = id('suppliers', 'S002');
+  const bal0 = (await admin.get(`/api/advance/supplier/${sup}`)).body.balance, vin0 = gl('1-1400');
+  const r = ok(await newPurchaseReturn(bill, 10, { advance_mode: 'saldo' }));
+  assert.equal(r.advance_part, 100_000); assert.equal(r.advance_amount, 0); assert.equal(r.total, 421_800);
+  const p = ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/post`));
+  assert.equal(p.record.to_invoice, 0); assert.equal(p.record.to_credit, 421_800);
+  assert.equal((await admin.get(`/api/advance/supplier/${sup}`)).body.balance, bal0 + 421_800);
+  near(gl('1-1400') - vin0, -41_800, 'PPN masukan dikoreksi atas seluruh DPP retur');
+  ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/void`));
+  assert.equal((await admin.get(`/api/advance/supplier/${sup}`)).body.balance, bal0);
+  await reconciledAp();
+  balanced();
+});
+
+test('retur pembelian melebihi sisa tagihan: kelebihan diterima kembali di rekening bank', async () => {
+  const rina = await as('rina.akuntan');
+  const b = ok(await rina.post('/api/e/purchase_bills', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', 'S002'), supplier_invoice_no: 'F-RET-BANK', warehouse_id: WH(), tax_rate: 11, lines: [{ product_id: prod('RM-002'), qty: 50, price: 38_000 }] }));
+  ok(await osmond.post(`/api/e/purchase_bills/${b.id}/actions/post`));
+  const pay = ok(await rina.post(`/api/e/purchase_bills/${b.id}/actions/pay`, { date: '2026-10-07', source: 'bank', bank_account_id: BCA(), amount: 1_500_000, discount: 0, pph23: 0, bank_charge: 0 }));
+  ok(await osmond.post(`/api/e/supplier_payments/${pay.redirect.id}/actions/post`));
+  const bill = (await admin.get(`/api/e/purchase_bills/${b.id}`)).body; // total 2.109.000, sisa 609.000
+  const bank0 = gl('1-1130');
+  const r = ok(await newPurchaseReturn(bill, 20, { refund_bank_id: BCA() })); // 843.600
+  const p = ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/post`));
+  assert.equal(p.record.to_invoice, 609_000); assert.equal(p.record.to_credit, 234_600);
+  assert.match(p.message, /diterima kembali/);
+  near(gl('1-1130') - bank0, 234_600, 'dana diterima kembali di bank');
+  assert.equal((await admin.get(`/api/e/purchase_bills/${b.id}`)).body.status, 'lunas');
+  ok(await osmond.post(`/api/e/purchase_returns/${r.id}/actions/void`));
+  near(gl('1-1130') - bank0, 0, 'bank kembali');
+  await reconciledAp();
   balanced();
 });

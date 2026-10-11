@@ -432,6 +432,7 @@ function postBill(ctx, bill) {
 
 function voidBill(ctx, bill) {
   if (bill.paid > 0) throw conflict('Tagihan yang sudah dibayar tidak dapat dibatalkan.');
+  if (db.get("SELECT id FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting'", bill.id)) throw conflict('Tagihan memiliki retur terposting; batalkan returnya terlebih dahulu.');
   for (const l of lines('purchase_bill_lines', bill.id)) {
     const p = l.product_id ? product(l.product_id) : null;
     if (p && isStockable(p)) stockOut(ctx, { warehouseId: bill.warehouse_id, productId: p.id, qty: l.qty, date: today(), sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: `${bill.number} (batal)` });
@@ -1140,10 +1141,41 @@ function postPurchaseReturn(ctx, r) {
   if (Math.abs(nonStock) >= 0.005) jl.push(nonStock > 0 ? { account_id: acct('purchase_variance'), credit: nonStock, memo: 'Selisih harga retur' } : { account_id: acct('purchase_variance'), debit: -nonStock, memo: 'Selisih harga retur' });
   if (r.tax > 0) jl.push({ account_id: acct('vat_in'), credit: toBase(r.tax, bill), memo: 'Koreksi PPN masukan' });
   const debit = round2(jl.reduce((a, x) => a + (x.credit || 0) - (x.debit || 0), 0));
-  jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit, memo: `Nota debit ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
-  settle('purchase_bills', bill.id, r.total);
+  const ref = { partner_type: 'supplier', partner_id: sup.id };
+  // Bagian retur yang dibayar dari uang muka pembelian (tagihan yang memotong uang muka).
+  const advPart = round2(r.advance_part || 0), restore = round2(r.advance_amount || 0);
+  if (advPart > 0) {
+    const others = db.get("SELECT COALESCE(SUM(advance_part),0) v FROM purchase_returns WHERE purchase_bill_id = ? AND status = 'diposting' AND id <> ?", bill.id, r.id).v;
+    if (others + advPart > (bill.advance_amount || 0) + 0.005) throw conflict('Bagian uang muka tagihan ini sudah habis diretur; simpan ulang draf retur untuk menghitung ulang.');
+  }
+  let restoredAdv = null;
+  if (restore > 0) {
+    restoredAdv = db.get('SELECT * FROM purchase_advances WHERE id = ?', bill.advance_id);
+    const applied = round2((restoredAdv.applied || 0) - restore);
+    if (applied < -0.005) throw conflict(`Uang muka ${restoredAdv.number} tidak memiliki potongan sebesar ini untuk dipulihkan.`);
+    db.update('purchase_advances', restoredAdv.id, { applied: Math.max(0, applied), status: 'lunas' });
+    jl.push({ account_id: acct('purchase_dp'), debit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
+  }
+  // Bagian hutang: mengurangi sisa tagihan; kelebihannya (tagihan sudah dibayar, atau bagian uang muka
+  // pada mode "saldo") menjadi saldo uang muka ke pemasok atau diterima kembali di rekening.
+  const dpPortion = advPart > 0 && r.advance_mode === 'saldo' ? round2(advPart + round2(advPart * (Number(r.tax_rate) || 0) / 100)) : 0;
+  const open = round2(bill.total - (bill.paid || 0));
+  const toBill = round2(Math.max(0, Math.min(open, r.total - dpPortion)));
+  const toCredit = round2(r.total - toBill);
+  const toCreditBase = toBase(toCredit, bill);
+  if (toCredit > 0.005) {
+    if (r.refund_bank_id) {
+      const b = bank(r.refund_bank_id);
+      jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: toCreditBase, memo: `Pengembalian dana retur ${r.number} dari ${sup.name}` });
+    } else jl.push({ account_id: acct('supplier_advance'), debit: toCreditBase, memo: `Saldo uang muka dari retur ${r.number}`, ...ref });
+  }
+  const apDebit = round2(debit - restore - (toCredit > 0.005 ? toCreditBase : 0));
+  if (apDebit > 0.005) jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit: apDebit, memo: `Nota retur ${r.number} atas ${bill.number}`, ...ref });
+  if (toBill > 0) settle('purchase_bills', bill.id, toBill);
   postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `Retur pembelian ${r.number} atas ${bill.number} — ${sup.name}`, sourceType: 'purchase_returns', sourceId: r.id, sourceNo: r.number, lines: jl });
-  setStatus('purchase_returns', r.id, 'diposting');
+  setStatus('purchase_returns', r.id, 'diposting', { to_invoice: toBill, to_credit: toCredit });
+  const parts = [toBill > 0 && `hutang ${bill.number} berkurang Rp ${toBill.toLocaleString('id-ID')}`, restore > 0 && `DPP Rp ${restore.toLocaleString('id-ID')} dipulihkan ke uang muka ${restoredAdv.number}`, toCredit > 0.005 && (r.refund_bank_id ? `Rp ${toCredit.toLocaleString('id-ID')} diterima kembali dari pemasok` : `Rp ${toCredit.toLocaleString('id-ID')} menjadi saldo uang muka ke pemasok`)].filter(Boolean);
+  return { message: `Retur ${r.number} diposting: ${parts.join('; ')}.` };
 }
 
 function voidPurchaseReturn(ctx, r) {
@@ -1151,7 +1183,18 @@ function voidPurchaseReturn(ctx, r) {
     const p = product(l.product_id);
     if (isStockable(p)) stockIn(ctx, { warehouseId: r.warehouse_id, productId: p.id, qty: l.qty, unitCost: l.unit_cost || 0, date: today(), sourceType: 'purchase_returns', sourceId: r.id, sourceNo: `${r.number} (batal)` });
   }
-  settle('purchase_bills', r.purchase_bill_id, -r.total);
+  const toBill = r.to_invoice ?? r.total, toCredit = r.to_credit || 0;
+  if (toCredit > 0.005 && !r.refund_bank_id) {
+    const bill = db.get('SELECT exchange_rate FROM purchase_bills WHERE id = ?', r.purchase_bill_id);
+    if (advanceBalance('supplier', r.supplier_id, r.company_id) + 0.005 < toBase(toCredit, bill)) throw conflict('Saldo uang muka dari retur ini sudah dipakai; batalkan pemakaiannya terlebih dahulu.');
+  }
+  if (r.advance_amount > 0) {
+    const a = db.get('SELECT * FROM purchase_advances WHERE id = ?', r.advance_id);
+    if (round2(a.amount - (a.applied || 0)) + 0.005 < r.advance_amount) throw conflict(`Uang muka ${a.number} yang dipulihkan sudah dipotong lagi pada tagihan lain; batalkan tagihan tersebut terlebih dahulu.`);
+    const applied = round2((a.applied || 0) + r.advance_amount);
+    db.update('purchase_advances', a.id, { applied, status: applied >= a.amount - 0.005 ? 'diterapkan' : 'lunas' });
+  }
+  if (toBill > 0) settle('purchase_bills', r.purchase_bill_id, -toBill);
   reverseDocumentJournals(ctx, 'purchase_returns', r.id, today(), `Pembatalan retur ${r.number}`);
   setStatus('purchase_returns', r.id, 'batal');
 }

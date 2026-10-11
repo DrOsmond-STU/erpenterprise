@@ -161,6 +161,7 @@ const advanceDeductFields = (ref) => [
 ];
 /* Retur atas faktur yang memotong uang muka: perlakuan bagian retur yang dibayar dari uang muka. */
 const RETURN_ADV_MODES = [['pulihkan', 'Pulihkan ke uang muka (dipotong lagi pada faktur pengganti)'], ['saldo', 'Jadikan saldo kredit pelanggan (termasuk PPN)']];
+const PURCHASE_RETURN_ADV_MODES = [['pulihkan', 'Pulihkan ke uang muka (dipotong lagi pada tagihan pengganti)'], ['saldo', 'Jadikan saldo uang muka ke pemasok (termasuk PPN)']];
 const NOTE_REASONS = [['harga', 'Koreksi harga'], ['potongan', 'Potongan / rabat'], ['klaim', 'Klaim kerusakan / kekurangan'], ['ongkos', 'Ongkos kirim / biaya tambahan'], ['denda', 'Denda / bunga keterlambatan'], ['lainnya', 'Lainnya']];
 
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
@@ -1163,12 +1164,22 @@ export const ENTITIES = {
     editable: ['draf'],
     fields: [
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
-      F.ref('purchase_bill_id', 'Tagihan asal', 'purchase_bills', { required: true, list: true, search: true, refFilter: { status: ['terbit', 'sebagian'] } }),
+      F.ref('purchase_bill_id', 'Tagihan asal', 'purchase_bills', { required: true, list: true, search: true, refFilter: { status: ['terbit', 'sebagian', 'lunas'] } }),
       F.ref('supplier_id', 'Pemasok', 'suppliers', { readonly: true, list: true }),
       F.ref('warehouse_id', 'Gudang asal barang', 'warehouses', { required: true }),
       F.text('reason', 'Alasan retur', { required: true, search: true, list: true }),
       F.ref('currency_id', 'Mata uang', 'currencies', { readonly: true }), F.num('exchange_rate', 'Kurs', { readonly: true }),
-      ...docTotals(),
+      F.sel('advance_mode', 'Bagian uang muka', PURCHASE_RETURN_ADV_MODES, { default: 'pulihkan', help: 'Hanya untuk tagihan yang memotong uang muka: bagian retur yang dibayar dari uang muka.' }),
+      F.ref('refund_bank_id', 'Terima pengembalian dana di rekening', 'bank_accounts', { help: 'Kosong = nilai retur yang melebihi sisa tagihan menjadi saldo uang muka ke pemasok.' }),
+      F.ref('advance_id', 'Uang muka tagihan', 'purchase_advances', { readonly: true }),
+      F.money('advance_part', 'DPP retur dari uang muka', { readonly: true }),
+      F.money('subtotal', 'Subtotal', { readonly: true }),
+      F.money('advance_amount', 'DPP dipulihkan ke uang muka', { readonly: true }),
+      F.pct('tax_rate', 'PPN (%)', { default: 11 }),
+      F.money('tax', 'PPN', { readonly: true }),
+      F.money('total', 'Total nota retur', { readonly: true, list: true }),
+      F.money('to_invoice', 'Mengurangi hutang tagihan', { readonly: true }),
+      F.money('to_credit', 'Kelebihan (saldo di pemasok / dikembalikan)', { readonly: true }),
       F.status(['draf', 'diposting', 'batal'], 'draf'),
     ],
     lines: returnLines('purchase_return_lines'),

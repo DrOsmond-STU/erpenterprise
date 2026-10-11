@@ -824,6 +824,9 @@ async function seedDemo() {
       setToday('2026-10-06');
       const bA = (await run(maker, 'KNM', 'purchase_orders', poA, 'to_bill', { supplier_invoice_no: 'F-S001-20261006' })).redirect.id;
       await run(checker, 'KNM', 'purchase_bills', bA, 'post');
+      // Retur pembelian atas tagihan yang memotong uang muka: bagian uang muka dipulihkan untuk tagihan pengganti.
+      const pr = await mk(maker, 'KNM', 'JKT', 'purchase_returns', { date: '2026-10-06', purchase_bill_id: bA, warehouse_id: WH['WH-JKT'], reason: 'Baja lembaran penyok — diganti pemasok', advance_mode: 'pulihkan', lines: [{ product_id: P['RM-001'], qty: 10 }] });
+      await run(checker, 'KNM', 'purchase_returns', pr, 'post');
       await dpPo('S005', 'WH-JKT', [tradeLine('RM-004', 100, 92_000)], '2026-10-05', 25, false);
     }
 

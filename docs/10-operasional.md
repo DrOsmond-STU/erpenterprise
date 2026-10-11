@@ -152,7 +152,12 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
    tersebut di kolom *Potong uang muka*), atau **Jadikan saldo kredit** bila transaksi
    batal. Isi *Kembalikan kelebihan lewat rekening* bila pelanggan meminta dana kembali;
    kosongkan agar kelebihan menjadi saldo kredit yang dapat dipakai melunasi faktur lain.
-6. Akhir bulan: **Keuangan → Register Uang Muka** — tagih/bayar uang muka yang belum
+6. Retur ke pemasok atas tagihan yang memotong uang muka: buat **Retur Pembelian** dari
+   tagihan asal (tagihan lunas juga bisa) dan pilih *Bagian uang muka* yang sama —
+   **Pulihkan** bila pemasok akan mengirim pengganti, **Jadikan saldo uang muka** bila
+   pesanan batal. Isi *Terima pengembalian dana di rekening* bila pemasok mentransfer
+   kembali kelebihannya.
+7. Akhir bulan: **Keuangan → Register Uang Muka** — tagih/bayar uang muka yang belum
    dibayar, tindak lanjuti uang muka lama yang belum dipotong, dan pastikan indikator
    hijau (sisa DPP = saldo akun 2-1610 / 1-1520).
 

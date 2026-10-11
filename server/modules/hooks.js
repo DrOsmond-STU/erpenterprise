@@ -219,24 +219,29 @@ function returnFrom(srcTable, srcField, srcLines, partyField) {
 }
 
 /**
- * Retur atas faktur yang memotong uang muka: bagian DPP retur yang dibayar dari uang muka
+ * Retur atas faktur/tagihan yang memotong uang muka: bagian DPP retur yang dibayar dari uang muka
  * (proporsional DPP uang muka ÷ DPP faktur, dibatasi sisa yang belum diretur). Mode "pulihkan":
  * DPP itu kembali ke uang muka (PPN nota retur hanya atas sisa DPP); mode "saldo": seluruh nilai
- * retur termasuk PPN dikreditkan, bagian uang muka menjadi saldo kredit pelanggan.
+ * retur termasuk PPN dikoreksi, bagian uang muka menjadi saldo kredit pelanggan / saldo uang muka ke pemasok.
  */
-function salesReturnAdvance(row) {
-  const inv = row.sales_invoice_id ? db.get('SELECT id, subtotal, advance_id, advance_amount FROM sales_invoices WHERE id = ?', row.sales_invoice_id) : null;
-  row.advance_mode = row.advance_mode || 'pulihkan';
-  row.advance_id = inv?.advance_id || null;
-  row.advance_part = 0; row.advance_amount = 0;
-  if (!inv?.advance_id || !(inv.advance_amount > 0) || !(inv.subtotal > 0)) return;
-  const prev = db.get("SELECT COALESCE(SUM(advance_part),0) v FROM sales_returns WHERE sales_invoice_id = ? AND status <> 'batal' AND id IS NOT ?", inv.id, row.id ?? null).v;
-  row.advance_part = round2(Math.max(0, Math.min(round2(row.subtotal * inv.advance_amount / inv.subtotal), inv.advance_amount - prev)));
-  if (row.advance_mode !== 'pulihkan') return;
-  row.advance_amount = row.advance_part;
-  row.tax = round2((row.subtotal - row.advance_amount) * (Number(row.tax_rate) || 0) / 100);
-  row.total = round2(row.subtotal - row.advance_amount + row.tax);
+function returnAdvance(docTable, docField) {
+  return (row) => {
+    const doc = row[docField] ? db.get(`SELECT id, subtotal, advance_id, advance_amount FROM "${docTable}" WHERE id = ?`, row[docField]) : null;
+    const retTable = docTable === 'sales_invoices' ? 'sales_returns' : 'purchase_returns';
+    row.advance_mode = row.advance_mode || 'pulihkan';
+    row.advance_id = doc?.advance_id || null;
+    row.advance_part = 0; row.advance_amount = 0;
+    if (!doc?.advance_id || !(doc.advance_amount > 0) || !(doc.subtotal > 0)) return;
+    const prev = db.get(`SELECT COALESCE(SUM(advance_part),0) v FROM "${retTable}" WHERE ${docField} = ? AND status <> 'batal' AND id IS NOT ?`, doc.id, row.id ?? null).v;
+    row.advance_part = round2(Math.max(0, Math.min(round2(row.subtotal * doc.advance_amount / doc.subtotal), doc.advance_amount - prev)));
+    if (row.advance_mode !== 'pulihkan') return;
+    row.advance_amount = row.advance_part;
+    row.tax = round2((row.subtotal - row.advance_amount) * (Number(row.tax_rate) || 0) / 100);
+    row.total = round2(row.subtotal - row.advance_amount + row.tax);
+  };
 }
+const salesReturnAdvance = returnAdvance('sales_invoices', 'sales_invoice_id');
+const purchaseReturnAdvance = returnAdvance('purchase_bills', 'purchase_bill_id');
 
 const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75, menang: 100, kalah: 0 };
 
@@ -254,7 +259,7 @@ export const HOOKS = {
   },
   delivery_orders: { compute: deliveryCompute },
   sales_returns: { compute: (c, row, lines) => { returnFrom('sales_invoices', 'sales_invoice_id', 'sales_invoice_lines', 'customer_id')(c, row, lines); salesReturnAdvance(row); } },
-  purchase_returns: { compute: returnFrom('purchase_bills', 'purchase_bill_id', 'purchase_bill_lines', 'supplier_id') },
+  purchase_returns: { compute: (c, row, lines) => { returnFrom('purchase_bills', 'purchase_bill_id', 'purchase_bill_lines', 'supplier_id')(c, row, lines); purchaseReturnAdvance(row); } },
   bank_reconciliations: {
     compute: (_c, row) => {
       const b = db.get('SELECT account_id, branch_id FROM bank_accounts WHERE id = ?', row.bank_account_id);
