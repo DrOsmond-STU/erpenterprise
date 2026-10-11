@@ -791,6 +791,30 @@ async function seedDemo() {
       const d4 = await dep('JKT', { customer_id: CU.C004, kind: 'jaminan', amount: 5_000_000, reference: 'Pinjam pakai palet', return_date: '2026-10-31', description: 'Jaminan palet besi 20 unit' });
       await run(checker, 'KNM', 'customer_deposits', d4, 'forfeit', { date: '2026-10-05', amount: 1_500_000, reason: 'Palet rusak 3 unit — ganti rugi sesuai kontrak' });
     }
+    // Deposit di pemasok: saldo prabayar (dipakai membayar tagihan) & uang jaminan (diterima kembali / hangus sebagian).
+    {
+      setToday('2026-10-02');
+      const sdep = async (body) => {
+        const did = await mk(maker, 'KNM', 'JKT', 'supplier_deposits', { date: '2026-10-02', bank_account_id: BA['BCA-JKT'], ...body });
+        await run(maker, 'KNM', 'supplier_deposits', did, 'submit');
+        await run(checker, 'KNM', 'supplier_deposits', did, 'approve');
+        return did;
+      };
+      const s1 = await sdep({ supplier_id: SU.S003, kind: 'saldo', amount: 30_000_000, reference: 'Top-up akun pemasok Q4', description: 'Deposit prabayar pembelian komponen — dipotong per tagihan' });
+      const sb3 = openBill('S003');
+      if (sb3) {
+        setToday('2026-10-04');
+        const r = await run(maker, 'KNM', 'supplier_deposits', s1, 'apply', { date: '2026-10-04', bill_id: sb3.id, amount: round2(Math.min(sb3.open, 12_000_000)) });
+        await run(checker, 'KNM', 'supplier_payments', r.redirect.id, 'post');
+      }
+      await sdep({ supplier_id: SU.S005, kind: 'jaminan', amount: 15_000_000, reference: 'Sewa gudang transit 2026', return_date: '2026-12-31', description: 'Uang jaminan sewa gudang transit Cikarang' });
+      setToday('2026-01-15');
+      const s3 = await sdep({ date: '2026-01-15', supplier_id: SU.S001, kind: 'jaminan', amount: 8_000_000, reference: 'Kontrak pasok baja 2025/26', return_date: '2026-10-01', description: 'Jaminan kontrak pasok — kontrak selesai' });
+      setToday('2026-10-05');
+      await run(checker, 'KNM', 'supplier_deposits', s3, 'refund', { date: '2026-10-05', bank_account_id: BA['BCA-JKT'], amount: 8_000_000, bank_charge: 0, reference: 'Transfer balik pemasok' });
+      const s4 = await sdep({ supplier_id: SU.S004, kind: 'jaminan', amount: 3_000_000, reference: 'Sewa kontainer cat', return_date: '2026-10-20', description: 'Jaminan sewa kontainer' });
+      await run(checker, 'KNM', 'supplier_deposits', s4, 'forfeit', { date: '2026-10-05', amount: 1_000_000, reason: 'Kontainer penyok — potongan jaminan sesuai berita acara' });
+    }
     // Uang muka penjualan & pembelian (faktur uang muka atas SO/PO, dipotong pada faktur/tagihan akhir).
     {
       const dpSo = async (soId, date, pct, pay) => {

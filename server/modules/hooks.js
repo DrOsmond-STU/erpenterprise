@@ -123,9 +123,10 @@ function settlementTotals(row, lines) {
     if (row.date && row.giro_due < row.date) throw bad('Tanggal efektif giro tidak boleh sebelum tanggal penerimaan/penyerahan giro.');
   }
   if (row.mode === 'pakai_deposit') {
-    if (!row.deposit_id) throw bad('Pilih deposit pelanggan yang dipakai.');
-    const d = db.get('SELECT customer_id FROM customer_deposits WHERE id = ?', row.deposit_id);
-    if (!d || (row.customer_id && d.customer_id !== row.customer_id)) throw bad('Deposit bukan milik pelanggan ini.');
+    const ap = 'supplier_id' in row, pf = ap ? 'supplier_id' : 'customer_id';
+    if (!row.deposit_id) throw bad('Pilih deposit yang dipakai.');
+    const d = db.get(`SELECT ${pf} party FROM ${ap ? 'supplier_deposits' : 'customer_deposits'} WHERE id = ?`, row.deposit_id);
+    if (!d || (row[pf] && d.party !== row[pf])) throw bad(`Deposit bukan milik ${ap ? 'pemasok' : 'pelanggan'} ini.`);
   } else if ('deposit_id' in row) row.deposit_id = null;
   if (['pakai_uang_muka', 'pakai_deposit'].includes(row.mode)) { row.bank_account_id = null; row.bank_charge = 0; }
   else if (!row.bank_account_id) throw bad('Pilih rekening kas/bank.');
@@ -248,6 +249,13 @@ function returnAdvance(docTable, docField) {
 const salesReturnAdvance = returnAdvance('sales_invoices', 'sales_invoice_id');
 const purchaseReturnAdvance = returnAdvance('purchase_bills', 'purchase_bill_id');
 
+/** Deposit pelanggan/pemasok: nilai positif, jatuh tempo pengembalian setelah tanggal deposit. */
+function depositCompute(_c, row) {
+  if (!(Number(row.amount) > 0)) throw bad('Nilai deposit harus lebih dari nol.');
+  if (row.return_date && row.date && row.return_date < row.date) throw bad('Jatuh tempo pengembalian tidak boleh sebelum tanggal deposit.');
+  row.used = row.used || 0; row.refunded = row.refunded || 0; row.forfeited = row.forfeited || 0;
+}
+
 const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75, menang: 100, kalah: 0 };
 
 export const HOOKS = {
@@ -315,13 +323,8 @@ export const HOOKS = {
   supplier_credit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', false) },
   sales_advances: { compute: advanceCompute('sales_advances') },
   purchase_advances: { compute: advanceCompute('purchase_advances') },
-  customer_deposits: {
-    compute: (_c, row) => {
-      if (!(Number(row.amount) > 0)) throw bad('Nilai deposit harus lebih dari nol.');
-      if (row.return_date && row.date && row.return_date < row.date) throw bad('Jatuh tempo pengembalian tidak boleh sebelum tanggal terima.');
-      row.used = row.used || 0; row.refunded = row.refunded || 0; row.forfeited = row.forfeited || 0;
-    },
-  },
+  customer_deposits: { compute: depositCompute },
+  supplier_deposits: { compute: depositCompute },
   cash_transactions: { compute: amountTotal },
   journals: {
     compute: (_c, row, lines) => {

@@ -473,7 +473,30 @@ dipakai deposit saldo tertua pelanggan.
 **Register Deposit** (`GET /api/reports/deposit`): saldo per deposit, saldo prabayar &
 jaminan, jaminan jatuh tempo ≤ 30 hari (juga notifikasi), dipakai/dikembalikan/dicairkan —
 **direkonsiliasi dengan akun 2-1620 dan 2-1630**. Riwayat per deposit:
-`GET /api/deposit-history/:id`. Saldo deposit juga tampil pada data pelanggan.
+`GET /api/deposit-history/customer_deposits/:id`. Saldo deposit juga tampil pada data pelanggan.
+
+### Deposit di pemasok
+
+Padanannya untuk dana **kita** di pemasok (`supplier_deposits`, nomor DPB) — **aset**:
+
+| Jenis | Akun | Penggunaan |
+| --- | --- | --- |
+| Deposit saldo (prabayar) | 1-1530 Deposit di Pemasok | Dipakai membayar tagihan, nota kredit pemasok, atau uang muka pembelian |
+| Uang jaminan | 1-1540 Uang Jaminan Dibayar | Ditagih kembali saat kontrak (sewa gudang/kontainer, kontrak pasok) berakhir, dipakai membayar tagihan, atau dihanguskan |
+
+| Kejadian | Jurnal |
+| --- | --- |
+| Deposit dibayar (*Ajukan* → *Setujui & bayar* oleh orang lain — SoD) | Dr 1-1530 / 1-1540 (per pemasok) · Cr Bank |
+| Dipakai membayar tagihan (aksi *Pakai untuk membayar tagihan*, atau dari tagihan → *Ajukan pembayaran* sumber dana "Deposit di pemasok") | Pembayaran jenis *Pakai deposit di pemasok* (tetap disetujui orang lain): Dr Hutang · Cr 1-1530 / 1-1540 |
+| Diterima kembali | Dr Bank (neto), Beban adm. bank · Cr 1-1530 / 1-1540 |
+| Jaminan hangus | Dr 7-2400 Beban Kompensasi / Jaminan Hangus (atau akun pilihan) · Cr 1-1540 |
+
+Status: draf → menunggu → dibayar → terpakai sebagian → habis (atau ditolak → diajukan
+ulang). Saldo deposit berkurang saat pembayaran pemakaiannya **diposting**; pembatalan
+pembayaran mengembalikan saldo. Register Deposit tab *Deposit di pemasok*
+(`GET /api/reports/deposit?side=ap`) **direkonsiliasi dengan akun 1-1530 dan 1-1540**;
+riwayat `GET /api/deposit-history/:entitas/:id`; notifikasi jaminan di pemasok yang jatuh
+tempo ≤ 30 hari; saldo deposit tampil pada data pemasok.
 
 ## Nota debet & nota kredit
 

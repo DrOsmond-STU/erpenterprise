@@ -199,7 +199,7 @@ const REPORTS = {
   penawaran: (ctx, r) => quotationReport(ctx, r),
   pemenuhan: (ctx, r) => fulfillmentReport(ctx, r),
   giro: (ctx, r, q) => giroRegister(ctx, { ...r, side: q.side === 'out' ? 'out' : 'in', from: isDate(q.from) ? q.from : null }),
-  deposit: (ctx, r) => depositRegister(ctx, r),
+  deposit: (ctx, r, q) => depositRegister(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar' }),
   'uang-muka': (ctx, r, q) => advanceRegister(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar' }),
   angsuran: (ctx, r, q) => installmentSchedule(ctx, { ...r, side: q.side === 'ap' ? 'ap' : 'ar', days: q.days }),
   pajak: (ctx, r) => reports.taxReport(ctx, r),
@@ -210,8 +210,8 @@ route('GET', '/api/reports/:name', (ctx, _b, p, q) => {
   const fn = REPORTS[p.name];
   if (!fn) throw notFound('Laporan tidak dikenal.');
   const r = reportQuery(ctx, q);
-  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales', deposit: 'sales' }[p.name]
-    || (['angsuran', 'uang-muka'].includes(p.name) ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
+  const needs = { 'umur-piutang': 'sales', 'umur-hutang': 'purchasing', persediaan: 'inventory', anggaran: 'finance', 'anggaran-akun': 'finance', proyek: 'projects', 'proyek-detail': 'projects', penawaran: 'sales', pemenuhan: 'sales' }[p.name]
+    || (['angsuran', 'uang-muka', 'deposit'].includes(p.name) ? (q.side === 'ap' ? 'purchasing' : 'sales') : null)
     || (p.name === 'giro' ? (q.side === 'out' ? 'purchasing' : 'sales') : null)
     || (p.name === 'kartu-mitra' ? (q.partner_type === 'supplier' ? 'purchasing' : 'sales') : 'reports');
   if (!can(ctx, needs, LEVEL.read) && !can(ctx, 'reports', LEVEL.read)) throw forbidden();
@@ -258,15 +258,20 @@ route('GET', '/api/settlement/:entity/:id', (ctx, _b, p, q) => {
     : [];
   return { installments: installmentsOf(p.entity, doc.id), payments, credits, applications, open: Math.round((doc.total - (doc.paid || 0)) * 100) / 100, advance: advanceBalance(partyType, doc[ar ? 'customer_id' : 'supplier_id'], doc.company_id) };
 });
-/* Riwayat deposit pelanggan: pemakaian melunasi faktur (penerimaan), pengembalian & pencairan (jurnal). */
-route('GET', '/api/deposit-history/:id', (ctx, _b, p, q) => {
+/* Riwayat deposit pelanggan/pemasok: pemakaian melunasi dokumen (penerimaan/pembayaran), pengembalian & pencairan (jurnal). */
+route('GET', '/api/deposit-history/:entity/:id', (ctx, _b, p, q) => {
   scoped(ctx, q);
-  const d = crud.read(ctx, 'customer_deposits', p.id);
-  const receipts = db.all(`SELECT r.id, r.number, r.date, r.total amount, r.status, 'customer_receipts' entity,
-      (SELECT GROUP_CONCAT(COALESCE(i.number, n.number, a.number), ', ') FROM customer_receipt_lines l LEFT JOIN sales_invoices i ON i.id = l.invoice_id LEFT JOIN customer_debit_notes n ON n.id = l.debit_note_id LEFT JOIN sales_advances a ON a.id = l.advance_id WHERE l.parent_id = r.id) docs
-    FROM customer_receipts r WHERE r.deposit_id = ? AND r.mode = 'pakai_deposit' AND r.status <> 'draf' ORDER BY r.date, r.id`, d.id);
-  const journals = db.all(`SELECT j.id, j.number, j.date, j.description, (SELECT ROUND(SUM(jl.debit),2) FROM journal_lines jl WHERE jl.parent_id = j.id AND jl.partner_type = 'customer') amount, 'journals' entity
-    FROM journals j WHERE j.source_type = 'customer_deposits' AND j.source_id = ? AND j.status = 'diposting' AND (j.description LIKE 'Pengembalian deposit%' OR j.description LIKE 'Pencairan jaminan%') ORDER BY j.date, j.id`, d.id);
+  const ar = p.entity === 'customer_deposits';
+  if (!ar && p.entity !== 'supplier_deposits') throw notFound();
+  const d = crud.read(ctx, p.entity, p.id);
+  const st = ar ? 'customer_receipts' : 'supplier_payments';
+  const docs = ar
+    ? 'SELECT GROUP_CONCAT(COALESCE(i.number, n.number, a.number), \', \') FROM customer_receipt_lines l LEFT JOIN sales_invoices i ON i.id = l.invoice_id LEFT JOIN customer_debit_notes n ON n.id = l.debit_note_id LEFT JOIN sales_advances a ON a.id = l.advance_id WHERE l.parent_id = r.id'
+    : 'SELECT GROUP_CONCAT(COALESCE(i.number, n.number, a.number), \', \') FROM supplier_payment_lines l LEFT JOIN purchase_bills i ON i.id = l.bill_id LEFT JOIN supplier_credit_notes n ON n.id = l.credit_note_id LEFT JOIN purchase_advances a ON a.id = l.advance_id WHERE l.parent_id = r.id';
+  const receipts = db.all(`SELECT r.id, r.number, r.date, r.total amount, r.status, '${st}' entity, (${docs}) docs
+    FROM ${st} r WHERE r.deposit_id = ? AND r.mode = 'pakai_deposit' AND r.status <> 'draf' ORDER BY r.date, r.id`, d.id);
+  const journals = db.all(`SELECT j.id, j.number, j.date, j.description, (SELECT ROUND(SUM(jl.${ar ? 'debit' : 'credit'}),2) FROM journal_lines jl WHERE jl.parent_id = j.id AND jl.partner_type = ?) amount, 'journals' entity
+    FROM journals j WHERE j.source_type = ? AND j.source_id = ? AND j.status = 'diposting' AND (j.description LIKE 'Pengembalian deposit%' OR j.description LIKE 'Pencairan jaminan%' OR j.description LIKE 'Jaminan hangus%') ORDER BY j.date, j.id`, ar ? 'customer' : 'supplier', p.entity, d.id);
   return { receipts, journals, remaining: Math.round((d.amount - (d.used || 0) - (d.refunded || 0) - (d.forfeited || 0)) * 100) / 100 };
 });
 

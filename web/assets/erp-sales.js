@@ -299,44 +299,58 @@
   /* Deposit pelanggan                                                        */
   /* ======================================================================== */
   const DEP_KIND = { saldo: 'Saldo prabayar', jaminan: 'Uang jaminan' };
-  /** Laci deposit: saldo, pemakaian melunasi faktur, pengembalian & pencairan. */
-  async function depositDrawer(r) {
-    if (['draf', 'batal'].includes(r.status)) return '';
+  /** Laci deposit: saldo, pemakaian melunasi faktur/tagihan, pengembalian & pencairan. */
+  async function depositDrawer(key, r) {
+    if (['draf', 'menunggu', 'ditolak', 'batal'].includes(r.status)) return '';
+    const ar = key === 'customer_deposits';
     let h;
-    try { h = await api('GET', `/api/deposit-history/${r.id}`); } catch { return ''; }
+    try { h = await api('GET', `/api/deposit-history/${key}/${r.id}`); } catch { return ''; }
     const rows = [
-      ...h.receipts.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>Melunasi ${esc(x.docs || '—')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill(x.status)}</td></tr>`),
-      ...h.journals.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>${esc(/^Pencairan/.test(x.description) ? 'Dicairkan (kompensasi)' : 'Dikembalikan ke pelanggan')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill('diposting')}</td></tr>`),
+      ...h.receipts.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>${ar ? 'Melunasi' : 'Membayar'} ${esc(x.docs || '—')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill(x.status)}</td></tr>`),
+      ...h.journals.map((x) => `<tr data-open="${x.entity}:${x.id}" tabindex="0"><td class="code">${esc(x.number)}</td><td class="num">${esc(ERP.date(x.date))}</td><td>${esc(/^Pencairan/.test(x.description) ? 'Dicairkan (kompensasi)' : /^Jaminan hangus/.test(x.description) ? 'Hangus (dibebankan)' : ar ? 'Dikembalikan ke pelanggan' : 'Diterima kembali dari pemasok')}</td><td class="ta-r">${money(x.amount)}</td><td>${pill('diposting')}</td></tr>`),
     ];
     return `<div class="section"><span class="section-title">Riwayat deposit</span>
       ${rows.length ? `<div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>Dokumen</th><th>Tanggal</th><th>Keterangan</th><th class="ta-r">Jumlah</th><th>Status</th></tr></thead><tbody>${rows.join('')}</tbody>
         <tfoot><tr class="row-total"><td colspan="3">Saldo deposit</td><td class="ta-r">${money(h.remaining)}</td><td></td></tr></tfoot></table></div>`
         : `<p class="muted">Belum dipakai. Saldo ${esc(FMT.rp(h.remaining))}.</p>`}
-      <p class="field-hint">${r.kind === 'jaminan' ? 'Uang jaminan dikembalikan saat kontrak berakhir; dapat dikompensasikan ke faktur terbuka atau dicairkan sebagai ganti rugi.' : 'Pakai melunasi faktur dari sini, atau dari faktur → Terima pembayaran → sumber dana "Deposit pelanggan".'}</p></div>`;
+      <p class="field-hint">${r.kind === 'jaminan'
+        ? (ar ? 'Uang jaminan dikembalikan saat kontrak berakhir; dapat dikompensasikan ke faktur terbuka atau dicairkan sebagai ganti rugi.' : 'Uang jaminan ditagih kembali saat kontrak berakhir; dapat dipakai membayar tagihan pemasok atau dihanguskan bila dipotong pemasok.')
+        : (ar ? 'Pakai melunasi faktur dari sini, atau dari faktur → Terima pembayaran → sumber dana "Deposit pelanggan".' : 'Pakai membayar tagihan dari sini, atau dari tagihan → Ajukan pembayaran → sumber dana "Deposit di pemasok" (disetujui orang lain).')}</p></div>`;
   }
 
   async function deposits(root) {
-    const head = (sub, tools = '') => V().pageHead('Register Deposit Pelanggan', sub, tools);
+    state.depSide = state.depSide || (state.me.permissions.sales ? 'ar' : 'ap');
+    const side = state.depSide, ar = side === 'ar';
+    const table = ar ? 'customer_deposits' : 'supplier_deposits';
+    const head = (sub, tools = '') => V().pageHead('Register Deposit', sub, tools);
+    const tabs = `<div class="segmented" role="group" aria-label="Jenis deposit"><button data-dep-side="ar" aria-pressed="${ar}">Deposit pelanggan</button><button data-dep-side="ap" aria-pressed="${!ar}">Deposit di pemasok</button></div>`;
     root.innerHTML = head('') + '<div class="loading-cell">Memuat…</div>';
     let r;
-    try { r = await api('GET', `/api/reports/deposit${qs({ to: state.to || state.meta.today })}`); } catch (e) { root.innerHTML = head('Deposit saldo prabayar & uang jaminan pelanggan.') + `<p class="pad neg">${esc(e.message)}</p>`; return; }
+    try { r = await api('GET', `/api/reports/deposit${qs({ side, to: state.to || state.meta.today })}`); } catch (e) { root.innerHTML = head('Deposit saldo prabayar & uang jaminan.', tabs) + `<p class="pad neg">${esc(e.message)}</p>`; return; }
     const t = r.totals;
-    const canNew = R().ent('customer_deposits')?.canWrite;
-    root.innerHTML = head('Deposit saldo (prabayar) dipakai melunasi faktur; uang jaminan dikembalikan saat kontrak berakhir atau dicairkan sebagai kompensasi. Deposit adalah liabilitas kepada pelanggan, bukan pendapatan.',
-      `${canNew ? `<button class="btn btn-primary" data-nav="deposit-pelanggan">${icon('plus')} Deposit baru</button>` : ''}<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
+    const canNew = R().ent(table)?.canWrite;
+    const [accS, accJ] = r.accounts;
+    root.innerHTML = head(ar
+      ? 'Deposit pelanggan: saldo prabayar dipakai melunasi faktur; uang jaminan dikembalikan saat kontrak berakhir atau dicairkan sebagai kompensasi. Liabilitas kepada pelanggan, bukan pendapatan.'
+      : 'Deposit kita di pemasok: saldo prabayar dipakai membayar tagihan; uang jaminan (sewa, kontrak) ditagih kembali saat kontrak berakhir atau dibebankan bila hangus. Aset, bukan beban.',
+    `${tabs}${canNew ? `<button class="btn btn-primary" data-nav="${ar ? 'deposit-pelanggan' : 'deposit-pemasok'}">${icon('plus')} Deposit baru</button>` : ''}<button class="btn" data-report-csv>${icon('download')} Ekspor CSV</button>`) +
       `<section class="kpi-grid-erp">
-        ${kpi('Saldo prabayar', esc(FMT.rpCompact(t.saldo)), 'akun 2-1620 · dapat melunasi faktur')}
-        ${kpi('Uang jaminan', esc(FMT.rpCompact(t.jaminan)), 'akun 2-1630')}
-        ${kpi('Jaminan jatuh tempo ≤ 30 hari', esc(FMT.rpCompact(t.dueSoon)), `${t.dueSoonCount} deposit · siapkan pengembalian`, t.dueSoonCount ? 'neg' : '')}
-        ${kpi('Dipakai / dikembalikan', esc(FMT.rpCompact(t.used + t.refunded)), `dicairkan ${FMT.rpCompact(t.forfeited)}`)}
+        ${kpi('Saldo prabayar', esc(FMT.rpCompact(t.saldo)), `akun ${accS} · ${ar ? 'dapat melunasi faktur' : 'dapat membayar tagihan'}`)}
+        ${kpi('Uang jaminan', esc(FMT.rpCompact(t.jaminan)), `akun ${accJ}`)}
+        ${kpi('Jaminan jatuh tempo ≤ 30 hari', esc(FMT.rpCompact(t.dueSoon)), `${t.dueSoonCount} deposit · ${ar ? 'siapkan pengembalian' : 'tagih pengembalian'}`, t.dueSoonCount ? 'neg' : '')}
+        ${kpi('Dipakai / dikembalikan', esc(FMT.rpCompact(t.used + t.refunded)), `${ar ? 'dicairkan' : 'hangus'} ${FMT.rpCompact(t.forfeited)}`)}
       </section>
-      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Saldo deposit cocok dengan buku besar — 2-1620 ${FMT.rp(r.glSaldo)} · 2-1630 ${FMT.rp(r.glJaminan)}.` : `Tidak cocok dengan buku besar (2-1620 ${FMT.rp(r.glSaldo)}, 2-1630 ${FMT.rp(r.glJaminan)}).`)}</div>
-      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Deposit</th><th>Pelanggan</th><th class="ta-r">Nilai</th><th class="ta-r">Dipakai / dikembalikan</th><th class="ta-r">Saldo</th><th>Pengembalian</th><th>Status</th></tr></thead><tbody>
-        ${r.rows.map((x) => `<tr class="${x.kind === 'jaminan' && x.remaining > 0 && x.daysToReturn != null && x.daysToReturn < 0 ? 'row-attn' : ''}"><td class="code"><button class="link" data-open="customer_deposits:${x.id}">${esc(x.number)}</button><span class="cell-sub">${esc(DEP_KIND[x.kind] || x.kind)} · ${esc(ERP.date(x.date))}</span></td><td>${esc(x.party)}${x.reference ? `<span class="cell-sub">${esc(x.reference)}</span>` : ''}</td>
-          <td class="ta-r">${money(x.amount)}</td><td class="ta-r">${x.used + x.refunded + x.forfeited ? money(x.used + x.refunded + x.forfeited) : ''}${[x.used && `dipakai ${money(x.used)}`, x.refunded && `kembali ${money(x.refunded)}`, x.forfeited && `dicairkan ${money(x.forfeited)}`].filter(Boolean).map((t2) => `<span class="cell-sub">${t2}</span>`).join('')}</td><td class="ta-r">${money(x.remaining)}</td>
+      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Saldo deposit cocok dengan buku besar — ${accS} ${FMT.rp(r.glSaldo)} · ${accJ} ${FMT.rp(r.glJaminan)}.` : `Tidak cocok dengan buku besar (${accS} ${FMT.rp(r.glSaldo)}, ${accJ} ${FMT.rp(r.glJaminan)}).`)}</div>
+      <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Deposit</th><th>${ar ? 'Pelanggan' : 'Pemasok'}</th><th class="ta-r">Nilai</th><th class="ta-r">Dipakai / dikembalikan</th><th class="ta-r">Saldo</th><th>Pengembalian</th><th>Status</th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr class="${x.kind === 'jaminan' && x.remaining > 0 && x.daysToReturn != null && x.daysToReturn < 0 ? 'row-attn' : ''}"><td class="code"><button class="link" data-open="${table}:${x.id}">${esc(x.number)}</button><span class="cell-sub">${esc(DEP_KIND[x.kind] || x.kind)} · ${esc(ERP.date(x.date))}</span></td><td>${esc(x.party)}${x.reference ? `<span class="cell-sub">${esc(x.reference)}</span>` : ''}</td>
+          <td class="ta-r">${money(x.amount)}</td><td class="ta-r">${x.used + x.refunded + x.forfeited ? money(x.used + x.refunded + x.forfeited) : ''}${[x.used && `dipakai ${money(x.used)}`, x.refunded && `kembali ${money(x.refunded)}`, x.forfeited && `${ar ? 'dicairkan' : 'hangus'} ${money(x.forfeited)}`].filter(Boolean).map((t2) => `<span class="cell-sub">${t2}</span>`).join('')}</td><td class="ta-r">${money(x.remaining)}</td>
           <td class="num">${x.return_date ? `${esc(ERP.date(x.return_date))}${x.remaining > 0 ? `<span class="cell-sub ${x.daysToReturn < 0 ? 'neg' : ''}">${x.daysToReturn >= 0 ? `${x.daysToReturn} hari lagi` : `${-x.daysToReturn} hari lewat`}</span>` : ''}` : '—'}</td><td>${pill(x.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Belum ada deposit.</td></tr>'}
       </tbody><tfoot><tr class="row-total"><td colspan="4">Total saldo deposit</td><td class="ta-r">${money(t.saldo + t.jaminan)}</td><td colspan="2"></td></tr></tfoot></table></div></div></article>`;
   }
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-dep-side]');
+    if (el) { state.depSide = el.dataset.depSide; ERP.app.renderView(); }
+  });
 
   ERP.sales = { quoteReport, openDoInvoice, soDrawer, fulfillment, settlementDrawer, schedule, giro, advances, depositDrawer, deposits };
 })();

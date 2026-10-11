@@ -1,6 +1,8 @@
 /* Uji deposit pelanggan: saldo prabayar (dipakai melunasi faktur dari deposit maupun dari faktur,
    dikembalikan) dan uang jaminan (dikompensasikan, dicairkan sebagai ganti rugi), register
-   terekonsiliasi dengan akun 2-1620 / 2-1630, serta pembatalan yang aman. */
+   terekonsiliasi dengan akun 2-1620 / 2-1630, serta pembatalan yang aman; dan deposit di pemasok
+   (dibayar dengan persetujuan SoD, dipakai membayar tagihan, diterima kembali, jaminan hangus)
+   terekonsiliasi dengan akun 1-1530 / 1-1540. */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { start, stop, as, db } from './helpers.mjs';
@@ -70,7 +72,7 @@ test('deposit saldo: diterima → dipakai melunasi faktur (dari deposit & dari f
   assert.equal(rcp.mode, 'pakai_deposit'); assert.equal(rcp.bank_account_id, null);
   let dd = (await admin.get(`/api/e/customer_deposits/${d.id}`)).body;
   assert.equal(dd.remaining, 1_670_000);
-  const hist = (await admin.get(`/api/deposit-history/${d.id}`)).body;
+  const hist = (await admin.get(`/api/deposit-history/customer_deposits/${d.id}`)).body;
   assert.equal(hist.receipts.length, 2);
   assert.ok(hist.receipts.some((x) => x.docs === inv2.number));
   // Deposit yang sudah dipakai tidak dapat dibatalkan; batal penerimaan mengembalikan saldo.
@@ -88,7 +90,7 @@ test('deposit saldo: diterima → dipakai melunasi faktur (dari deposit & dari f
   assert.equal(dd.status, 'habis'); assert.equal(dd.remaining, 0);
   assert.equal((await osmond.post(`/api/e/customer_deposits/${d.id}/actions/refund`, { date: '2026-10-07', bank_account_id: BCA(), amount: 1 })).status, 409, 'tidak ada aksi pada deposit habis');
   near(gl('2-1620') - dep0, 0, 'deposit habis');
-  assert.equal((await admin.get(`/api/deposit-history/${d.id}`)).body.journals.length, 1);
+  assert.equal((await admin.get(`/api/deposit-history/customer_deposits/${d.id}`)).body.journals.length, 1);
   await reconciled();
   balanced();
 });
@@ -128,4 +130,101 @@ test('register deposit dapat dibaca bagian penjualan; data contoh terekonsiliasi
   assert.equal(r.status, 200);
   assert.ok(r.body.rows.length >= 4 && r.body.reconciled);
   assert.ok(r.body.totals.saldo > 0 && r.body.totals.jaminan > 0);
+});
+
+/* --- Deposit di pemasok (aset) -------------------------------------------------------- */
+async function supplierDeposit(rina, sup, kind, amount, extra = {}) {
+  const d = ok(await rina.post('/api/e/supplier_deposits', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', sup), kind, bank_account_id: BCA(), amount, ...extra }), 'deposit pemasok');
+  ok(await rina.post(`/api/e/supplier_deposits/${d.id}/actions/submit`), 'ajukan');
+  assert.equal((await rina.post(`/api/e/supplier_deposits/${d.id}/actions/approve`)).status, 403, 'pembuat tidak boleh menyetujui');
+  ok(await osmond.post(`/api/e/supplier_deposits/${d.id}/actions/approve`), 'setujui & bayar');
+  return (await admin.get(`/api/e/supplier_deposits/${d.id}`)).body;
+}
+async function bill(rina, sup, amount) {
+  const b = ok(await rina.post('/api/e/purchase_bills', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', sup), supplier_invoice_no: `UJI-DEP-${amount}`, tax_rate: 11, lines: [{ account_id: id('accounts', '6-2900'), qty: 1, price: amount }] }));
+  ok(await osmond.post(`/api/e/purchase_bills/${b.id}/actions/post`));
+  return (await admin.get(`/api/e/purchase_bills/${b.id}`)).body;
+}
+async function reconciledAp() {
+  const d = (await admin.get('/api/reports/deposit?side=ap')).body;
+  assert.ok(d.reconciled, `register deposit pemasok: 1-1530 ${d.glSaldo}, 1-1540 ${d.glJaminan}`);
+  const x = (await admin.get('/api/reports/umur-hutang?to=2026-12-31')).body;
+  assert.ok(x.reconciled, `umur hutang ${x.totals.total} = buku besar ${x.glBalance}`);
+}
+
+test('deposit di pemasok: dibayar dengan SoD → dipakai membayar tagihan (persetujuan) → diterima kembali → habis', async () => {
+  const rina = await as('rina.akuntan');
+  const bank0 = gl('1-1130'), dep0 = gl('1-1530'), ap0 = gl('2-1100');
+  const d = await supplierDeposit(rina, 'S002', 'saldo', 6_000_000, { reference: 'Top-up uji' });
+  assert.equal(d.status, 'dibayar'); assert.match(d.approval_note, /Disetujui/);
+  near(gl('1-1130') - bank0, -6_000_000, 'kas keluar');
+  near(gl('1-1530') - dep0, 6_000_000, 'aset deposit');
+  assert.ok((await admin.get(`/api/e/suppliers/${id('suppliers', 'S002')}`)).body.deposit_balance >= 6_000_000);
+  await reconciledAp();
+
+  // Pakai dari deposit → pembayaran diajukan (SoD) → diposting penyetuju.
+  const b1 = await bill(rina, 'S002', 2_000_000); // 2.220.000
+  const a = ok(await rina.post(`/api/e/supplier_deposits/${d.id}/actions/apply`, { date: '2026-10-07', bill_id: b1.id, amount: 2_220_000 }), 'pakai deposit');
+  assert.equal(a.redirect.entity, 'supplier_payments');
+  assert.equal((await admin.get(`/api/e/supplier_deposits/${d.id}`)).body.used, 0, 'belum terpakai sebelum disetujui');
+  assert.equal((await rina.post(`/api/e/supplier_payments/${a.redirect.id}/actions/post`)).status, 403);
+  ok(await osmond.post(`/api/e/supplier_payments/${a.redirect.id}/actions/post`), 'posting pembayaran');
+  assert.equal((await admin.get(`/api/e/purchase_bills/${b1.id}`)).body.status, 'lunas');
+  let dd = (await admin.get(`/api/e/supplier_deposits/${d.id}`)).body;
+  assert.equal(dd.status, 'terpakai'); assert.equal(dd.used, 2_220_000);
+  near(gl('2-1100') - ap0, 0, 'hutang tagihan lunas lewat deposit');
+  near(gl('1-1130') - bank0, -6_000_000, 'kas tidak berubah saat deposit dipakai');
+
+  // Dari tagihan: sumber dana "Deposit di pemasok" (deposit tertua otomatis).
+  const b2 = await bill(rina, 'S002', 1_000_000); // 1.110.000
+  const p2 = ok(await rina.post(`/api/e/purchase_bills/${b2.id}/actions/pay`, { date: '2026-10-07', source: 'deposit', amount: 1_110_000, discount: 0, pph23: 0, bank_charge: 0 }));
+  ok(await osmond.post(`/api/e/supplier_payments/${p2.redirect.id}/actions/post`));
+  const pay = db.get('SELECT mode, deposit_id, bank_account_id FROM supplier_payments WHERE id = ?', p2.redirect.id);
+  assert.equal(pay.mode, 'pakai_deposit'); assert.ok(pay.deposit_id); assert.equal(pay.bank_account_id, null);
+  const hist = (await admin.get(`/api/deposit-history/supplier_deposits/${pay.deposit_id}`)).body;
+  assert.ok(hist.receipts.length >= 1);
+  // Melebihi saldo ditolak saat pengajuan.
+  const b3 = await bill(rina, 'S002', 9_000_000);
+  assert.equal((await rina.post(`/api/e/supplier_deposits/${d.id}/actions/apply`, { date: '2026-10-07', bill_id: b3.id, amount: 9_990_000 })).status, 400);
+  // Batal pembayaran mengembalikan saldo deposit.
+  ok(await osmond.post(`/api/e/supplier_payments/${a.redirect.id}/actions/void`), 'batal pemakaian');
+  dd = (await admin.get(`/api/e/supplier_deposits/${d.id}`)).body;
+  const rem = dd.remaining;
+  assert.equal(dd.used, pay.deposit_id === d.id ? 1_110_000 : 0);
+  await reconciledAp();
+
+  // Pemasok mengembalikan sisa (dipotong biaya bank) → habis.
+  const bank1 = gl('1-1130');
+  ok(await osmond.post(`/api/e/supplier_deposits/${d.id}/actions/refund`, { date: '2026-10-07', bank_account_id: BCA(), amount: rem, bank_charge: 5_000 }), 'terima kembali');
+  near(gl('1-1130') - bank1, rem - 5_000, 'kas masuk neto biaya bank');
+  dd = (await admin.get(`/api/e/supplier_deposits/${d.id}`)).body;
+  assert.equal(dd.status, 'habis'); assert.equal(dd.remaining, 0);
+  assert.equal((await admin.get(`/api/deposit-history/supplier_deposits/${d.id}`)).body.journals.length, 1);
+  await reconciledAp();
+  balanced();
+});
+
+test('uang jaminan di pemasok: ditolak lalu diajukan ulang, dihanguskan sebagian sebagai beban, tidak dapat dibatalkan setelah dipakai', async () => {
+  const rina = await as('rina.akuntan');
+  const d0 = ok(await rina.post('/api/e/supplier_deposits', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', 'S004'), kind: 'jaminan', bank_account_id: BCA(), amount: 4_000_000, return_date: '2026-11-01' }));
+  ok(await rina.post(`/api/e/supplier_deposits/${d0.id}/actions/submit`));
+  ok(await osmond.post(`/api/e/supplier_deposits/${d0.id}/actions/reject`, { reason: 'Lampirkan kontrak sewa' }));
+  assert.equal((await admin.get(`/api/e/supplier_deposits/${d0.id}`)).body.status, 'ditolak');
+  const exp0 = gl('7-2400'), jam0 = gl('1-1540');
+  ok(await rina.post(`/api/e/supplier_deposits/${d0.id}/actions/submit`), 'ajukan ulang');
+  ok(await osmond.post(`/api/e/supplier_deposits/${d0.id}/actions/approve`));
+  near(gl('1-1540') - jam0, 4_000_000, 'uang jaminan dibayar (aset)');
+  const reg = (await admin.get('/api/reports/deposit?side=ap&to=2026-10-07')).body;
+  assert.ok(reg.rows.some((x) => x.id === d0.id && x.daysToReturn === 25) && reg.totals.dueSoonCount >= 1);
+  ok(await osmond.post(`/api/e/supplier_deposits/${d0.id}/actions/forfeit`, { date: '2026-10-07', amount: 1_000_000, reason: 'Kontainer rusak' }), 'hangus');
+  near(gl('7-2400') - exp0, 1_000_000, 'beban jaminan hangus');
+  near(gl('1-1540') - jam0, 3_000_000, 'sisa jaminan');
+  assert.equal((await osmond.post(`/api/e/supplier_deposits/${d0.id}/actions/void`)).status, 409, 'tidak dapat dibatalkan setelah hangus sebagian');
+  const s = await supplierDeposit(rina, 'S004', 'saldo', 500_000);
+  assert.ok(!s.__actions.some((a) => a.name === 'forfeit'), 'deposit saldo tidak dapat dihanguskan');
+  ok(await osmond.post(`/api/e/supplier_deposits/${s.id}/actions/void`), 'batal deposit saldo');
+  await reconciledAp();
+  balanced();
+  const sari = await as('sari.sales');
+  assert.equal((await sari.get('/api/reports/deposit?side=ap')).status, 403, 'register pemasok mengikuti hak pembelian');
 });

@@ -54,6 +54,8 @@ export const COA = [
   ['1-1500', 'Uang Muka & Biaya Dibayar Dimuka', 'asset', '1-1000', 0, 'current_asset'],
   ['1-1510', 'Uang Muka Pembelian', 'asset', '1-1000', 0, 'current_asset'],
   ['1-1520', 'Uang Muka Pembelian — Faktur Uang Muka (PO)', 'asset', '1-1000', 0, 'current_asset'],
+  ['1-1530', 'Deposit di Pemasok (Saldo Prabayar)', 'asset', '1-1000', 0, 'current_asset'],
+  ['1-1540', 'Uang Jaminan Dibayar (Deposit Jaminan)', 'asset', '1-1000', 0, 'current_asset'],
   ['1-1600', 'Piutang Antar Perusahaan', 'asset', '1-1000', 0, 'current_asset', 'operating', 1],
   ['1-1700', 'Rekening Antar Cabang (RAK)', 'asset', '1-1000', 0, 'current_asset'],
   ['1-2000', 'Aset Tidak Lancar', 'asset', '1', 1],
@@ -122,6 +124,7 @@ export const COA = [
   ['7-2100', 'Beban Administrasi Bank', 'other_expense', '7', 0],
   ['7-2200', 'Rugi Pelepasan Aset', 'other_expense', '7', 0],
   ['7-2300', 'Rugi Selisih Kurs', 'other_expense', '7', 0],
+  ['7-2400', 'Beban Kompensasi / Jaminan Hangus', 'other_expense', '7', 0],
   ['8', 'PAJAK PENGHASILAN', 'tax', null, 1],
   ['8-1000', 'Beban Pajak Penghasilan', 'tax', '8', 0],
 ];

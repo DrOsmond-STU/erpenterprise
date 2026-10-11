@@ -173,6 +173,18 @@ docker run -d --name erp -p 127.0.0.1:8080:8080 -v erp-data:/data \
 4. Bulanan: **Keuangan → Register Deposit** — tindak lanjuti jaminan jatuh tempo ≤ 30 hari
    dan pastikan indikator hijau (saldo deposit = akun 2-1620 / 2-1630).
 
+## Deposit di pemasok
+
+1. Bayar deposit: **Pembelian → Deposit Pemasok → baru** — jenis *Deposit saldo (prabayar)*
+   atau *Uang jaminan* (isi no. kontrak sewa/pasok & jatuh tempo pengembalian), rekening,
+   nilai → **Ajukan pembayaran deposit** → penyetuju lain **Setujui & bayar**.
+2. Pakai deposit: dari deposit → **Pakai untuk membayar tagihan**, atau dari tagihan →
+   **Ajukan pembayaran** sumber dana *Deposit di pemasok*; pembayaran disetujui orang lain.
+3. Kontrak berakhir: **Terima pengembalian deposit** saat dana masuk rekening (isi potongan
+   biaya bank). Bila pemasok memotong jaminan (kerusakan, denda): **Hanguskan jaminan**.
+4. Bulanan: **Keuangan → Register Deposit → Deposit di pemasok** — tagih jaminan yang jatuh
+   tempo ≤ 30 hari dan pastikan indikator hijau (saldo = akun 1-1530 / 1-1540).
+
 ## Nota debet & nota kredit
 
 1. Koreksi harga, rabat, atau klaim pelanggan: **Penjualan → Nota Kredit**, pilih

@@ -438,7 +438,7 @@ export function lookup(ctx, key, q = {}) {
   if (e.statusField && !q.f_status && !q[`f_${e.statusField}`] && ['aktif'].includes(e.fields.find((f) => f.name === e.statusField).default)) {
     where.push(`t."${e.statusField}" = 'aktif'`);
   }
-  const extra = key === 'products' ? ', t.price, t.standard_cost, t.kind, t.uom' : key === 'sales_invoices' || key === 'purchase_bills' ? ', ROUND(t.total - t.paid, 2) AS open_amount' : key === 'customer_deposits' ? ', ROUND(t.amount - COALESCE(t.used,0) - COALESCE(t.refunded,0) - COALESCE(t.forfeited,0), 2) AS open_amount' : '';
+  const extra = key === 'products' ? ', t.price, t.standard_cost, t.kind, t.uom' : key === 'sales_invoices' || key === 'purchase_bills' ? ', ROUND(t.total - t.paid, 2) AS open_amount' : key === 'customer_deposits' || key === 'supplier_deposits' ? ', ROUND(t.amount - COALESCE(t.used,0) - COALESCE(t.refunded,0) - COALESCE(t.forfeited,0), 2) AS open_amount' : '';
   return db.all(`SELECT t.id, ${lab} AS label${extra} FROM "${e.table}" t WHERE ${where.join(' AND ')} ORDER BY label LIMIT 200`, ...params);
 }
 

@@ -67,6 +67,8 @@ export function notifications(ctx) {
   if (can(ctx, 'purchasing', LEVEL.read)) {
     const g = db.get(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM supplier_payments WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar' AND giro_due <= ?${b.sql}`, ctx.companyId, addDays(t, 3), ...b.p);
     if (g.n) push('danger', `${g.n} giro keluar efektif ≤ 3 hari`, `Pastikan saldo rekening cukup: ${fmt(g.v)}.`, { view: 'giro' });
+    const dj = db.get(`SELECT COUNT(*) n, COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM supplier_deposits WHERE company_id = ? AND kind = 'jaminan' AND status IN ('dibayar','terpakai') AND return_date <= ?${b.sql}`, ctx.companyId, addDays(t, 30), ...b.p);
+    if (dj.n) push('warn', `${dj.n} uang jaminan di pemasok jatuh tempo ≤ 30 hari`, `Saldo ${fmt(dj.v)} — tagih pengembaliannya atau perpanjang kontrak.`, { view: 'register-deposit' });
   }
   if (can(ctx, 'purchasing', LEVEL.read)) {
     const r = db.get(`SELECT COUNT(*) n, COALESCE(SUM((total - paid) * COALESCE(exchange_rate,1)),0) v FROM purchase_bills WHERE company_id = ? AND status IN ('terbit','sebagian') AND due_date BETWEEN ? AND ?${b.sql}`, ctx.companyId, t, addDays(t, 7), ...b.p);

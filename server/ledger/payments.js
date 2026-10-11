@@ -233,31 +233,37 @@ export function advanceRegister(ctx, { companyId, branchId, side = 'ar' }) {
 }
 
 /**
- * Register deposit pelanggan: saldo per deposit (saldo prabayar & uang jaminan), jaminan yang jatuh
- * tempo dikembalikan ≤ 30 hari, direkonsiliasi dengan akun 2-1620 / 2-1630.
+ * Register deposit pelanggan (liabilitas 2-1620/2-1630) atau deposit di pemasok (aset 1-1530/1-1540):
+ * saldo per deposit, jaminan yang jatuh tempo dikembalikan ≤ 30 hari, direkonsiliasi dengan buku besar.
  */
-export function depositRegister(ctx, { companyId, branchId, asOf }) {
+export function depositRegister(ctx, { companyId, branchId, asOf, side = 'ar' }) {
+  const ar = side !== 'ap';
   const t = asOf || today();
+  const table = ar ? 'customer_deposits' : 'supplier_deposits';
+  const [partyTable, partyField] = ar ? ['customers', 'customer_id'] : ['suppliers', 'supplier_id'];
+  const live = ar ? "('diterima','terpakai','habis')" : "('dibayar','terpakai','habis')";
   const bf = branchId ? ' AND d.branch_id = ?' : '';
   const rows = db.all(`SELECT d.id, d.number, d.date, d.kind, d.reference, d.return_date, d.status, d.amount, COALESCE(d.used,0) used, COALESCE(d.refunded,0) refunded, COALESCE(d.forfeited,0) forfeited,
       ROUND(d.amount - COALESCE(d.used,0) - COALESCE(d.refunded,0) - COALESCE(d.forfeited,0),2) remaining, p.name party, p.id party_id, b.name branch
-    FROM customer_deposits d JOIN customers p ON p.id = d.customer_id JOIN branches b ON b.id = d.branch_id
-    WHERE d.company_id = ? AND d.status IN ('diterima','terpakai','habis')${bf}
+    FROM "${table}" d JOIN "${partyTable}" p ON p.id = d."${partyField}" JOIN branches b ON b.id = d.branch_id
+    WHERE d.company_id = ? AND d.status IN ${live}${bf}
     ORDER BY CASE d.status WHEN 'habis' THEN 1 ELSE 0 END, d.kind, d.date DESC, d.number`, companyId, ...(branchId ? [branchId] : []));
   for (const r of rows) r.daysToReturn = r.return_date ? Math.round((Date.parse(r.return_date) - Date.parse(t)) / 864e5) : null;
   const open = rows.filter((r) => r.remaining > 0.005);
-  const sumBy = (xs) => round2(xs.reduce((s, r) => s + r.remaining, 0));
-  const gl = (key) => -db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(key)).v;
-  const all = (kind) => round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM customer_deposits WHERE company_id = ? AND kind = ? AND status IN ('diterima','terpakai','habis')`, companyId, kind).v);
-  const glSaldo = round2(gl('deposit_saldo')), glJaminan = round2(gl('deposit_guarantee'));
+  const sumBy = (xs) => round2(xs.reduce((s2, r) => s2 + r.remaining, 0));
+  const sign = ar ? -1 : 1; // liabilitas bersaldo kredit, aset bersaldo debit
+  const gl = (code) => round2(sign * db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(code)).v);
+  const all = (kind) => round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM "${table}" WHERE company_id = ? AND kind = ? AND status IN ${live}`, companyId, kind).v);
+  const glSaldo = gl(ar ? 'deposit_saldo' : 'sdeposit_saldo'), glJaminan = gl(ar ? 'deposit_guarantee' : 'sdeposit_guarantee');
   const dueSoon = open.filter((r) => r.kind === 'jaminan' && r.daysToReturn != null && r.daysToReturn <= 30);
   return {
-    title: 'Register Deposit Pelanggan', asOf: t,
+    title: ar ? 'Register Deposit Pelanggan' : 'Register Deposit di Pemasok', side: ar ? 'ar' : 'ap', asOf: t,
+    accounts: ar ? ['2-1620', '2-1630'] : ['1-1530', '1-1540'],
     rows,
     totals: {
       saldo: sumBy(open.filter((r) => r.kind === 'saldo')), jaminan: sumBy(open.filter((r) => r.kind === 'jaminan')),
-      dueSoon: sumBy(dueSoon), dueSoonCount: dueSoon.length, customers: new Set(open.map((r) => r.party_id)).size,
-      used: round2(rows.reduce((s, r) => s + r.used, 0)), refunded: round2(rows.reduce((s, r) => s + r.refunded, 0)), forfeited: round2(rows.reduce((s, r) => s + r.forfeited, 0)),
+      dueSoon: sumBy(dueSoon), dueSoonCount: dueSoon.length, parties: new Set(open.map((r) => r.party_id)).size,
+      used: round2(rows.reduce((s2, r) => s2 + r.used, 0)), refunded: round2(rows.reduce((s2, r) => s2 + r.refunded, 0)), forfeited: round2(rows.reduce((s2, r) => s2 + r.forfeited, 0)),
     },
     glSaldo, glJaminan, reconciled: Math.abs(glSaldo - all('saldo')) < 1 && Math.abs(glJaminan - all('jaminan')) < 1,
   };

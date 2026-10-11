@@ -164,11 +164,12 @@ const RETURN_ADV_MODES = [['pulihkan', 'Pulihkan ke uang muka (dipotong lagi pad
 const PURCHASE_RETURN_ADV_MODES = [['pulihkan', 'Pulihkan ke uang muka (dipotong lagi pada tagihan pengganti)'], ['saldo', 'Jadikan saldo uang muka ke pemasok (termasuk PPN)']];
 /* Deposit pelanggan: saldo prabayar (dipakai melunasi faktur) atau uang jaminan (dikembalikan / dicairkan). */
 const DEPOSIT_KINDS = [['saldo', 'Deposit saldo (prabayar) — dipakai melunasi faktur'], ['jaminan', 'Uang jaminan — dikembalikan di akhir kontrak']];
+const SUPPLIER_DEPOSIT_KINDS = [['saldo', 'Deposit saldo (prabayar) — dipakai membayar tagihan'], ['jaminan', 'Uang jaminan — kembali di akhir kontrak']];
 const NOTE_REASONS = [['harga', 'Koreksi harga'], ['potongan', 'Potongan / rabat'], ['klaim', 'Klaim kerusakan / kekurangan'], ['ongkos', 'Ongkos kirim / biaya tambahan'], ['denda', 'Denda / bunga keterlambatan'], ['lainnya', 'Lainnya']];
 
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
 const PAY_MODES_AR = [['pelunasan', 'Pelunasan faktur (penuh/sebagian)'], ['uang_muka', 'Terima titipan / uang muka tanpa faktur'], ['pakai_uang_muka', 'Pakai saldo uang muka'], ['pakai_deposit', 'Pakai deposit pelanggan']];
-const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar titipan / uang muka tanpa faktur'], ['pakai_uang_muka', 'Pakai saldo uang muka']];
+const PAY_MODES_AP = [['pelunasan', 'Pelunasan tagihan (penuh/sebagian)'], ['uang_muka', 'Bayar titipan / uang muka tanpa faktur'], ['pakai_uang_muka', 'Pakai saldo uang muka'], ['pakai_deposit', 'Pakai deposit di pemasok']];
 /* Aksi giro hanya untuk giro yang belum cair; pembatalan biasa tidak berlaku untuk giro yang sudah cair. */
 const giroOpen = (r) => r.method === 'giro' && r.giro_status === 'beredar';
 const notCleared = (r) => !(r.method === 'giro' && r.giro_status === 'cair');
@@ -181,9 +182,10 @@ const GIRO_BOUNCE_PARAMS = [
 ];
 const PAY_PARAMS = (bankLabel, pphLabel, ar = bankLabel === 'Diterima di') => [
   { name: 'date', label: 'Tanggal', type: 'date', required: true },
-  { name: 'source', label: 'Sumber dana', type: 'select', options: [['bank', 'Kas/bank (tunai/transfer)'], ['giro', 'Giro / cek mundur'], ['uang_muka', 'Saldo uang muka'], ...(ar ? [['deposit', 'Deposit pelanggan']] : [])], default: 'bank', required: true },
+  { name: 'source', label: 'Sumber dana', type: 'select', options: [['bank', 'Kas/bank (tunai/transfer)'], ['giro', 'Giro / cek mundur'], ['uang_muka', 'Saldo uang muka'], ['deposit', ar ? 'Deposit pelanggan' : 'Deposit di pemasok']], default: 'bank', required: true },
   { name: 'bank_account_id', label: bankLabel, type: 'ref', ref: 'bank_accounts', help: 'Wajib untuk kas/bank & giro (rekening setor/penerbit giro).' },
-  ...(ar ? [{ name: 'deposit_id', label: 'Deposit pelanggan', type: 'ref', ref: 'customer_deposits', refParent: 'customer_id', refFilter: { status: ['diterima', 'terpakai'] }, help: 'Untuk sumber dana deposit. Kosong = deposit tertua pelanggan yang masih bersaldo.' }] : []),
+  ar ? { name: 'deposit_id', label: 'Deposit pelanggan', type: 'ref', ref: 'customer_deposits', refParent: 'customer_id', refFilter: { status: ['diterima', 'terpakai'] }, help: 'Untuk sumber dana deposit. Kosong = deposit tertua pelanggan yang masih bersaldo.' }
+    : { name: 'deposit_id', label: 'Deposit di pemasok', type: 'ref', ref: 'supplier_deposits', refParent: 'supplier_id', refFilter: { status: ['dibayar', 'terpakai'] }, help: 'Untuk sumber dana deposit. Kosong = deposit tertua di pemasok ini yang masih bersaldo.' },
   { name: 'giro_no', label: 'No. giro / cek', type: 'text', help: 'Isi bila sumber dana giro.' },
   { name: 'giro_bank', label: 'Bank penerbit giro', type: 'text' },
   { name: 'giro_due', label: 'Tanggal efektif giro', type: 'date' },
@@ -745,6 +747,7 @@ export const ENTITIES = {
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {
+      deposit_balance: { label: 'Saldo deposit di pemasok', type: 'money', sql: `(SELECT COALESCE(ROUND(SUM(d.amount - COALESCE(d.used,0) - COALESCE(d.refunded,0) - COALESCE(d.forfeited,0)),2),0) FROM supplier_deposits d WHERE d.supplier_id = t.id AND d.status IN ('dibayar','terpakai'))` },
       outstanding: { label: 'Hutang terbuka', type: 'money', list: true, sql: `(SELECT ROUND(COALESCE(SUM((b.total - b.paid) * COALESCE(b.exchange_rate,1)),0),2) FROM purchase_bills b WHERE b.supplier_id = t.id AND b.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(n.total - n.paid),0) FROM supplier_credit_notes n WHERE n.supplier_id = t.id AND n.status IN ('terbit','sebagian')) + (SELECT COALESCE(SUM(a.total - a.paid),0) FROM purchase_advances a WHERE a.supplier_id = t.id AND a.status IN ('terbit','sebagian'))` },
     },
   },
@@ -863,7 +866,8 @@ export const ENTITIES = {
       F.date('giro_due', 'Tanggal efektif (jatuh tempo) giro', { list: true }),
       F.sel('giro_status', 'Status giro', GIRO_STATUS, { readonly: true, list: true }),
       F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
-      F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka".' }),
+      F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka" / "Pakai deposit di pemasok".' }),
+      F.ref('deposit_id', 'Deposit di pemasok', 'supplier_deposits', { refParent: 'supplier_id', refFilter: { status: ['dibayar', 'terpakai'] }, help: 'Wajib untuk jenis "Pakai deposit di pemasok".' }),
       ...fx(),
       F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar titipan / uang muka tanpa faktur" — dicatat sebagai Uang Muka Pembelian.' }),
       F.money('bank_charge', 'Biaya transfer (ditanggung kita)', { default: 0 }),
@@ -1222,6 +1226,37 @@ export const ENTITIES = {
       act('refund', 'Kembalikan deposit', { from: ['diterima', 'terpakai'], confirm: 'Dana deposit ditransfer kembali ke pelanggan dan dicatat permanen (tidak dapat dibatalkan).', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bank_account_id', label: 'Dibayar dari', type: 'ref', ref: 'bank_accounts', required: true }, { name: 'amount', label: 'Jumlah dikembalikan', type: 'money', required: true }, { name: 'bank_charge', label: 'Biaya transfer (beban kita)', type: 'money', default: 0 }, { name: 'reference', label: 'Referensi', type: 'text' }] }),
       act('forfeit', 'Cairkan jaminan (kompensasi)', { from: ['diterima', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan diakui sebagai kompensasi dan tidak dikembalikan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah dicairkan', type: 'money', required: true }, { name: 'account_id', label: 'Akun kompensasi', type: 'ref', ref: 'accounts', help: 'Kosong = 7-1400 Pendapatan Kompensasi / Ganti Rugi Pelanggan.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan aset pinjaman, denda wanprestasi.' }] }),
       act('void', 'Batalkan (jurnal balik)', { from: ['diterima'], confirm: 'Penerimaan deposit dibatalkan dan jurnalnya dibalik.' }),
+    ],
+  },
+  supplier_deposits: {
+    label: 'Deposit Pemasok', one: 'deposit pemasok', module: 'purchasing', scope: 'branch', title: 'number', number: 'DPB', sort: 'date', sortDir: 'desc',
+    editable: ['draf', 'ditolak'],
+    fields: [
+      F.number(), F.date('date', 'Tanggal bayar', { required: true, list: true }),
+      F.ref('supplier_id', 'Pemasok', 'suppliers', { required: true, list: true, search: true }),
+      F.sel('kind', 'Jenis deposit', SUPPLIER_DEPOSIT_KINDS, { required: true, default: 'saldo', list: true }),
+      F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { required: true }),
+      F.money('amount', 'Nilai deposit', { required: true, list: true }),
+      F.text('reference', 'No. kontrak / referensi', { max: 60, search: true }),
+      F.date('return_date', 'Jatuh tempo pengembalian', { list: true, help: 'Untuk uang jaminan: tanggal kontrak berakhir / deposit diminta kembali.' }),
+      F.area('description', 'Keterangan'),
+      F.money('used', 'Dipakai membayar tagihan', { readonly: true }),
+      F.money('refunded', 'Diterima kembali', { readonly: true }),
+      F.money('forfeited', 'Hangus (dibebankan)', { readonly: true }),
+      F.text('approval_note', 'Catatan persetujuan', { readonly: true, max: 300 }),
+      F.status(['draf', 'menunggu', 'dibayar', 'terpakai', 'habis', 'ditolak', 'batal'], 'draf'),
+    ],
+    computed: {
+      remaining: { label: 'Saldo deposit', type: 'money', list: true, sql: `(CASE WHEN t.status IN ('dibayar','terpakai','habis') THEN ROUND(t.amount - COALESCE(t.used,0) - COALESCE(t.refunded,0) - COALESCE(t.forfeited,0),2) ELSE 0 END)` },
+    },
+    actions: [
+      act('submit', 'Ajukan pembayaran deposit', { from: ['draf', 'ditolak'], level: 2 }),
+      act('approve', 'Setujui & bayar', { from: ['menunggu'], sod: true }),
+      act('reject', 'Tolak', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
+      act('apply', 'Pakai untuk membayar tagihan', { from: ['dibayar', 'terpakai'], level: 2, params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bill_id', label: 'Tagihan pemasok ini', type: 'ref', ref: 'purchase_bills', required: true, refParent: 'supplier_id', refFilter: { status: ['terbit', 'sebagian'] } }, { name: 'amount', label: 'Jumlah', type: 'money', required: true, help: 'Maks. saldo deposit dan sisa tagihan. Pembayaran diajukan untuk disetujui orang lain.' }] }),
+      act('refund', 'Terima pengembalian deposit', { from: ['dibayar', 'terpakai'], confirm: 'Dana deposit yang diterima kembali dari pemasok dicatat permanen (tidak dapat dibatalkan).', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bank_account_id', label: 'Diterima di', type: 'ref', ref: 'bank_accounts', required: true }, { name: 'amount', label: 'Jumlah dikembalikan pemasok', type: 'money', required: true }, { name: 'bank_charge', label: 'Biaya bank (dipotong)', type: 'money', default: 0 }, { name: 'reference', label: 'Referensi', type: 'text' }] }),
+      act('forfeit', 'Hanguskan jaminan (beban)', { from: ['dibayar', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan tidak kembali dan dibebankan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah hangus', type: 'money', required: true }, { name: 'account_id', label: 'Akun beban', type: 'ref', ref: 'accounts', help: 'Kosong = 7-2400 Beban Kompensasi / Jaminan Hangus.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan kontainer sewaan, denda kontrak.' }] }),
+      act('void', 'Batalkan (jurnal balik)', { from: ['dibayar'], confirm: 'Pembayaran deposit dibatalkan dan jurnalnya dibalik.' }),
     ],
   },
   sales_advances: advanceEntity({ label: 'Uang Muka Penjualan', one: 'uang muka penjualan', module: 'sales', number: 'UMJ', party: ['customer_id', 'Pelanggan', 'customers'], order: ['sales_order_id', 'Pesanan penjualan', 'sales_orders', ['disetujui', 'dikirim_sebagian', 'terkirim']], ar: true }),
