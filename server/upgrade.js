@@ -9,7 +9,7 @@ import { clearPermCache } from './security/rbac.js';
 import { spread } from './ledger/budget.js';
 import { syncInstallments } from './ledger/payments.js';
 import { BUDGET_MONTHS } from './modules/entities.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, ASSET_ACCOUNTS, EMPLOYEE_ACCOUNTS, BANK_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, ASSET_ACCOUNTS, EMPLOYEE_ACCOUNTS, BANK_ACCOUNTS, MASTER_KEYS, DEFAULT_TAXES, fillTaxDefaults } from './ledger/accounts.js';
 import { getSetting, setSetting, clearSettingsCache, accountMap } from './lib/settings.js';
 
 export function upgrade() {
@@ -93,6 +93,20 @@ export function upgrade() {
     }
     // Slip gaji terposting sebelum akun per karyawan: akun hutang gaji = akun bawaan saat itu.
     db.run("UPDATE payroll_lines SET payable_account_id = (SELECT id FROM accounts WHERE code = ?) WHERE payable_account_id IS NULL AND parent_id IN (SELECT id FROM payroll_runs WHERE status = 'diposting')", accountMap().salary_payable);
+    // Master pajak: kode bawaan (akun dari pemetaan lama, termasuk penyesuaian tersimpan), lalu dokumen lama
+    // dihubungkan ke kode PPN yang tarifnya sama.
+    if (!db.get('SELECT id FROM taxes LIMIT 1')) {
+      for (const [code, name, kind, rate, isDefault] of DEFAULT_TAXES) {
+        db.insert('taxes', fillTaxDefaults({ code, name, kind, rate, is_default: isDefault, status: 'aktif', created_at: nowIso() }));
+      }
+    }
+    const ppnByRate = "(SELECT id FROM taxes WHERE kind = 'ppn' AND status = 'aktif' AND rate = t.tax_rate ORDER BY is_default DESC, id LIMIT 1)";
+    for (const t of ['quotations', 'sales_orders', 'sales_invoices', 'purchase_orders', 'purchase_bills', 'pos_sales', 'sales_advances', 'purchase_advances', 'sales_returns', 'purchase_returns']) {
+      db.run(`UPDATE "${t}" AS t SET tax_id = ${ppnByRate} WHERE tax_id IS NULL AND tax_rate IS NOT NULL`);
+    }
+    for (const t of ['customer_debit_notes', 'customer_credit_notes', 'supplier_debit_notes', 'supplier_credit_notes']) {
+      db.run(`UPDATE "${t}" AS t SET tax_id = ${ppnByRate} WHERE tax_id IS NULL AND tax_rate > 0`);
+    }
     const saved = getSetting('account_map', null);
     if (saved && Object.keys(saved).some((k) => MASTER_KEYS.has(k))) {
       setSetting('account_map', Object.fromEntries(Object.entries(saved).filter(([k]) => !MASTER_KEYS.has(k))), null);

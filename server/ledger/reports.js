@@ -6,7 +6,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct } from './posting.js';
-import { partyAccountSet, inList } from './accounts.js';
+import { partyAccountSet, taxAccountSet, masterAccountSet, inList } from './accounts.js';
 import { bad, round2, isDate, today, monthEnd } from '../lib/util.js';
 
 export const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
@@ -669,15 +669,18 @@ export function taxReport(ctx, { companyId, branchId, to }) {
   const year = to.slice(0, 4);
   const bf = branchId ? ' AND jl.branch_id = ?' : '';
   const bp = branchId ? [branchId] : [];
-  const q = (accountKey, sources, side) => db.all(`SELECT substr(j.date, 1, 7) m, ROUND(SUM(${side}), 2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
-    WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ? AND j.date BETWEEN ? AND ? AND j.source_type IN (${sources.map(() => '?').join(',')})${bf} GROUP BY 1`,
-  companyId, acct(accountKey), `${year}-01-01`, `${year}-12-31`, ...sources, ...bp);
+  // Akun pajak dari master: semua kode PPN (penjualan/pembelian) & akun PPh 21 seluruh karyawan.
+  const q = (ids, sources, side) => db.all(`SELECT substr(j.date, 1, 7) m, ROUND(SUM(${side}), 2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
+    WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${inList(ids)} AND j.date BETWEEN ? AND ? AND j.source_type IN (${sources.map(() => '?').join(',')})${bf} GROUP BY 1`,
+  companyId, `${year}-01-01`, `${year}-12-31`, ...sources, ...bp);
   const toMap = (rows) => new Map(rows.map((r) => [r.m, r.v]));
-  const out = toMap(q('vat_out', ['sales_invoices', 'pos_sales', 'sales_returns'], 'jl.credit - jl.debit'));
-  const inp = toMap(q('vat_in', ['purchase_bills', 'purchase_returns'], 'jl.debit - jl.credit'));
-  const pph = toMap(q('pph21_payable', ['payroll_runs'], 'jl.credit - jl.debit'));
-  const paid = toMap(q('pph21_payable', ['cash_transactions', 'manual'], 'jl.debit - jl.credit'));
-  const vatPaid = toMap(q('vat_out', ['cash_transactions'], 'jl.debit - jl.credit'));
+  const vatOut = taxAccountSet('ppn', 'out'), vatIn = taxAccountSet('ppn', 'in');
+  const pph21 = masterAccountSet('employees', 'pph21_account_id', 'pph21_payable');
+  const out = toMap(q(vatOut, ['sales_invoices', 'pos_sales', 'sales_returns'], 'jl.credit - jl.debit'));
+  const inp = toMap(q(vatIn, ['purchase_bills', 'purchase_returns'], 'jl.debit - jl.credit'));
+  const pph = toMap(q(pph21, ['payroll_runs'], 'jl.credit - jl.debit'));
+  const paid = toMap(q(pph21, ['cash_transactions', 'manual'], 'jl.debit - jl.credit'));
+  const vatPaid = toMap(q(vatOut, ['cash_transactions'], 'jl.debit - jl.credit'));
   const rows = [];
   for (let m = 1; m <= 12; m++) {
     const k = `${year}-${String(m).padStart(2, '0')}`;

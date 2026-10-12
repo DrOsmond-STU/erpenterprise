@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount } from './accounts.js';
+import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount, vatAccount, pphAccount, defaultTax, getTax } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -115,7 +115,7 @@ function postSalesInvoice(ctx, inv) {
       }
     }
   }
-  if (inv.tax > 0) jl.push({ account_id: acct('vat_out'), credit: toBase(inv.tax, inv), memo: 'PPN keluaran' });
+  if (inv.tax > 0) jl.push({ account_id: vatAccount(inv, 'out'), credit: toBase(inv.tax, inv), memo: 'PPN keluaran' });
   // Potongan uang muka: DPP uang muka (sudah dikenai PPN saat faktur uang muka) mengurangi piutang.
   const adv = applyAdvance('sales_advances', inv, 1);
   if (adv) jl.push({ account_id: partyAcct('customer', cust, 'dp'), debit: round2(inv.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'customer', partner_id: cust.id });
@@ -259,7 +259,7 @@ export function invoiceFromDeliveries(ctx, deliveryIds, { date = null } = {}) {
     company_id: first.company_id, branch_id: so1.branch_id, date: invDate, due_date: due.toISOString().slice(0, 10), customer_id: first.customer_id, warehouse_id: first.warehouse_id,
     sales_order_id: sos.size === 1 ? so1.id : null, project_id: projects.size === 1 ? [...projects][0] : null, ...fxCopy(so1),
     notes: `Surat jalan: ${dos.map((d) => d.number).join(', ')}${sos.size > 1 ? ` · Pesanan: ${[...sos.values()].map((s2) => s2.number).join(', ')}` : ''}`,
-    subtotal, tax_rate: so1.tax_rate ?? 11, tax, total: round2(subtotal + tax), paid: 0, status: 'draf',
+    subtotal, tax_id: so1.tax_id ?? null, tax_rate: so1.tax_rate ?? 11, tax, total: round2(subtotal + tax), paid: 0, status: 'draf',
   }, 'sales_invoices', sos.size === 1 ? so1.id : null, lastBilling), invLines, 'sales_invoice_lines');
   for (const d of dos) db.update('delivery_orders', d.id, { invoice_id: id });
   audit.log(ctx, 'invoice.from_deliveries', { entity: 'sales_invoices', entityId: id, companyId: first.company_id, detail: { deliveries: dos.map((d) => d.number), number } });
@@ -352,7 +352,7 @@ function postReceipt(ctx, r) {
       debitBase += bankDebit + chargeBase;
     }
     if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: partyAcct('customer', cust, 'discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
-    if (pph > 0) { const v = toBase(pph, r); jl.push({ account_id: acct('pph23_prepaid'), debit: v, memo: 'PPh 23 dipotong pelanggan', partner_type: 'customer', partner_id: cust.id }); debitBase += v; }
+    if (pph > 0) { const v = toBase(pph, r); jl.push({ account_id: pphAccount(r.pph_tax_id, 'out'), debit: v, memo: 'PPh 23 dipotong pelanggan', partner_type: 'customer', partner_id: cust.id }); debitBase += v; }
     const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
   }
@@ -389,7 +389,7 @@ function postPos(ctx, s) {
       }
     }
   }
-  if (s.tax > 0) jl.push({ account_id: acct('vat_out'), credit: s.tax, memo: 'PPN keluaran' });
+  if (s.tax > 0) jl.push({ account_id: vatAccount(s, 'out'), credit: s.tax, memo: 'PPN keluaran' });
   postJournal(ctx, { companyId: s.company_id, branchId: s.branch_id, date: s.date, description: `Penjualan kasir ${s.number}`, sourceType: 'pos_sales', sourceId: s.id, sourceNo: s.number, lines: jl });
   setStatus('pos_sales', s.id, 'lunas');
 }
@@ -426,7 +426,7 @@ function postBill(ctx, bill) {
     }
   }
   const warnings = budgetCheck({ companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, excludePoId: bill.purchase_order_id, lines: jl.map((x) => ({ account_id: x.account_id, amount: x.debit, branch_id: x.branch_id, project_id: x.project_id })) });
-  if (bill.tax > 0) jl.push({ account_id: acct('vat_in'), debit: toBase(bill.tax, bill), memo: 'PPN masukan' });
+  if (bill.tax > 0) jl.push({ account_id: vatAccount(bill, 'in'), debit: toBase(bill.tax, bill), memo: 'PPN masukan' });
   const adv = applyAdvance('purchase_advances', bill, 1);
   const apAmount = round2(jl.reduce((a, x) => a + (x.debit || 0), 0) - (adv ? bill.advance_amount : 0));
   if (adv) jl.push({ account_id: partyAcct('supplier', sup, 'dp'), credit: round2(bill.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'supplier', partner_id: sup.id });
@@ -511,7 +511,7 @@ function postPayment(ctx, pay) {
       creditBase += cashBase;
     }
     if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: partyAcct('supplier', sup, 'discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
-    if (pph > 0) { const v = toBase(pph, pay); jl.push({ account_id: acct('pph23_payable'), credit: v, memo: `PPh 23 dipotong — ${sup.name}`, partner_type: 'supplier', partner_id: sup.id }); creditBase += v; }
+    if (pph > 0) { const v = toBase(pph, pay); jl.push({ account_id: pphAccount(pay.pph_tax_id || sup.pph_tax_id, 'in'), credit: v, memo: `PPh 23 dipotong — ${sup.name}`, partner_type: 'supplier', partner_id: sup.id }); creditBase += v; }
     const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
   }
@@ -548,6 +548,7 @@ function quickSettle(ctx, table, doc, p, docTable = table === 'customer_receipts
     mode: useDep ? 'pakai_deposit' : useAdv ? 'pakai_uang_muka' : 'pelunasan', method: giro ? 'giro' : 'transfer', giro_no: giro ? p.giro_no : null, giro_bank: giro ? p.giro_bank || null : null, giro_due: giro ? p.giro_due : null,
     bank_account_id: useAdv || useDep ? null : p.bank_account_id, deposit_id: depositId, ...fxCopy(doc), bank_charge: useAdv || useDep || giro ? 0 : (p.bank_charge || 0),
     reference: p.reference || null, total: round2(p.amount || 0), settled, status: 'draf',
+    pph_tax_id: p.pph23 > 0 ? (p.pph_tax_id || (ar ? null : db.get('SELECT pph_tax_id FROM suppliers WHERE id = ?', doc.supplier_id)?.pph_tax_id) || defaultTax('pph23')?.id || null) : null,
   };
   const line = { [(ar ? AR_TARGETS : AP_TARGETS).find((t) => t[1] === docTable)[0]]: doc.id, amount: round2(p.amount || 0), discount: p.discount || 0, pph23: p.pph23 || 0, settled };
   const { id, number } = createDoc(ctx, table, ar ? 'RCV' : 'PAY', header, [line], ar ? 'customer_receipt_lines' : 'supplier_payment_lines');
@@ -583,7 +584,7 @@ function postNote(table) {
     const party = cfg.ar ? db.get('SELECT * FROM customers WHERE id = ?', n.customer_id) : db.get('SELECT * FROM suppliers WHERE id = ?', n.supplier_id);
     const partyRef = { partner_type: cfg.ar ? 'customer' : 'supplier', partner_id: party.id };
     const control = partyAcct(cfg.ar ? 'customer' : 'supplier', party, 'control');
-    const vat = acct(cfg.ar ? 'vat_out' : 'vat_in');
+    const vat = vatAccount(n, cfg.ar ? 'out' : 'in');
     const total = round2(n.total);
     const jl = [];
     // Sisi akun penyesuaian: pelanggan-kredit & pemasok-kredit → debit; pelanggan-debet & pemasok-debet → kredit.
@@ -687,11 +688,11 @@ function postAdvance(table) {
       ? [
         { account_id: partyAcct('customer', party, 'control'), debit: round2(a.total), memo: `Piutang uang muka ${o.number}`, ...ref },
         { account_id: partyAcct('customer', party, 'dp'), credit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
-        ...(a.tax > 0 ? [{ account_id: acct('vat_out'), credit: round2(a.tax), memo: `PPN keluaran uang muka ${a.number}` }] : []),
+        ...(a.tax > 0 ? [{ account_id: vatAccount(a, 'out'), credit: round2(a.tax), memo: `PPN keluaran uang muka ${a.number}` }] : []),
       ]
       : [
         { account_id: partyAcct('supplier', party, 'dp'), debit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
-        ...(a.tax > 0 ? [{ account_id: acct('vat_in'), debit: round2(a.tax), memo: `PPN masukan uang muka ${a.supplier_invoice_no || a.number}` }] : []),
+        ...(a.tax > 0 ? [{ account_id: vatAccount(a, 'in'), debit: round2(a.tax), memo: `PPN masukan uang muka ${a.supplier_invoice_no || a.number}` }] : []),
         { account_id: partyAcct('supplier', party, 'control'), credit: round2(a.total), memo: `Hutang uang muka ${o.number}`, ...ref },
       ];
     postJournal(ctx, { companyId: a.company_id, branchId: a.branch_id, date: a.date, description: `Uang muka ${a.number} atas ${o.number} — ${party.name}`, sourceType: table, sourceId: a.id, sourceNo: a.number, lines: jl });
@@ -724,7 +725,7 @@ function advanceFromOrder(table) {
     const rate = o.tax_rate ?? 11, tax = round2(amount * rate / 100), date = p.date || today();
     const { id, number } = createDoc(ctx, table, cfg.ar ? 'UMJ' : 'UMB', {
       company_id: o.company_id, branch_id: o.branch_id, date, due_date: date, [cfg.party]: o[cfg.party], [cfg.order]: o.id,
-      percent: pct || null, amount, tax_rate: rate, tax, total: round2(amount + tax), paid: 0, applied: 0, currency_id: null, exchange_rate: 1, status: 'draf',
+      percent: pct || null, amount, tax_id: o.tax_id ?? null, tax_rate: rate, tax, total: round2(amount + tax), paid: 0, applied: 0, currency_id: null, exchange_rate: 1, status: 'draf',
       description: `Uang muka ${pct ? `${pct}% ` : ''}atas ${o.number}${o.customer_po ? ` (PO pelanggan ${o.customer_po})` : ''}`,
     }, [], null);
     return { redirect: { entity: table, id }, message: `Draf uang muka ${number} dibuat (DPP Rp ${amount.toLocaleString('id-ID')}). ${cfg.ar ? 'Terbitkan untuk menagih pelanggan.' : 'Isi no. faktur uang muka pemasok lalu posting.'}` };
@@ -1185,7 +1186,7 @@ function postSalesReturn(ctx, r) {
       }
     }
   }
-  if (r.tax > 0) jl.push({ account_id: acct('vat_out'), debit: toBase(r.tax, inv), memo: 'Koreksi PPN keluaran' });
+  if (r.tax > 0) jl.push({ account_id: vatAccount(r, 'out'), debit: toBase(r.tax, inv), memo: 'Koreksi PPN keluaran' });
   const credit = round2(jl.filter((x) => x.debit && !x.branch_id).reduce((a, x) => a + x.debit, 0));
   const ref = { partner_type: 'customer', partner_id: cust.id };
   // Bagian retur yang dibayar dari uang muka (faktur yang memotong uang muka).
@@ -1271,7 +1272,7 @@ function postPurchaseReturn(ctx, r) {
   const subtotalBase = toBase(r.subtotal, bill);
   const nonStock = round2(subtotalBase - stockValue);
   if (Math.abs(nonStock) >= 0.005) jl.push(nonStock > 0 ? { account_id: acct('purchase_variance'), credit: nonStock, memo: 'Selisih harga retur' } : { account_id: acct('purchase_variance'), debit: -nonStock, memo: 'Selisih harga retur' });
-  if (r.tax > 0) jl.push({ account_id: acct('vat_in'), credit: toBase(r.tax, bill), memo: 'Koreksi PPN masukan' });
+  if (r.tax > 0) jl.push({ account_id: vatAccount(r, 'in'), credit: toBase(r.tax, bill), memo: 'Koreksi PPN masukan' });
   const debit = round2(jl.reduce((a, x) => a + (x.credit || 0) - (x.debit || 0), 0));
   const ref = { partner_type: 'supplier', partner_id: sup.id };
   // Bagian retur yang dibayar dari uang muka pembelian (tagihan yang memotong uang muka).
@@ -1456,7 +1457,7 @@ export const ACTIONS = {
       if (!delivery && q.lead_time_days) { const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + q.lead_time_days); delivery = d.toISOString().slice(0, 10); }
       const { id, number } = createDoc(ctx, 'sales_orders', 'SO', {
         company_id: q.company_id, branch_id: q.branch_id, date: today(), delivery_date: delivery, customer_id: q.customer_id, warehouse_id: wh.id, quotation_id: q.id, project_id: q.project_id ?? null,
-        customer_po: q.customer_po, ...fxCopy(q), subtotal: q.subtotal, tax_rate: q.tax_rate, tax: q.tax, total: q.total, status: 'draf', notes: `Dari penawaran ${q.number}`,
+        customer_po: q.customer_po, ...fxCopy(q), subtotal: q.subtotal, tax_id: q.tax_id ?? null, tax_rate: q.tax_rate, tax: q.tax, total: q.total, status: 'draf', notes: `Dari penawaran ${q.number}`,
       }, tradeCopy(lines('quotation_lines', q.id)), 'sales_order_lines');
       setStatus('quotations', q.id, 'selesai', { sales_order_id: id });
       return { redirect: { entity: 'sales_orders', id }, message: `Pesanan ${number} dibuat dari penawaran ${q.number}. Ajukan untuk pemeriksaan plafon kredit.` };
@@ -1499,7 +1500,7 @@ export const ACTIONS = {
       if (db.get("SELECT id FROM delivery_orders WHERE sales_order_id = ? AND status <> 'batal'", so.id)) throw conflict('Pesanan ini sudah memakai surat jalan — buat faktur dari surat jalan.');
       const { id, number } = createDoc(ctx, 'sales_invoices', 'INV', withAdvance({
         company_id: so.company_id, branch_id: so.branch_id, date: today(), customer_id: so.customer_id, warehouse_id: so.warehouse_id, sales_order_id: so.id, project_id: so.project_id ?? null, ...fxCopy(so),
-        subtotal: so.subtotal, tax_rate: so.tax_rate, tax: so.tax, total: so.total, paid: 0, status: 'draf',
+        subtotal: so.subtotal, tax_id: so.tax_id ?? null, tax_rate: so.tax_rate, tax: so.tax, total: so.total, paid: 0, status: 'draf',
       }, 'sales_invoices', so.id, true), tradeCopy(lines('sales_order_lines', so.id)), 'sales_invoice_lines');
       const c = db.get('SELECT terms_days FROM customers WHERE id = ?', so.customer_id);
       const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (c?.terms_days ?? 30));
@@ -1531,10 +1532,11 @@ export const ACTIONS = {
     reject: (_c, pr, p) => setStatus('purchase_requests', pr.id, 'ditolak', { notes: `${pr.notes || ''}\nDitolak: ${p.reason}`.trim() }),
     to_po: (ctx, pr, p) => {
       const ls = lines('purchase_request_lines', pr.id).map((l) => ({ product_id: l.product_id, description: l.description, qty: l.qty, price: l.price, discount_pct: 0, amount: l.amount }));
-      const subtotal = sum(ls, (l) => l.amount), tax = round2(subtotal * 0.11);
+      const ppn = getTax(db.get('SELECT tax_id FROM suppliers WHERE id = ?', p.supplier_id)?.tax_id) || defaultTax('ppn');
+      const subtotal = sum(ls, (l) => l.amount), tax = round2(subtotal * (ppn ? ppn.rate : 11) / 100);
       const { id, number } = createDoc(ctx, 'purchase_orders', 'PO', {
         company_id: pr.company_id, branch_id: pr.branch_id, date: today(), supplier_id: p.supplier_id, warehouse_id: p.warehouse_id, purchase_request_id: pr.id, project_id: pr.project_id ?? null,
-        buyer: ctx.user.full_name, subtotal, tax_rate: 11, tax, total: round2(subtotal + tax), status: 'draf',
+        buyer: ctx.user.full_name, subtotal, tax_id: ppn?.id ?? null, tax_rate: ppn ? ppn.rate : 11, tax, total: round2(subtotal + tax), status: 'draf',
       }, ls, 'purchase_order_lines');
       setStatus('purchase_requests', pr.id, 'selesai');
       return { redirect: { entity: 'purchase_orders', id }, message: `PO ${number} dibuat.` };
@@ -1569,7 +1571,7 @@ export const ACTIONS = {
     to_bill: (ctx, po, p) => {
       const { id, number } = createDoc(ctx, 'purchase_bills', 'BILL', withAdvance({
         company_id: po.company_id, branch_id: po.branch_id, date: today(), supplier_id: po.supplier_id, warehouse_id: po.warehouse_id, purchase_order_id: po.id, project_id: po.project_id ?? null, ...fxCopy(po),
-        supplier_invoice_no: p.supplier_invoice_no, subtotal: po.subtotal, tax_rate: po.tax_rate, tax: po.tax, total: po.total, paid: 0, status: 'draf',
+        supplier_invoice_no: p.supplier_invoice_no, subtotal: po.subtotal, tax_id: po.tax_id ?? null, tax_rate: po.tax_rate, tax: po.tax, total: po.total, paid: 0, status: 'draf',
       }, 'purchase_bills', po.id, true), tradeCopy(lines('purchase_order_lines', po.id)), 'purchase_bill_lines');
       const s = db.get('SELECT terms_days FROM suppliers WHERE id = ?', po.supplier_id);
       const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (s?.terms_days ?? 30));
@@ -1598,11 +1600,12 @@ export const ACTIONS = {
         const cid = db.insert('customers', { company_id: lead.company_id, code, name: lead.company_name, segment: 'Korporasi', pic: lead.contact, email: lead.email, phone: lead.phone, credit_limit: 0, terms_days: 30, status: 'aktif', created_at: nowIso(), created_by: ctx.user.id });
         cust = { id: cid };
       }
-      const subtotal = round2(lead.value || 0), tax = round2(subtotal * 0.11);
+      const ppn = getTax(db.get('SELECT tax_id FROM customers WHERE id = ?', cust.id)?.tax_id) || defaultTax('ppn');
+      const subtotal = round2(lead.value || 0), tax = round2(subtotal * (ppn ? ppn.rate : 11) / 100);
       const { id, number } = createDoc(ctx, 'quotations', 'QT', {
         company_id: lead.company_id, branch_id: lead.branch_id, date: today(), valid_until: (() => { const d = new Date(today() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + (Number(approvalPolicy().quoteValidityDays) || 30)); return d.toISOString().slice(0, 10); })(),
         customer_id: cust.id, lead_id: lead.id, attention: lead.contact, email: lead.email, salesperson: lead.owner, revision: 0, terms_days: db.get('SELECT terms_days FROM customers WHERE id = ?', cust.id)?.terms_days ?? 30,
-        subtotal, tax_rate: 11, tax, total: round2(subtotal + tax), status: 'draf', notes: lead.title,
+        subtotal, tax_id: ppn?.id ?? null, tax_rate: ppn ? ppn.rate : 11, tax, total: round2(subtotal + tax), status: 'draf', notes: lead.title,
       }, [], 'quotation_lines');
       db.update('leads', lead.id, { customer_id: cust.id });
       return { redirect: { entity: 'quotations', id }, message: `Penawaran ${number} dibuat. Lengkapi baris barangnya.` };

@@ -9,7 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, fillTaxDefaults, applyTax, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -19,7 +19,7 @@ function tradeTotals(_ctx, row, lines) {
     l.amount = round2((l.qty || 0) * (l.price || 0) * (1 - (l.discount_pct || 0) / 100));
   }
   row.subtotal = sum(lines, (l) => l.amount);
-  row.tax_rate = row.tax_rate ?? 11;
+  applyTax(row); // kode pajak (master pajak) → tarif PPN
   row.tax = round2(row.subtotal * row.tax_rate / 100);
   row.total = round2(row.subtotal + row.tax);
 }
@@ -47,6 +47,7 @@ function noteCompute(partyTable, partyField, docTable, docField, reduces) {
     if (lines) {
       for (const l of lines) if (!(Number(l.amount) > 0)) throw bad('Jumlah setiap baris nota harus lebih dari nol.');
       row.subtotal = sum(lines, (l) => l.amount);
+      applyTax(row, null, null, { optional: true }); // PPN nota opsional: kosong = tanpa PPN
       row.tax_rate = Number(row.tax_rate) || 0;
       row.tax = round2(row.subtotal * row.tax_rate / 100);
       row.total = round2(row.subtotal + row.tax);
@@ -80,7 +81,8 @@ function advanceCompute(table) {
     if (!o) return;
     if (o[cfg.party] !== row[cfg.party]) throw bad('Pesanan bukan milik mitra yang dipilih.');
     if ((Number(o.exchange_rate) || 1) !== 1) throw bad('Faktur uang muka hanya untuk pesanan IDR.');
-    if (row.tax_rate == null || row.tax_rate === '') row.tax_rate = o.tax_rate ?? 11;
+    if (!row.tax_id && (row.tax_rate == null || row.tax_rate === '')) { row.tax_id = o.tax_id ?? null; row.tax_rate = o.tax_rate ?? null; }
+    applyTax(row);
     if (Number(row.percent) > 0) row.amount = round2(o.subtotal * Number(row.percent) / 100);
     row.amount = round2(Number(row.amount) || 0);
     if (!(row.amount > 0)) throw bad('Isi persentase atau nilai uang muka (DPP).');
@@ -174,6 +176,7 @@ function deliveryCompute(_ctx, row, lines) {
 /** Penawaran: total, masa berlaku & termin bawaan, serta indikator harga internal (diskon tertinggi, estimasi HPP & margin). */
 function quotationCompute(ctx, row, lines) {
   applyFx(row, 'customers', 'customer_id');
+  applyTax(row, 'customers', 'customer_id');
   tradeTotals(ctx, row, lines);
   row.revision = row.revision ?? 0;
   if (!row.valid_until && row.date) {
@@ -213,6 +216,7 @@ function returnFrom(srcTable, srcField, srcLines, partyField) {
     row.currency_id = src.currency_id ?? null;
     row.exchange_rate = src.exchange_rate || 1;
     row.tax_rate = src.tax_rate ?? 11;
+    row.tax_id = src.tax_id ?? null;
     if (lines) {
       const sl = db.all(`SELECT * FROM ${srcLines} WHERE parent_id = ?`, src.id);
       for (const l of lines) {
@@ -286,9 +290,9 @@ const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75,
 
 export const HOOKS = {
   quotations: { compute: quotationCompute },
-  purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
+  purchase_orders: { compute: (c, row, lines) => { applyFx(row, 'suppliers', 'supplier_id'); applyTax(row, 'suppliers', 'supplier_id'); tradeTotals(c, row, lines); } },
   sales_invoices: {
-    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'sales_invoices'); applyTerm(row, 'customers', 'customer_id'); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
+    compute: (ctx, row, lines) => { applyFx(row, 'customers', 'customer_id'); applyTax(row, 'customers', 'customer_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'sales_invoices'); applyTerm(row, 'customers', 'customer_id'); defaultDue(row, 'customers', 'customer_id'); row.paid = row.paid || 0; },
     // Faktur dari surat jalan: baris terkunci (qty & barang mengikuti surat jalan); hapus draf → surat jalan dapat difakturkan lagi.
     beforeUpdate: (_c, row, existing, body) => {
       if (body.lines !== undefined && db.get('SELECT id FROM delivery_orders WHERE invoice_id = ?', existing.id)) throw bad('Baris faktur dari surat jalan tidak dapat diubah. Hapus draf faktur lalu buat ulang dari surat jalan yang benar.');
@@ -331,7 +335,7 @@ export const HOOKS = {
   purchase_bills: {
     compute: (ctx, row, lines) => {
       if (lines) for (const l of lines) if (!l.product_id && !l.account_id) throw bad('Setiap baris tagihan harus memilih barang atau akun.');
-      applyFx(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'purchase_bills'); applyTerm(row, 'suppliers', 'supplier_id'); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
+      applyFx(row, 'suppliers', 'supplier_id'); applyTax(row, 'suppliers', 'supplier_id'); tradeTotals(ctx, row, lines); applyAdvanceDeduction(row, 'purchase_bills'); applyTerm(row, 'suppliers', 'supplier_id'); defaultDue(row, 'suppliers', 'supplier_id'); row.paid = row.paid || 0;
     },
   },
   pos_sales: {
@@ -365,6 +369,19 @@ export const HOOKS = {
     },
   },
   products: { compute: (_c, row) => { fillProductDefaults(row); }, beforeUpdate: (_c, row, existing) => guardProductAccounts(row, existing) },
+  // Master pajak: akun kosong diisi akun bawaan jenisnya; hanya satu kode bawaan per jenis; kode yang dipakai tidak dapat dihapus.
+  taxes: {
+    compute: (_c, row) => {
+      if (row.rate < 0) throw bad('Tarif pajak tidak boleh negatif.');
+      fillTaxDefaults(row);
+      if (row.is_default) db.run('UPDATE taxes SET is_default = 0 WHERE kind = ? AND id IS NOT ?', row.kind, row.id ?? null);
+    },
+    beforeDelete: (_c, t) => {
+      const used = [['sales_invoices', 'tax_id'], ['purchase_bills', 'tax_id'], ['sales_orders', 'tax_id'], ['purchase_orders', 'tax_id'], ['quotations', 'tax_id'], ['customers', 'tax_id'], ['suppliers', 'tax_id'], ['suppliers', 'pph_tax_id'], ['customer_receipts', 'pph_tax_id'], ['supplier_payments', 'pph_tax_id']]
+        .find(([tb, f]) => db.get(`SELECT 1 FROM ${tb} WHERE ${f} = ? LIMIT 1`, t.id));
+      if (used) throw conflict(`Kode pajak ${t.code} sudah dipakai (${used[0]}); nonaktifkan saja.`);
+    },
+  },
   customer_deposits: { compute: depositCompute },
   supplier_deposits: { compute: depositCompute },
   cash_transactions: { compute: amountTotal },
@@ -411,7 +428,7 @@ export const HOOKS = {
   budgets: { compute: (_c, row) => phaseBudget(row) },
   // Pesanan draf dari penawaran dihapus → penawaran kembali "diterima" agar dapat dibuatkan pesanan lagi.
   sales_orders: {
-    compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); tradeTotals(c, row, lines); },
+    compute: (c, row, lines) => { applyFx(row, 'customers', 'customer_id'); applyTax(row, 'customers', 'customer_id'); tradeTotals(c, row, lines); },
     beforeDelete: (_c, so) => { if (so.quotation_id) db.run("UPDATE quotations SET status = 'diterima', sales_order_id = NULL WHERE id = ? AND sales_order_id = ?", so.quotation_id, so.id); },
   },
   projects: {

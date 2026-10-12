@@ -112,10 +112,23 @@ aktif, nilai perolehan dan akun aset/akumulasi terkunci; yang masih dapat diubah
 lokasi, dan akun beban penyusutan (berlaku untuk penyusutan berikutnya), laba/rugi pelepasan,
 serta beban pemeliharaan. Aset aktif tidak dapat dihapus (gunakan *Lepas / jual aset*).
 
-**Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: PPN masukan/
-keluaran, RAK, investasi & ekuitas, selisih kurs, penyesuaian persediaan & selisih harga,
-barang dalam proses, PPh 23, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset,
-akun gaji/PPh 21/BPJS di master karyawan, akun biaya bank/giro/selisih kas di master kas & bank). Saat pemutakhiran, penyesuaian akun mitra/barang
+**Master Pajak** (`taxes`, Keuangan → Master Pajak) menyimpan kode pajak berjenis PPN atau
+PPh 23 beserta tarif, penanda bawaan per jenis, dan dua akun: *akun pajak penjualan* (PPN
+keluaran / PPh 23 dibayar di muka) dan *akun pajak pembelian* (PPN masukan / hutang PPh 23).
+Bawaan: PPN11 (bawaan), PPN12, PPN0, PPH23 (bawaan). Penawaran, pesanan, faktur, tagihan, POS,
+nota, uang muka, dan retur menyimpan `tax_id`; tarif PPN mengikuti kode tersebut. Tanpa kode,
+dipakai kode PPN bawaan pelanggan/pemasok lalu kode PPN bawaan perusahaan; tarif yang dikirim
+tanpa kode (API lama) dicocokkan ke kode bertarif sama. Konversi dokumen (penawaran → pesanan
+→ faktur, PO → tagihan, uang muka, retur) membawa kode pajak dokumen asal. Kode PPh 23 dipilih
+pada penerimaan/pembayaran (bawaan pemasok untuk pembayaran). Posting PPN & PPh 23 memakai akun
+kode pajak; rekap pajak menjumlahkan seluruh akun PPN dari master pajak dan seluruh akun PPh 21
+karyawan. Kode yang sudah dipakai tidak dapat dihapus (nonaktifkan).
+
+**Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: RAK, investasi
+& ekuitas, selisih kurs, penyesuaian persediaan & selisih harga, barang dalam proses, serta akun
+kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset, akun gaji/
+PPh 21/BPJS di master karyawan, akun biaya bank/giro/selisih kas di master kas & bank, akun PPN
+& PPh 23 di master pajak). Saat pemutakhiran, penyesuaian akun mitra/barang/pajak
 yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)

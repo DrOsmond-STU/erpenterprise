@@ -110,7 +110,7 @@ test('pemasok dengan akun hutang khusus & jasa dengan akun beban: tagihan dan pe
 
 test('Pengaturan hanya berisi akun sistem; akun data master tidak dapat diatur di sana', async () => {
   const s = (await admin.get('/api/settings')).body.account_map;
-  assert.ok(s.vat_out && s.retained_earnings && s.fx_gain, 'akun sistem tersedia');
+  assert.ok(s.inter_branch && s.retained_earnings && s.fx_gain, 'akun sistem tersedia');
   for (const k of ['ar', 'ap', 'inventory', 'cogs', 'sales', 'customer_advance', 'supplier_advance', 'deposit_saldo', 'sales_returns']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
   assert.equal((await admin.put('/api/settings/account_map', { ar: '1-1210' })).status, 400, 'akun piutang tidak lagi di Pengaturan');
   ok(await admin.put('/api/settings/account_map', { fx_gain: '7-1200' }), 'akun sistem tetap dapat diubah');
@@ -214,4 +214,63 @@ test('kas & bank: akun biaya bank, giro mundur & selisih kas per rekening; regis
   ok(await admin.put(`/api/e/bank_accounts/${b.id}`, { row_version: cur2.row_version, giro_in_account_id: acc('1-1250') }), 'akun giro dapat diganti setelah tidak ada giro beredar');
   const s = (await admin.get('/api/settings')).body.account_map;
   for (const k of ['bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
+});
+
+test('master pajak: kode PPN/PPh 23 dengan akun sendiri; dokumen, pelanggan & pemasok memakai kode pajak; rekap pajak mencakup semua akun', async () => {
+  for (const [code, name, type, par, subtype] of [['2-1210', 'PPN Keluaran — Tarif 12%', 'liability', '2-1000', 'current_liability'], ['1-1405', 'PPN Masukan — Tarif 12%', 'asset', '1-1000', 'current_asset'], ['1-1415', 'PPh 23 Dibayar di Muka — BUMN', 'asset', '1-1000', 'current_asset']]) {
+    if (!db.get('SELECT id FROM accounts WHERE code = ?', code)) ok(await admin.post('/api/e/accounts', { code, name, type, parent_id: acc(par), is_header: 0, subtype, status: 'aktif' }), code);
+  }
+  const tax = (code) => db.get('SELECT * FROM taxes WHERE code = ?', code);
+  const ppn11 = tax('PPN11'), ppn12 = tax('PPN12'), ppn0 = tax('PPN0'), pph = tax('PPH23');
+  assert.ok(ppn11.is_default && pph.is_default, 'kode bawaan PPN 11% & PPh 23');
+  assert.equal(ppn11.sales_account_id, acc('2-1200')); assert.equal(ppn11.purchase_account_id, acc('1-1400'));
+  assert.equal(pph.sales_account_id, acc('1-1410')); assert.equal(pph.purchase_account_id, acc('2-1330'));
+  let cur = (await admin.get(`/api/e/taxes/${ppn12.id}`)).body;
+  ok(await admin.put(`/api/e/taxes/${ppn12.id}`, { row_version: cur.row_version, sales_account_id: acc('2-1210'), purchase_account_id: acc('1-1405') }), 'akun PPN 12%');
+
+  // Faktur dengan kode PPN 12% → tarif 12% dan PPN keluaran ke akun kode tersebut.
+  const rep0 = (await admin.get('/api/reports/pajak?to=2026-12-31')).body.totals.vatOut;
+  const k12 = gl('2-1210'), k11 = gl('2-1200');
+  const inv = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: id('customers', 'C002'), warehouse_id: WH(), tax_id: ppn12.id, lines: [{ product_id: id('products', 'SV-301'), qty: 2, price: 1_000_000 }] }));
+  assert.equal(inv.tax_rate, 12); near(inv.tax, inv.subtotal * 0.12, 'PPN 12%');
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/post`));
+  near(gl('2-1210') - k12, -inv.tax, 'PPN keluaran akun 12%'); near(gl('2-1200') - k11, 0, 'bukan akun PPN umum');
+  near((await admin.get('/api/reports/pajak?to=2026-12-31')).body.totals.vatOut - rep0, inv.tax, 'rekap pajak mencakup akun kode 12%');
+  assert.equal((await admin.del(`/api/e/taxes/${ppn12.id}`)).status, 409, 'kode yang dipakai tidak dapat dihapus');
+
+  // Tanpa kode: kode bawaan pelanggan (PPN 0%), lalu bawaan perusahaan; tarif lama dicocokkan ke kode.
+  const c5 = id('customers', 'C005');
+  cur = (await admin.get(`/api/e/customers/${c5}`)).body;
+  ok(await admin.put(`/api/e/customers/${c5}`, { row_version: cur.row_version, tax_id: ppn0.id }));
+  const exp = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: c5, warehouse_id: WH(), lines: [{ product_id: id('products', 'SV-301'), qty: 1, price: 1_000_000 }] }));
+  assert.equal(exp.tax_id, ppn0.id); assert.equal(exp.tax, 0, 'PPN 0% dari pelanggan');
+  const dom = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: id('customers', 'C002'), warehouse_id: WH(), lines: [{ product_id: id('products', 'SV-301'), qty: 1, price: 1_000_000 }] }));
+  assert.equal(dom.tax_id, ppn11.id); assert.equal(dom.tax_rate, 11, 'kode PPN bawaan');
+  const legacy = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: c5, warehouse_id: WH(), tax_rate: 12, lines: [{ product_id: id('products', 'SV-301'), qty: 1, price: 1_000_000 }] }));
+  assert.equal(legacy.tax_id, ppn12.id, 'tarif dicocokkan ke kode');
+  cur = (await admin.get(`/api/e/sales_invoices/${dom.id}`)).body;
+  const ch = ok(await admin.put(`/api/e/sales_invoices/${dom.id}`, { row_version: cur.row_version, tax_id: ppn12.id }));
+  assert.equal(ch.tax_rate, 12, 'ganti kode → tarif ikut');
+  assert.equal((await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: c5, warehouse_id: WH(), tax_id: pph.id, lines: [{ product_id: id('products', 'SV-301'), qty: 1, price: 1 }] })).status, 400, 'kode PPh tidak untuk PPN dokumen');
+  cur = (await admin.get(`/api/e/customers/${c5}`)).body;
+  ok(await admin.put(`/api/e/customers/${c5}`, { row_version: cur.row_version, tax_id: null }));
+
+  // PPh 23 dengan akun sendiri (mis. pemotong BUMN) saat penerimaan.
+  const bumn = ok(await admin.post('/api/e/taxes', { code: 'PPH23-BUMN', name: 'PPh 23 dipotong BUMN', kind: 'pph23', rate: 2, sales_account_id: acc('1-1415') }));
+  assert.equal(bumn.purchase_account_id, acc('2-1330'), 'akun kosong diisi bawaan jenisnya');
+  const p0 = gl('1-1415'), pg0 = gl('1-1410');
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/receive`, { date: '2026-10-07', source: 'bank', bank_account_id: id('bank_accounts', 'BCA-JKT'), amount: 1_000_000, discount: 0, pph23: 40_000, pph_tax_id: bumn.id, bank_charge: 0 }));
+  near(gl('1-1415') - p0, 40_000, 'PPh 23 ke akun kode BUMN'); near(gl('1-1410') - pg0, 0, 'bukan akun PPh 23 umum');
+  await reconciled();
+
+  // Satu kode bawaan per jenis.
+  const alt = ok(await admin.post('/api/e/taxes', { code: 'PPN11-ALT', name: 'PPN 11% alternatif', kind: 'ppn', rate: 11, is_default: 1 }));
+  assert.equal(tax('PPN11').is_default, 0, 'bawaan lama dilepas');
+  cur = (await admin.get(`/api/e/taxes/${ppn11.id}`)).body;
+  ok(await admin.put(`/api/e/taxes/${ppn11.id}`, { row_version: cur.row_version, is_default: 1 }));
+  assert.equal(tax('PPN11-ALT').is_default, 0);
+  ok(await admin.del(`/api/e/taxes/${alt.id}`), 'kode belum dipakai dapat dihapus');
+
+  const s = (await admin.get('/api/settings')).body.account_map;
+  for (const k of ['vat_out', 'vat_in', 'pph23_prepaid', 'pph23_payable']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
 });

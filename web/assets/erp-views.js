@@ -344,7 +344,7 @@
       if (ev.target.closest('[data-pos-pay]')) {
         if (!cart.length) return toast('Keranjang kosong', '', 'warn');
         const f = $('[data-pos-form]', root);
-        const body = { date: state.meta.today, warehouse_id: Number(f.warehouse_id.value), bank_account_id: Number(f.bank_account_id.value), payment_method: f.payment_method.value, customer_name: 'Umum', tax_rate: 11, lines: cart.map((l) => ({ product_id: l.product_id, qty: l.qty, price: l.price, discount_pct: 0 })) };
+        const body = { date: state.meta.today, warehouse_id: Number(f.warehouse_id.value), bank_account_id: Number(f.bank_account_id.value), payment_method: f.payment_method.value, customer_name: 'Umum', lines: cart.map((l) => ({ product_id: l.product_id, qty: l.qty, price: l.price, discount_pct: 0 })) };
         if (!body.warehouse_id || !body.bank_account_id) return toast('Lengkapi gudang & laci kas', '', 'warn');
         try {
           const s = await api('POST', '/api/e/pos_sales', body);
@@ -456,12 +456,12 @@
     requireJournalApproval: 'Jurnal manual wajib disetujui', budgetControl: 'Kontrol anggaran (COA & proyek)',
     soRequiresQuotation: 'Pesanan penjualan wajib dari penawaran yang diterima pelanggan', quoteValidityDays: 'Masa berlaku penawaran bawaan (hari)',
     quoteDiscountLimit: 'Diskon maksimum penawaran tanpa persetujuan (%)', quoteMinMargin: 'Margin kotor minimum penawaran (%)', quoteApprovalThreshold: 'Ambang persetujuan nilai penawaran (Rp)',
-    // Akun sistem (akun pelanggan, pemasok, persediaan & jasa ada di data master masing-masing).
-    vat_in: 'PPN masukan', vat_out: 'PPN keluaran', inter_branch: 'Rekening antar cabang (RAK)', investment_sub: 'Investasi pada entitas anak',
+    // Akun sistem (akun pelanggan, pemasok, persediaan, jasa, aset, karyawan, kas/bank & pajak ada di data master masing-masing).
+    inter_branch: 'Rekening antar cabang (RAK)', investment_sub: 'Investasi pada entitas anak',
     share_capital: 'Modal disetor', retained_earnings: 'Saldo laba',
     stock_adjustment: 'Selisih / penyesuaian persediaan', wip: 'Barang dalam proses (produksi)',
     fx_gain: 'Laba selisih kurs', fx_loss: 'Rugi selisih kurs',
-    purchase_variance: 'Selisih harga pembelian / retur', pph23_prepaid: 'PPh 23 dibayar di muka', pph23_payable: 'Hutang PPh 23',
+    purchase_variance: 'Selisih harga pembelian / retur',
     deposit_forfeit: 'Pendapatan kompensasi (jaminan pelanggan dicairkan)', sdeposit_forfeit: 'Beban jaminan hangus (di pemasok)',
   };
   const SETTING_OPTIONS = { budgetControl: [['none', 'Tanpa kontrol'], ['warn', 'Peringatan saat posting'], ['block', 'Blokir transaksi melebihi anggaran']] };
@@ -477,7 +477,7 @@
       ${canEdit ? `<div class="form-grid-full"><button class="btn btn-primary" type="submit">${icon('check')} Simpan ${esc(title.toLowerCase())}</button></div>` : ''}</form></article>`;
     root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, akun sistem, dan tampilan. Setiap perubahan tercatat di jejak audit.') +
       `<div class="grid grid-1-1">${group('security_policy', 'Kebijakan keamanan', 'ISO 27001 A.5.17, A.8.5')}${group('approval_policy', 'Kebijakan persetujuan', 'Pemisahan tugas A.5.3')}</div>
-      ${group('account_map', 'Akun sistem', 'Akun pajak, ekuitas, RAK, selisih kurs, dan sejenisnya. Akun piutang/hutang, uang muka, deposit, potongan, persediaan, HPP, pendapatan, retur, beban jasa, akun aset, penyusutan, pelepasan & pemeliharaan, akun gaji, PPh 21 & BPJS, serta akun biaya bank, giro & selisih kas diatur pada data master Pelanggan, Pemasok, Produk & Layanan, Aset Tetap, Karyawan, dan Kas & Bank.')}
+      ${group('account_map', 'Akun sistem', 'Akun ekuitas, RAK, investasi, selisih kurs, penyesuaian persediaan, dan sejenisnya. Akun piutang/hutang, uang muka, deposit, potongan, persediaan, HPP, pendapatan, retur, beban jasa, akun aset, penyusutan, pelepasan & pemeliharaan, akun gaji, PPh 21 & BPJS, akun biaya bank, giro & selisih kas, serta akun PPN masukan/keluaran & PPh 23 diatur pada data master Pelanggan, Pemasok, Produk & Layanan, Aset Tetap, Karyawan, Kas & Bank, dan Master Pajak.')}
       <article class="card"><div class="card-head"><div class="card-head-text"><h2 class="card-title">Tampilan</h2></div></div><div class="pad"><div class="segmented" role="group" aria-label="Tema">
         <button data-theme-set="light" aria-pressed="${state.theme === 'light'}">Terang</button><button data-theme-set="dark" aria-pressed="${state.theme === 'dark'}">Gelap</button><button data-theme-set="system" aria-pressed="${state.theme === 'system'}">Ikut sistem</button></div></div></article>`;
   }

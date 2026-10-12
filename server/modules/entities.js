@@ -22,9 +22,14 @@ const F = {
   email: (o = {}) => ({ name: 'email', label: 'Surel', type: 'email', max: 160, ...o }),
 };
 
+/* PPN dokumen: kode pajak (master pajak) menentukan tarif & akun. Tarif tersimpan di dokumen;
+   lewat API boleh dikirim tarif saja (dicocokkan ke kode PPN bertarif sama). */
+const taxRef = (help = 'Tarif & akun PPN dari master pajak. Kosong = kode PPN bawaan pelanggan/pemasok, atau PPN bawaan.') =>
+  F.ref('tax_id', 'Kode pajak (PPN)', 'taxes', { refFilter: { kind: 'ppn', status: 'aktif' }, help });
 const docTotals = () => [
   F.money('subtotal', 'Subtotal', { readonly: true }),
-  F.pct('tax_rate', 'PPN (%)', { default: 11 }),
+  taxRef(),
+  F.pct('tax_rate', 'PPN (%)', { hidden: true }),
   F.money('tax', 'PPN', { readonly: true }),
   F.money('total', 'Total', { readonly: true, list: true }),
 ];
@@ -109,7 +114,7 @@ function noteEntity({ label, one, module, number, party, doc, reduces, defaultHe
     F.text('reference', 'No. dokumen mitra / referensi', { max: 60, search: true }),
     F.area('description', 'Uraian', { required: true, search: true }),
     ...(reduces ? [] : [F.date('due_date', 'Jatuh tempo', { list: true, help: 'Kosong = tanggal + termin hari mitra.' })]),
-    F.money('subtotal', 'Subtotal', { readonly: true }), F.pct('tax_rate', 'PPN (%)', { default: 0, help: 'Isi bila penyesuaian mengoreksi DPP ber-PPN.' }), F.money('tax', 'PPN', { readonly: true }),
+    F.money('subtotal', 'Subtotal', { readonly: true }), taxRef('Isi bila penyesuaian mengoreksi DPP ber-PPN. Kosong = tanpa PPN.'), F.pct('tax_rate', 'PPN (%)', { hidden: true }), F.money('tax', 'PPN', { readonly: true }),
     F.money('total', 'Total', { readonly: true, list: true }),
     ...(reduces ? [F.text('approval_note', 'Catatan persetujuan', { readonly: true, max: 300 })] : [F.money('paid', 'Terbayar', { readonly: true, list: true })]),
     F.status(reduces ? ['draf', 'menunggu', 'diposting', 'ditolak', 'batal'] : ['draf', 'terbit', 'sebagian', 'lunas', 'batal'], 'draf'),
@@ -139,7 +144,7 @@ function advanceEntity({ label, one, module, number, party, order, ar }) {
       ...(ar ? [] : [F.text('supplier_invoice_no', 'No. faktur uang muka pemasok', { max: 60, search: true })]),
       F.pct('percent', 'Persentase dari DPP pesanan', { help: 'Isi % agar nilai dihitung dari DPP pesanan; kosongkan untuk mengisi nilai langsung.' }),
       F.money('amount', 'Nilai uang muka (DPP)', { help: 'Total uang muka per pesanan tidak boleh melebihi DPP pesanan.' }),
-      F.pct('tax_rate', 'PPN (%)', { help: 'Kosong = tarif PPN pesanan.' }),
+      taxRef('Kosong = kode pajak pesanan.'), F.pct('tax_rate', 'PPN (%)', { hidden: true }),
       F.money('tax', 'PPN', { readonly: true }),
       F.money('total', 'Total ditagih', { readonly: true, list: true }),
       F.money('paid', 'Terbayar', { readonly: true, list: true }),
@@ -168,6 +173,7 @@ const PURCHASE_RETURN_ADV_MODES = [['pulihkan', 'Pulihkan ke uang muka (dipotong
 /* Deposit pelanggan: saldo prabayar (dipakai melunasi faktur) atau uang jaminan (dikembalikan / dicairkan). */
 const DEPOSIT_KINDS = [['saldo', 'Deposit saldo (prabayar) — dipakai melunasi faktur'], ['jaminan', 'Uang jaminan — dikembalikan di akhir kontrak']];
 const SUPPLIER_DEPOSIT_KINDS = [['saldo', 'Deposit saldo (prabayar) — dipakai membayar tagihan'], ['jaminan', 'Uang jaminan — kembali di akhir kontrak']];
+const TAX_KINDS_ENT = [['ppn', 'PPN'], ['pph23', 'PPh 23']];
 const NOTE_REASONS = [['harga', 'Koreksi harga'], ['potongan', 'Potongan / rabat'], ['klaim', 'Klaim kerusakan / kekurangan'], ['ongkos', 'Ongkos kirim / biaya tambahan'], ['denda', 'Denda / bunga keterlambatan'], ['lainnya', 'Lainnya']];
 
 /* Pembayaran bertahap: jenis penerimaan/pembayaran & parameter aksi cepat dari faktur/tagihan. */
@@ -195,6 +201,7 @@ const PAY_PARAMS = (bankLabel, pphLabel, ar = bankLabel === 'Diterima di') => [
   { name: 'amount', label: 'Jumlah dibayar (kas/uang muka)', type: 'money', required: true, help: 'Boleh sebagian — sisa tetap terbuka sesuai jadwal angsuran.' },
   { name: 'discount', label: 'Potongan / diskon', type: 'money', default: 0 },
   { name: 'pph23', label: pphLabel, type: 'money', default: 0 },
+  { name: 'pph_tax_id', label: 'Kode PPh 23', type: 'ref', ref: 'taxes', refFilter: { kind: 'pph23', status: 'aktif' }, help: 'Kosong = PPh 23 bawaan.' },
   { name: 'bank_charge', label: 'Biaya bank', type: 'money', default: 0 },
   { name: 'reference', label: 'Referensi', type: 'text' },
 ];
@@ -551,6 +558,7 @@ export const ENTITIES = {
       F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
+      F.ref('tax_id', 'Kode pajak PPN bawaan', 'taxes', { refFilter: { kind: 'ppn', status: 'aktif' }, help: 'Dipakai dokumen penjualan bila kode pajak dikosongkan (mis. PPN 0% untuk pelanggan ekspor). Kosong = PPN bawaan.' }),
       acctRef('ar_account_id', 'Akun piutang usaha', 'Kosong = 1-1200 Piutang Usaha (1-1600 untuk pelanggan antar perusahaan).'),
       acctRef('sales_account_id', 'Akun pendapatan penjualan', 'Kosong = akun pendapatan pada barang/jasa (4-1400 untuk pelanggan antar perusahaan).', { type: 'revenue' }),
       acctRef('discount_account_id', 'Akun potongan penjualan', 'Potongan saat pelunasan. Kosong = 4-1900.'),
@@ -711,6 +719,7 @@ export const ENTITIES = {
       F.sel('giro_status', 'Status giro', GIRO_STATUS, { readonly: true, list: true }),
       F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Diterima di', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka" / "Pakai deposit pelanggan".' }),
+      F.ref('pph_tax_id', 'Kode PPh 23', 'taxes', { refFilter: { kind: 'pph23', status: 'aktif' }, help: 'Untuk PPh 23 yang dipotong pelanggan. Kosong = PPh 23 bawaan.' }),
       F.ref('deposit_id', 'Deposit pelanggan', 'customer_deposits', { refParent: 'customer_id', refFilter: { status: ['diterima', 'terpakai'] }, help: 'Wajib untuk jenis "Pakai deposit pelanggan".' }),
       ...fx(),
       F.money('advance', 'Uang muka diterima', { help: 'Hanya untuk jenis "Terima titipan / uang muka tanpa faktur" — dicatat sebagai Uang Muka Pelanggan.' }),
@@ -764,6 +773,8 @@ export const ENTITIES = {
       F.int('terms_days', 'Termin (hari)', { default: 30 }), F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }), F.int('lead_time_days', 'Waktu tunggu (hari)', { default: 7, list: true }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
+      F.ref('tax_id', 'Kode pajak PPN bawaan', 'taxes', { refFilter: { kind: 'ppn', status: 'aktif' }, help: 'Dipakai dokumen pembelian bila kode pajak dikosongkan (mis. PPN 0% untuk pemasok impor/non-PKP). Kosong = PPN bawaan.' }),
+      F.ref('pph_tax_id', 'Kode PPh 23 bawaan', 'taxes', { refFilter: { kind: 'pph23', status: 'aktif' }, help: 'Dipakai saat memotong PPh 23 pemasok ini. Kosong = PPh 23 bawaan.' }),
       acctRef('ap_account_id', 'Akun hutang usaha', 'Kosong = 2-1100 Hutang Usaha (2-1500 untuk pemasok antar perusahaan).'),
       acctRef('discount_account_id', 'Akun potongan pembelian', 'Potongan saat pelunasan. Kosong = 7-1300.'),
       acctRef('advance_account_id', 'Akun titipan / uang muka ke pemasok', 'Titipan tanpa faktur & saldo kredit di pemasok. Kosong = 1-1510.'),
@@ -893,6 +904,7 @@ export const ENTITIES = {
       F.sel('giro_status', 'Status giro', GIRO_STATUS, { readonly: true, list: true }),
       F.date('giro_cleared', 'Tanggal giro cair/ditolak', { readonly: true }),
       F.ref('bank_account_id', 'Dibayar dari', 'bank_accounts', { list: true, help: 'Wajib kecuali "Pakai saldo uang muka" / "Pakai deposit di pemasok".' }),
+      F.ref('pph_tax_id', 'Kode PPh 23', 'taxes', { refFilter: { kind: 'pph23', status: 'aktif' }, help: 'Untuk PPh 23 yang kita potong. Kosong = kode PPh 23 pemasok atau PPh 23 bawaan.' }),
       F.ref('deposit_id', 'Deposit di pemasok', 'supplier_deposits', { refParent: 'supplier_id', refFilter: { status: ['dibayar', 'terpakai'] }, help: 'Wajib untuk jenis "Pakai deposit di pemasok".' }),
       ...fx(),
       F.money('advance', 'Uang muka dibayar', { help: 'Hanya untuk jenis "Bayar titipan / uang muka tanpa faktur" — dicatat sebagai Uang Muka Pembelian.' }),
@@ -1188,7 +1200,7 @@ export const ENTITIES = {
       F.money('advance_part', 'DPP retur dari uang muka', { readonly: true }),
       F.money('subtotal', 'Subtotal', { readonly: true }),
       F.money('advance_amount', 'DPP dipulihkan ke uang muka', { readonly: true }),
-      F.pct('tax_rate', 'PPN (%)', { default: 11 }),
+      F.ref('tax_id', 'Kode pajak (PPN)', 'taxes', { readonly: true, help: 'Mengikuti dokumen asal.' }), F.pct('tax_rate', 'PPN (%)', { hidden: true }),
       F.money('tax', 'PPN', { readonly: true }),
       F.money('total', 'Total nota retur', { readonly: true, list: true }),
       F.money('to_invoice', 'Mengurangi piutang faktur', { readonly: true }),
@@ -1214,7 +1226,7 @@ export const ENTITIES = {
       F.money('advance_part', 'DPP retur dari uang muka', { readonly: true }),
       F.money('subtotal', 'Subtotal', { readonly: true }),
       F.money('advance_amount', 'DPP dipulihkan ke uang muka', { readonly: true }),
-      F.pct('tax_rate', 'PPN (%)', { default: 11 }),
+      F.ref('tax_id', 'Kode pajak (PPN)', 'taxes', { readonly: true, help: 'Mengikuti dokumen asal.' }), F.pct('tax_rate', 'PPN (%)', { hidden: true }),
       F.money('tax', 'PPN', { readonly: true }),
       F.money('total', 'Total nota retur', { readonly: true, list: true }),
       F.money('to_invoice', 'Mengurangi hutang tagihan', { readonly: true }),
@@ -1230,6 +1242,19 @@ export const ENTITIES = {
   customer_debit_notes: noteEntity({ label: 'Nota Debet Pelanggan', one: 'nota debet', module: 'sales', number: 'ND', party: ['customer_id', 'Pelanggan', 'customers'], doc: ['invoice_id', 'Faktur terkait', 'sales_invoices'], reduces: false, defaultHelp: 'Mis. akun pendapatan/penggantian ongkos kirim, denda keterlambatan, kurang tagih.' }),
   supplier_debit_notes: noteEntity({ label: 'Nota Debet Pemasok', one: 'nota debet', module: 'purchasing', number: 'NDB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Terapkan ke tagihan', 'purchase_bills'], reduces: true, defaultHelp: 'Mis. 7-1300 Potongan Pembelian, akun beban/persediaan yang dikoreksi (klaim, lebih tagih).' }),
   supplier_credit_notes: noteEntity({ label: 'Nota Kredit Pemasok', one: 'nota kredit', module: 'purchasing', number: 'NKB', party: ['supplier_id', 'Pemasok', 'suppliers'], doc: ['bill_id', 'Tagihan terkait', 'purchase_bills'], reduces: false, defaultHelp: 'Mis. beban angkut, biaya tambahan, kurang tagih pemasok.' }),
+  taxes: {
+    label: 'Master Pajak', one: 'kode pajak', module: 'finance', scope: 'global', title: 'name', sort: 'code',
+    fields: [
+      F.code({ label: 'Kode pajak', max: 20 }), F.name(),
+      F.sel('kind', 'Jenis pajak', TAX_KINDS_ENT, { required: true, default: 'ppn', list: true }),
+      F.pct('rate', 'Tarif (%)', { required: true, list: true }),
+      F.bool('is_default', 'Bawaan untuk jenisnya', { list: true, help: 'Dipakai bila dokumen/mitra tidak memilih kode pajak. Hanya satu bawaan per jenis.' }),
+      F.area('description', 'Keterangan', { help: 'Mis. dasar hukum, fasilitas, ketentuan faktur pajak.' }),
+      F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('sales_account_id', 'Akun pajak penjualan', 'PPN: PPN keluaran (kosong = 2-1200). PPh 23: PPh 23 dibayar di muka, dipotong pelanggan (kosong = 1-1410).'),
+      acctRef('purchase_account_id', 'Akun pajak pembelian', 'PPN: PPN masukan (kosong = 1-1400). PPh 23: hutang PPh 23 yang kita potong (kosong = 2-1330).'),
+    ],
+  },
   customer_deposits: {
     label: 'Deposit Pelanggan', one: 'deposit pelanggan', module: 'sales', scope: 'branch', title: 'number', number: 'DPS', sort: 'date', sortDir: 'desc',
     editable: ['draf'],

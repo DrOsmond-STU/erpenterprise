@@ -347,6 +347,10 @@ export async function update(ctx, key, id, body = {}) {
 
   return db.tx(() => {
     const merged = { ...existing, ...row };
+    // Kode pajak dikosongkan di formulir (tarif tersembunyi tidak dikirim) → tarif ditentukan ulang dari bawaan.
+    if ('tax_id' in row && !row.tax_id && !('tax_rate' in row) && 'tax_rate' in existing) merged.tax_rate = null;
+    // Tarif dikirim tanpa kode (API lama) → kode pajak dicocokkan ulang dari tarif.
+    if ('tax_rate' in row && !('tax_id' in row) && 'tax_id' in existing) merged.tax_id = null;
     if (hooks.compute) {
       const ls = lines || (e.lines ? db.all(`SELECT * FROM "${e.lines.table}" WHERE parent_id = ? ORDER BY line_no`, id) : null);
       hooks.compute(ctx, merged, ls);
@@ -416,7 +420,7 @@ export async function runAction(ctx, key, id, actionName, params = {}) {
 
 /* --- Pencarian rujukan ------------------------------------------------------ */
 /* Data induk yang dirujuk lintas modul (mis. produk di penjualan & pembelian). */
-const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles', 'currencies', 'warehouse_bins', 'payment_terms']);
+const SHARED_LOOKUPS = new Set(['products', 'warehouses', 'accounts', 'cost_centers', 'projects', 'bank_accounts', 'customers', 'suppliers', 'boms', 'branches', 'companies', 'fixed_assets', 'purchase_requests', 'quotations', 'sales_orders', 'purchase_orders', 'leads', 'roles', 'currencies', 'warehouse_bins', 'payment_terms', 'taxes']);
 
 export function lookup(ctx, key, q = {}) {
   const e = mustEntity(key);

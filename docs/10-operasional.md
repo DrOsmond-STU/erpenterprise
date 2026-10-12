@@ -30,10 +30,13 @@ untuk mengulang dari awal.
 3. `sudo systemctl enable --now erp`, pasang `deploy/nginx.conf`.
 4. Masuk sebagai `admin`, ganti sandi (wajib), aktifkan MFA, lalu:
    * Administrasi → Perusahaan & Cabang: lengkapi data entitas.
-   * Keuangan → Bagan Akun: sesuaikan bila perlu; Pengaturan → Akun sistem (PPN, RAK, ekuitas, dll.).
+   * Keuangan → Bagan Akun: sesuaikan bila perlu; Pengaturan → Akun sistem (RAK, ekuitas, selisih kurs, dll.).
    * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
      **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per
      lini produk, beban jasa); kolom yang kosong diisi akun bawaan saat disimpan.
+   * Keuangan → Master Pajak: periksa kode PPN (11%, 12%, 0%) dan PPh 23 beserta akun pajak
+     penjualan/pembelian; tandai kode bawaan per jenis. Atur kode PPN bawaan pada pelanggan
+     (mis. PPN 0% untuk ekspor) dan kode PPN/PPh 23 bawaan pada pemasok bila berbeda.
    * Keuangan → Kas & Bank: tiap rekening memiliki akun kas/bank, biaya administrasi bank, giro
      mundur diterima/diberikan, dan selisih kas (laci kasir) — pisahkan bila perlu per bank.
    * SDM → Karyawan: atur akun beban gaji per karyawan bila berbeda (mis. 5-1400 tenaga kerja

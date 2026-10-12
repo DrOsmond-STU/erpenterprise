@@ -11,6 +11,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct, accountByCode } from './posting.js';
+import { bad } from '../lib/util.js';
 
 const ic = (p) => !!p?.related_company_id;
 
@@ -90,7 +91,8 @@ export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_di
   'inventory', 'cogs', 'goods_delivered', 'sales', 'sales_returns',
   'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense',
   'salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable',
-  'bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short']);
+  'bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short',
+  'vat_out', 'vat_in', 'pph23_prepaid', 'pph23_payable']);
 
 const keyOf = (def, row) => (typeof def === 'function' ? def(row || {}) : def);
 /* Bawaan berupa kunci pemetaan (mis. 'ar') atau kode akun langsung ({ code }) — mis. akun aset per kategori. */
@@ -171,6 +173,70 @@ export function bankAccountSet(key) {
   const [field, def] = BANK_ACCOUNTS[key];
   const ids = new Set(db.all(`SELECT DISTINCT ${field} id FROM bank_accounts WHERE ${field} IS NOT NULL`).map((r) => r.id));
   const d = defaultId(def, {}); if (d) ids.add(d);
+  return [...ids];
+}
+
+/* --- Master pajak ---------------------------------------------------------------------
+   Kode pajak menyimpan tarif dan akunnya: PPN (keluaran untuk penjualan, masukan untuk pembelian)
+   dan PPh 23 (dibayar di muka bila dipotong pelanggan, hutang bila kita memotong pemasok). */
+export const TAX_KINDS = [['ppn', 'PPN'], ['pph23', 'PPh 23']];
+const TAX_DEFAULT_KEYS = { ppn: ['vat_out', 'vat_in'], pph23: ['pph23_prepaid', 'pph23_payable'] };
+/** Kode pajak bawaan sistem (dibuat saat pemutakhiran bila master pajak masih kosong). */
+export const DEFAULT_TAXES = [
+  ['PPN11', 'PPN 11%', 'ppn', 11, 1], ['PPN12', 'PPN 12% (barang mewah / tarif umum baru)', 'ppn', 12, 0],
+  ['PPN0', 'PPN 0% — ekspor / dibebaskan', 'ppn', 0, 0], ['PPH23', 'PPh 23 — jasa 2%', 'pph23', 2, 1],
+];
+export const getTax = (id) => (id ? db.get('SELECT * FROM taxes WHERE id = ?', id) : null);
+export const defaultTax = (kind) => db.get("SELECT * FROM taxes WHERE kind = ? AND is_default = 1 AND status = 'aktif' ORDER BY id LIMIT 1", kind) || null;
+const taxByRate = (rate) => db.get("SELECT * FROM taxes WHERE kind = 'ppn' AND rate = ? AND status = 'aktif' ORDER BY is_default DESC, id LIMIT 1", Number(rate) || 0) || null;
+export function fillTaxDefaults(row) {
+  const [o, i] = TAX_DEFAULT_KEYS[row.kind] || TAX_DEFAULT_KEYS.ppn;
+  if (row.sales_account_id == null || row.sales_account_id === '') row.sales_account_id = acct(o);
+  if (row.purchase_account_id == null || row.purchase_account_id === '') row.purchase_account_id = acct(i);
+  return row;
+}
+
+/**
+ * Kode & tarif PPN dokumen: kode pajak menentukan tarif; tanpa kode, tarif yang dikirim dicocokkan ke
+ * kode PPN bertarif sama; tanpa keduanya dipakai kode bawaan mitra lalu PPN bawaan.
+ */
+export function applyTax(row, partyTable = null, partyField = null, { optional = false } = {}) {
+  if (row.tax_id) {
+    const t = getTax(row.tax_id);
+    if (!t || t.kind !== 'ppn') throw bad('Kode pajak dokumen harus berjenis PPN.');
+    row.tax_rate = t.rate;
+    return;
+  }
+  if (row.tax_rate != null && row.tax_rate !== '') { row.tax_id = (Number(row.tax_rate) > 0 || !optional ? taxByRate(row.tax_rate)?.id : null) ?? null; return; }
+  if (optional) { row.tax_rate = 0; row.tax_id = null; return; }
+  const p = partyTable && row[partyField] ? db.get(`SELECT tax_id FROM ${partyTable} WHERE id = ?`, row[partyField]) : null;
+  const t = getTax(p?.tax_id) || defaultTax('ppn');
+  row.tax_id = t?.id ?? null;
+  row.tax_rate = t ? t.rate : 11;
+}
+
+/** Akun PPN dokumen: 'out' = keluaran (penjualan), 'in' = masukan (pembelian). */
+export function vatAccount(doc, side) {
+  const t = getTax(doc?.tax_id) || taxByRate(doc?.tax_rate);
+  return t?.[side === 'out' ? 'sales_account_id' : 'purchase_account_id'] || acct(side === 'out' ? 'vat_out' : 'vat_in');
+}
+/** Akun PPh 23: 'out' = dibayar di muka (dipotong pelanggan), 'in' = hutang (kita potong pemasok). */
+export function pphAccount(taxId, side) {
+  const t = getTax(taxId) || defaultTax('pph23');
+  if (t && t.kind !== 'pph23') throw bad('Kode PPh harus berjenis PPh 23.');
+  return t?.[side === 'out' ? 'sales_account_id' : 'purchase_account_id'] || acct(side === 'out' ? 'pph23_prepaid' : 'pph23_payable');
+}
+/** Seluruh akun pajak satu jenis & sisi (master + bawaan) — rekap pajak. */
+export function taxAccountSet(kind, side) {
+  const field = side === 'out' ? 'sales_account_id' : 'purchase_account_id';
+  const ids = new Set(db.all(`SELECT DISTINCT ${field} id FROM taxes WHERE kind = ? AND ${field} IS NOT NULL`, kind).map((r) => r.id));
+  ids.add(acct(TAX_DEFAULT_KEYS[kind][side === 'out' ? 0 : 1]));
+  return [...ids];
+}
+/** Seluruh akun pada satu kolom data master (+ akun bawaan) — mis. hutang PPh 21 karyawan. */
+export function masterAccountSet(table, field, defaultKey) {
+  const ids = new Set(db.all(`SELECT DISTINCT ${field} id FROM ${table} WHERE ${field} IS NOT NULL`).map((r) => r.id));
+  ids.add(acct(defaultKey));
   return [...ids];
 }
 
