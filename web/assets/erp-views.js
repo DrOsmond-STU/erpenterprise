@@ -456,14 +456,22 @@
     requireJournalApproval: 'Jurnal manual wajib disetujui', budgetControl: 'Kontrol anggaran (COA & proyek)',
     soRequiresQuotation: 'Pesanan penjualan wajib dari penawaran yang diterima pelanggan', quoteValidityDays: 'Masa berlaku penawaran bawaan (hari)',
     quoteDiscountLimit: 'Diskon maksimum penawaran tanpa persetujuan (%)', quoteMinMargin: 'Margin kotor minimum penawaran (%)', quoteApprovalThreshold: 'Ambang persetujuan nilai penawaran (Rp)',
-    // Akun sistem (akun pelanggan, pemasok, persediaan, jasa, aset, karyawan, kas/bank & pajak ada di data master masing-masing).
-    inter_branch: 'Rekening antar cabang (RAK)', investment_sub: 'Investasi pada entitas anak',
-    share_capital: 'Modal disetor', retained_earnings: 'Saldo laba',
-    stock_adjustment: 'Selisih / penyesuaian persediaan', wip: 'Barang dalam proses (produksi)',
-    fx_gain: 'Laba selisih kurs', fx_loss: 'Rugi selisih kurs',
-    purchase_variance: 'Selisih harga pembelian / retur',
-    deposit_forfeit: 'Pendapatan kompensasi (jaminan pelanggan dicairkan)', sdeposit_forfeit: 'Beban jaminan hangus (di pemasok)',
   };
+  /* Peta akun buku besar per data master (seluruh akun posting otomatis diatur di data master). */
+  const ACCOUNT_MASTERS = [
+    ['pelanggan', 'Pelanggan', 'Piutang, pendapatan, potongan, titipan, uang muka, deposit, jaminan, kompensasi jaminan dicairkan'],
+    ['pemasok', 'Pemasok', 'Hutang, potongan, titipan, uang muka, deposit, jaminan, beban jaminan hangus'],
+    ['produk', 'Produk & Layanan', 'Persediaan, HPP, barang terkirim, pendapatan, retur penjualan, beban jasa, selisih harga pembelian/retur'],
+    ['gudang', 'Gudang', 'Penyesuaian / selisih stok (akun lawan bawaan penyesuaian stok)'],
+    ['bom', 'Bill of Materials', 'Barang dalam proses (produksi)'],
+    ['aset', 'Aset Tetap', 'Aset, akumulasi & beban penyusutan, laba/rugi pelepasan, pemeliharaan'],
+    ['karyawan', 'Karyawan', 'Beban gaji, hutang gaji, PPh 21, BPJS'],
+    ['kas-bank', 'Kas & Bank', 'Kas/bank, biaya administrasi bank, giro mundur, selisih kas'],
+    ['master-pajak', 'Master Pajak', 'PPN keluaran/masukan, PPh 23 dibayar di muka/hutang'],
+    ['mata-uang', 'Mata Uang', 'Laba/rugi selisih kurs terealisasi'],
+    ['cabang', 'Cabang', 'Rekening antar cabang (RAK)'],
+    ['perusahaan', 'Perusahaan', 'Modal disetor, saldo laba (tutup buku), investasi pada entitas anak (konsolidasi)'],
+  ];
   const SETTING_OPTIONS = { budgetControl: [['none', 'Tanpa kontrol'], ['warn', 'Peringatan saat posting'], ['block', 'Blokir transaksi melebihi anggaran']] };
   async function settings(root) {
     let s;
@@ -475,9 +483,12 @@
         : SETTING_OPTIONS[k] ? `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><select class="select" name="${k}" ${canEdit ? '' : 'disabled'}>${SETTING_OPTIONS[k].map(([v2, l]) => `<option value="${v2}" ${v === v2 ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
         : `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><input class="input ${typeof v === 'number' ? 'num' : 'code'}" name="${k}" type="${typeof v === 'number' ? 'number' : 'text'}" value="${esc(v)}" ${canEdit ? '' : 'disabled'}></div>`).join('')}
       ${canEdit ? `<div class="form-grid-full"><button class="btn btn-primary" type="submit">${icon('check')} Simpan ${esc(title.toLowerCase())}</button></div>` : ''}</form></article>`;
-    root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, akun sistem, dan tampilan. Setiap perubahan tercatat di jejak audit.') +
+    root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, peta akun buku besar, dan tampilan. Setiap perubahan tercatat di jejak audit.') +
       `<div class="grid grid-1-1">${group('security_policy', 'Kebijakan keamanan', 'ISO 27001 A.5.17, A.8.5')}${group('approval_policy', 'Kebijakan persetujuan', 'Pemisahan tugas A.5.3')}</div>
-      ${group('account_map', 'Akun sistem', 'Akun ekuitas, RAK, investasi, selisih kurs, penyesuaian persediaan, dan sejenisnya. Akun piutang/hutang, uang muka, deposit, potongan, persediaan, HPP, pendapatan, retur, beban jasa, akun aset, penyusutan, pelepasan & pemeliharaan, akun gaji, PPh 21 & BPJS, akun biaya bank, giro & selisih kas, serta akun PPN masukan/keluaran & PPh 23 diatur pada data master Pelanggan, Pemasok, Produk & Layanan, Aset Tetap, Karyawan, Kas & Bank, dan Master Pajak.')}
+      <article class="card"><div class="card-head"><div class="card-head-text"><h2 class="card-title">Akun buku besar</h2><span class="card-note">Seluruh akun posting otomatis diatur pada data master masing-masing (bagian Akun buku besar), sehingga dapat berbeda per data. Kolom yang kosong diisi akun bawaan saat disimpan.</span></div></div>
+        <div class="table-scroll"><table class="table tbl-sm"><thead><tr><th>Data master</th><th>Akun yang diatur</th></tr></thead><tbody>
+        ${ACCOUNT_MASTERS.map(([nav, label, accts]) => `<tr><td><button class="link" data-nav="${nav}">${esc(label)}</button></td><td>${esc(accts)}</td></tr>`).join('')}
+        </tbody></table></div></article>
       <article class="card"><div class="card-head"><div class="card-head-text"><h2 class="card-title">Tampilan</h2></div></div><div class="pad"><div class="segmented" role="group" aria-label="Tema">
         <button data-theme-set="light" aria-pressed="${state.theme === 'light'}">Terang</button><button data-theme-set="dark" aria-pressed="${state.theme === 'dark'}">Gelap</button><button data-theme-set="system" aria-pressed="${state.theme === 'system'}">Ikut sistem</button></div></div></article>`;
   }

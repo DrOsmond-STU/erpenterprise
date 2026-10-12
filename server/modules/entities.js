@@ -233,6 +233,9 @@ export const ENTITIES = {
       F.ref('parent_id', 'Induk perusahaan', 'companies', { list: true }),
       F.pct('ownership_pct', 'Kepemilikan induk (%)', { default: 100, list: true }),
       F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('share_capital_account_id', 'Akun modal disetor', 'Dieliminasi terhadap investasi induk pada neraca konsolidasi. Kosong = 3-1000.', { type: 'equity' }),
+      acctRef('retained_earnings_account_id', 'Akun saldo laba', 'Tujuan jurnal penutup tahun buku; dasar bagian NCI atas saldo laba. Kosong = 3-2000.', { type: 'equity' }),
+      acctRef('investment_account_id', 'Akun investasi pada entitas anak', 'Investasi perusahaan ini pada anak perusahaan (dieliminasi saat konsolidasi). Kosong = 1-2900.', { type: 'asset' }),
     ],
   },
   branches: {
@@ -243,6 +246,7 @@ export const ENTITIES = {
       F.area('address', 'Alamat'),
       F.bool('is_head_office', 'Kantor pusat', { list: true }),
       F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('rak_account_id', 'Akun rekening antar cabang (RAK)', 'Penyeimbang otomatis jurnal lintas cabang (mis. RAK Cabang Surabaya). Dikunci selama masih bersaldo. Kosong = 1-1700.'),
     ],
   },
   users: {
@@ -503,6 +507,7 @@ export const ENTITIES = {
       acctRef('revenue_account_id', 'Akun pendapatan', 'Kosong = 4-1100.', { type: 'revenue' }),
       acctRef('sales_return_account_id', 'Akun retur penjualan', 'Kosong = 4-1900.', { type: 'revenue' }),
       acctRef('expense_account_id', 'Akun beban pembelian (jasa)', 'Jasa / barang non-persediaan yang dibeli tanpa akun pada baris tagihan. Kosong = 5-1100.'),
+      acctRef('variance_account_id', 'Akun selisih harga pembelian / retur', 'Selisih nilai retur pembelian terhadap biaya persediaan (dan retur jasa). Kosong = 6-2700.'),
       F.status(['aktif', 'nonaktif'], 'aktif'),
     ],
     computed: {
@@ -511,7 +516,8 @@ export const ENTITIES = {
   },
   warehouses: {
     label: 'Gudang', one: 'gudang', module: 'master', scope: 'branch', title: 'name', sort: 'code',
-    fields: [F.code(), F.name(), F.area('address', 'Alamat'), F.status(['aktif', 'nonaktif'], 'aktif')],
+    fields: [F.code(), F.name(), F.area('address', 'Alamat'), F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('adjustment_account_id', 'Akun penyesuaian / selisih stok', 'Akun lawan bawaan penyesuaian stok gudang ini (stock opname, rusak, hilang). Kosong = 6-2700.')],
   },
 
   /* ------------------------------------------------------------ CRM */
@@ -566,6 +572,7 @@ export const ENTITIES = {
       acctRef('dp_account_id', 'Akun uang muka penjualan', 'Faktur uang muka atas SO. Kosong = 2-1610.'),
       acctRef('deposit_account_id', 'Akun deposit pelanggan', 'Deposit saldo prabayar. Kosong = 2-1620.'),
       acctRef('guarantee_account_id', 'Akun uang jaminan pelanggan', 'Kosong = 2-1630.'),
+      acctRef('forfeit_account_id', 'Akun pendapatan kompensasi', 'Uang jaminan pelanggan yang dicairkan sebagai ganti rugi. Kosong = 7-1400.'),
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
     ],
     computed: {
@@ -781,6 +788,7 @@ export const ENTITIES = {
       acctRef('dp_account_id', 'Akun uang muka pembelian', 'Faktur uang muka atas PO. Kosong = 1-1520.'),
       acctRef('deposit_account_id', 'Akun deposit di pemasok', 'Deposit saldo prabayar. Kosong = 1-1530.'),
       acctRef('guarantee_account_id', 'Akun uang jaminan di pemasok', 'Kosong = 1-1540.'),
+      acctRef('forfeit_account_id', 'Akun beban jaminan hangus', 'Uang jaminan di pemasok yang hangus/dipotong. Kosong = 7-2400.'),
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {
@@ -947,7 +955,7 @@ export const ENTITIES = {
     fields: [
       F.number(), F.date('date', 'Tanggal', { required: true, list: true }),
       F.ref('warehouse_id', 'Gudang', 'warehouses', { required: true, list: true }),
-      F.ref('account_id', 'Akun lawan', 'accounts', { required: true, refFilter: { is_header: 0 }, help: 'Biasanya Beban Selisih Persediaan; gunakan ekuitas untuk saldo awal.' }),
+      F.ref('account_id', 'Akun lawan', 'accounts', { refFilter: { is_header: 0 }, help: 'Kosong = akun penyesuaian stok pada gudang. Gunakan ekuitas untuk saldo awal.' }),
       F.text('reason', 'Alasan', { required: true, list: true, search: true }),
       F.money('total', 'Nilai', { readonly: true, list: true, min: undefined }),
       F.status(['draf', 'diposting'], 'draf'),
@@ -986,7 +994,8 @@ export const ENTITIES = {
   /* ------------------------------------------------------------ Produksi */
   boms: {
     label: 'Bill of Materials', one: 'BOM', module: 'production', scope: 'global', title: 'name', sort: 'code',
-    fields: [F.code(), F.name(), F.ref('product_id', 'Produk jadi', 'products', { required: true, list: true, refFilter: { kind: 'barang_jadi' } }), F.num('output_qty', 'Hasil per batch', { default: 1, min: 0.0001 }), F.status(['aktif', 'nonaktif'], 'aktif')],
+    fields: [F.code(), F.name(), F.ref('product_id', 'Produk jadi', 'products', { required: true, list: true, refFilter: { kind: 'barang_jadi' } }), F.num('output_qty', 'Hasil per batch', { default: 1, min: 0.0001 }), F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('wip_account_id', 'Akun barang dalam proses', 'Bahan baku dipindahkan ke akun ini lalu ke persediaan barang jadi saat perintah kerja selesai. Kosong = 1-1320.')],
     lines: { table: 'bom_lines', fields: [F.ref('component_id', 'Komponen', 'products', { required: true }), F.num('qty', 'Qty per batch', { required: true, min: 0.0001 })] },
   },
   work_orders: {
@@ -1172,6 +1181,8 @@ export const ENTITIES = {
       F.text('symbol', 'Simbol', { max: 5, list: true }),
       F.bool('is_base', 'Mata uang dasar', { readonly: true, list: true }),
       F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('fx_gain_account_id', 'Akun laba selisih kurs', 'Selisih kurs terealisasi saat pelunasan dokumen bermata uang ini. Kosong = 7-1200.'),
+      acctRef('fx_loss_account_id', 'Akun rugi selisih kurs', 'Kosong = 7-2300.'),
     ],
     computed: { latest_rate: { label: 'Kurs terakhir', type: 'number', list: true, sql: `(SELECT r.rate FROM exchange_rates r WHERE r.currency_id = t.id ORDER BY r.date DESC, r.id DESC LIMIT 1)` } },
   },
@@ -1279,7 +1290,7 @@ export const ENTITIES = {
       act('post', 'Terima & posting', { from: ['draf'] }),
       act('apply', 'Pakai untuk melunasi faktur', { from: ['diterima', 'terpakai'], params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'invoice_id', label: 'Faktur pelanggan ini', type: 'ref', ref: 'sales_invoices', required: true, refParent: 'customer_id', refFilter: { status: ['terbit', 'sebagian'] } }, { name: 'amount', label: 'Jumlah', type: 'money', required: true, help: 'Maks. saldo deposit dan sisa faktur.' }] }),
       act('refund', 'Kembalikan deposit', { from: ['diterima', 'terpakai'], confirm: 'Dana deposit ditransfer kembali ke pelanggan dan dicatat permanen (tidak dapat dibatalkan).', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bank_account_id', label: 'Dibayar dari', type: 'ref', ref: 'bank_accounts', required: true }, { name: 'amount', label: 'Jumlah dikembalikan', type: 'money', required: true }, { name: 'bank_charge', label: 'Biaya transfer (beban kita)', type: 'money', default: 0 }, { name: 'reference', label: 'Referensi', type: 'text' }] }),
-      act('forfeit', 'Cairkan jaminan (kompensasi)', { from: ['diterima', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan diakui sebagai kompensasi dan tidak dikembalikan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah dicairkan', type: 'money', required: true }, { name: 'account_id', label: 'Akun kompensasi', type: 'ref', ref: 'accounts', help: 'Kosong = 7-1400 Pendapatan Kompensasi / Ganti Rugi Pelanggan.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan aset pinjaman, denda wanprestasi.' }] }),
+      act('forfeit', 'Cairkan jaminan (kompensasi)', { from: ['diterima', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan diakui sebagai kompensasi dan tidak dikembalikan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah dicairkan', type: 'money', required: true }, { name: 'account_id', label: 'Akun kompensasi', type: 'ref', ref: 'accounts', help: 'Kosong = akun pendapatan kompensasi pada data pelanggan.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan aset pinjaman, denda wanprestasi.' }] }),
       act('void', 'Batalkan (jurnal balik)', { from: ['diterima'], confirm: 'Penerimaan deposit dibatalkan dan jurnalnya dibalik.' }),
     ],
   },
@@ -1310,7 +1321,7 @@ export const ENTITIES = {
       act('reject', 'Tolak', { from: ['menunggu'], params: [{ name: 'reason', label: 'Alasan', type: 'text', required: true }] }),
       act('apply', 'Pakai untuk membayar tagihan', { from: ['dibayar', 'terpakai'], level: 2, params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bill_id', label: 'Tagihan pemasok ini', type: 'ref', ref: 'purchase_bills', required: true, refParent: 'supplier_id', refFilter: { status: ['terbit', 'sebagian'] } }, { name: 'amount', label: 'Jumlah', type: 'money', required: true, help: 'Maks. saldo deposit dan sisa tagihan. Pembayaran diajukan untuk disetujui orang lain.' }] }),
       act('refund', 'Terima pengembalian deposit', { from: ['dibayar', 'terpakai'], confirm: 'Dana deposit yang diterima kembali dari pemasok dicatat permanen (tidak dapat dibatalkan).', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'bank_account_id', label: 'Diterima di', type: 'ref', ref: 'bank_accounts', required: true }, { name: 'amount', label: 'Jumlah dikembalikan pemasok', type: 'money', required: true }, { name: 'bank_charge', label: 'Biaya bank (dipotong)', type: 'money', default: 0 }, { name: 'reference', label: 'Referensi', type: 'text' }] }),
-      act('forfeit', 'Hanguskan jaminan (beban)', { from: ['dibayar', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan tidak kembali dan dibebankan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah hangus', type: 'money', required: true }, { name: 'account_id', label: 'Akun beban', type: 'ref', ref: 'accounts', help: 'Kosong = 7-2400 Beban Kompensasi / Jaminan Hangus.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan kontainer sewaan, denda kontrak.' }] }),
+      act('forfeit', 'Hanguskan jaminan (beban)', { from: ['dibayar', 'terpakai'], when: (r) => r.kind === 'jaminan', confirm: 'Sebagian/seluruh uang jaminan tidak kembali dan dibebankan.', params: [{ name: 'date', label: 'Tanggal', type: 'date', required: true }, { name: 'amount', label: 'Jumlah hangus', type: 'money', required: true }, { name: 'account_id', label: 'Akun beban', type: 'ref', ref: 'accounts', help: 'Kosong = akun beban jaminan hangus pada data pemasok.' }, { name: 'reason', label: 'Alasan', type: 'text', required: true, help: 'Mis. kerusakan kontainer sewaan, denda kontrak.' }] }),
       act('void', 'Batalkan (jurnal balik)', { from: ['dibayar'], confirm: 'Pembayaran deposit dibatalkan dan jurnalnya dibalik.' }),
     ],
   },

@@ -5,8 +5,7 @@
    laporan konsolidasi grup dengan eliminasi antar perusahaan & investasi.
    ========================================================================== */
 import * as db from '../db.js';
-import { acct } from './posting.js';
-import { partyAccountSet, taxAccountSet, masterAccountSet, inList } from './accounts.js';
+import { partyAccountSet, taxAccountSet, masterAccountSet, masterKeySet, masterAcct, inList } from './accounts.js';
 import { bad, round2, isDate, today, monthEnd } from '../lib/util.js';
 
 export const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
@@ -165,16 +164,18 @@ export function balanceSheet(ctx, { companyId, branchId, asOf, mode = 'single' }
 
   const members = entityCols.filter((c) => c.member && c.member.effective_pct < 1 && c.member.id !== companyId);
   const subsAll = entityCols.filter((c) => c.member && c.member.id !== companyId);
-  const invId = mode === 'consolidated' ? acct('investment_sub') : null;
-  const capId = mode === 'consolidated' ? acct('share_capital') : null;
+  // Akun investasi, modal disetor & saldo laba dari data perusahaan masing-masing.
+  const coAcct = (c, key) => masterAcct('companies', c.member.id, key);
+  const invIds = new Set(mode === 'consolidated' ? entityCols.filter((c) => c.member).map((c) => coAcct(c, 'investment')) : []);
+  const capOfSub = new Map(subsAll.map((c) => [c.key, coAcct(c, 'capital')]));
   const pctOf = (c) => c.member.effective_pct;
 
   const raw = (a, k) => signFor(a.type) * netOf(bal[k], a.id);
   const elimFor = (a) => {
     let v = 0;
     if (a.is_intercompany) v -= entityCols.reduce((s, c) => s + raw(a, c.key), 0);
-    if (a.id === invId) v -= entityCols.reduce((s, c) => s + raw(a, c.key), 0);
-    if (a.id === capId) v -= subsAll.reduce((s, c) => s + raw(a, c.key), 0);
+    if (invIds.has(a.id)) v -= entityCols.reduce((s, c) => s + raw(a, c.key), 0);
+    v -= subsAll.reduce((s, c) => s + (capOfSub.get(c.key) === a.id ? raw(a, c.key) : 0), 0);
     return v;
   };
   const val = (a, k) => {
@@ -195,13 +196,13 @@ export function balanceSheet(ctx, { companyId, branchId, asOf, mode = 'single' }
     // Eliminasi antar perusahaan pada laba rugi tidak mengubah laba jika seimbang;
     // selisih IC dicatat sebagai baris tersendiri agar neraca tetap seimbang.
     const icPL = round2(accs.list.filter((a) => a.is_intercompany && PL_TYPES.includes(a.type)).reduce((s, a) => s + entityCols.reduce((x, c) => x - netOf(plCurrent[c.key], a.id), 0), 0));
-    const capOf = (c) => raw(accs.byId.get(capId), c.key);
-    const invTotal = round2(entityCols.reduce((s, c) => s + raw(accs.byId.get(invId), c.key), 0));
+    const capOf = (c) => raw(accs.byId.get(capOfSub.get(c.key)), c.key);
+    const invTotal = round2([...invIds].reduce((s, id) => s + entityCols.reduce((x, c) => x + raw(accs.byId.get(id), c.key), 0), 0));
     const goodwill = round2(invTotal - subsAll.reduce((s, c) => s + pctOf(c) * capOf(c), 0));
     const nciPrior = round2(members.reduce((s, c) => s + (1 - pctOf(c)) * prior[c.key], 0));
     const nciCurrent = round2(members.reduce((s, c) => s + (1 - pctOf(c)) * current[c.key], 0));
     const nciCap = round2(members.reduce((s, c) => s + (1 - pctOf(c)) * capOf(c), 0));
-    const nciEquityOther = round2(members.reduce((s, c) => s + (1 - pctOf(c)) * (raw(accs.byId.get(acct('retained_earnings')), c.key)), 0));
+    const nciEquityOther = round2(members.reduce((s, c) => s + (1 - pctOf(c)) * (raw(accs.byId.get(coAcct(c, 'retained')), c.key)), 0));
     prior.elim = -nciPrior; prior.cons = round2(sumE(prior) - nciPrior);
     current.elim = round2(-nciCurrent - icPL); current.cons = round2(sumE(current) - nciCurrent - icPL);
     const gw = { ...zero(keys), elim: goodwill, cons: goodwill };
@@ -287,25 +288,25 @@ export function generalLedger(ctx, { companyId, branchId, from, to, accountId })
 export function cashFlow(ctx, { companyId, branchId, from, to }) {
   const cashIds = db.all("SELECT id FROM accounts WHERE subtype = 'cash'").map((r) => r.id);
   if (!cashIds.length) return { title: 'Laporan Arus Kas', sections: [] };
-  const inList = cashIds.map(() => '?').join(',');
+  const cashIn = cashIds.map(() => '?').join(',');
   const bf = branchId ? ' AND jl.branch_id = ?' : '';
   const bp = branchId ? [branchId] : [];
-  const opening = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status='diposting' AND jl.company_id = ? AND jl.account_id IN (${inList}) AND j.date < ?${bf}`, companyId, ...cashIds, from, ...bp).v);
+  const opening = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status='diposting' AND jl.company_id = ? AND jl.account_id IN (${cashIn}) AND j.date < ?${bf}`, companyId, ...cashIds, from, ...bp).v);
   const rows = db.all(`
-    SELECT a.id, a.code, a.name, a.cash_flow, a.code = ? AS is_rak, ROUND(SUM(jl.credit - jl.debit),2) amount
+    SELECT a.id, a.code, a.name, a.cash_flow, a.id IN ${inList(masterKeySet('branches', 'rak'))} AS is_rak, ROUND(SUM(jl.credit - jl.debit),2) amount
     FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN accounts a ON a.id = jl.account_id
     WHERE j.status = 'diposting' AND jl.company_id = ? AND j.date BETWEEN ? AND ?${bf}
-      AND jl.account_id NOT IN (${inList})
-      AND EXISTS (SELECT 1 FROM journal_lines c WHERE c.parent_id = j.id AND c.account_id IN (${inList})${branchId ? ' AND c.branch_id = ?' : ''})
+      AND jl.account_id NOT IN (${cashIn})
+      AND EXISTS (SELECT 1 FROM journal_lines c WHERE c.parent_id = j.id AND c.account_id IN (${cashIn})${branchId ? ' AND c.branch_id = ?' : ''})
     GROUP BY a.id HAVING ABS(amount) > 0.004 ORDER BY a.code`,
-  db.get('SELECT code FROM accounts WHERE id = ?', acct('inter_branch')).code, companyId, from, to, ...bp, ...cashIds, ...cashIds, ...bp);
+  companyId, from, to, ...bp, ...cashIds, ...cashIds, ...bp);
   const cats = [['operating', 'Arus kas dari aktivitas operasi'], ['investing', 'Arus kas dari aktivitas investasi'], ['financing', 'Arus kas dari aktivitas pendanaan'], ['interbranch', 'Arus kas antar cabang']];
   const sections = cats.map(([k, label]) => {
     const rs = rows.filter((r) => (r.is_rak ? 'interbranch' : r.cash_flow || 'operating') === k);
     return { key: k, label, rows: rs.map((r) => ({ code: r.code, name: r.name, amount: r.amount })), total: round2(rs.reduce((s, r) => s + r.amount, 0)) };
   }).filter((s) => s.rows.length);
   const net = round2(sections.reduce((s, x) => s + x.total, 0));
-  const closing = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status='diposting' AND jl.company_id = ? AND jl.account_id IN (${inList}) AND j.date <= ?${bf}`, companyId, ...cashIds, to, ...bp).v);
+  const closing = round2(db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status='diposting' AND jl.company_id = ? AND jl.account_id IN (${cashIn}) AND j.date <= ?${bf}`, companyId, ...cashIds, to, ...bp).v);
   return { title: 'Laporan Arus Kas (metode langsung)', period: { from, to }, opening, sections, net, closing, balanced: Math.abs(opening + net - closing) < 1 };
 }
 

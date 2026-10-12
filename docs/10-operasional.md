@@ -30,7 +30,12 @@ untuk mengulang dari awal.
 3. `sudo systemctl enable --now erp`, pasang `deploy/nginx.conf`.
 4. Masuk sebagai `admin`, ganti sandi (wajib), aktifkan MFA, lalu:
    * Administrasi → Perusahaan & Cabang: lengkapi data entitas.
-   * Keuangan → Bagan Akun: sesuaikan bila perlu; Pengaturan → Akun sistem (RAK, ekuitas, selisih kurs, dll.).
+   * Keuangan → Bagan Akun: sesuaikan bila perlu. Seluruh akun posting otomatis diatur di data master
+     (Pengaturan menampilkan petanya).
+   * Administrasi → Perusahaan & Cabang: akun modal disetor, saldo laba, dan investasi pada entitas anak
+     per perusahaan; akun RAK per cabang bila ingin dipisah (mis. RAK Cabang Surabaya).
+   * Keuangan → Mata Uang: akun laba/rugi selisih kurs per mata uang bila dipisah.
+   * Data Master → Gudang & BOM: akun penyesuaian stok per gudang dan akun barang dalam proses per BOM.
    * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
      **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per
      lini produk, beban jasa); kolom yang kosong diisi akun bawaan saat disimpan.

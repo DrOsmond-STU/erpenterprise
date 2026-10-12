@@ -363,7 +363,7 @@ route('PUT', '/api/roles/:id/permissions', (ctx, body, p) => {
 /* --- Pengaturan ----------------------------------------------------------------------- */
 const SETTING_KEYS = {
   security_policy: { get: securityPolicy, defaults: DEFAULT_SECURITY_POLICY },
-  // Hanya akun sistem; akun pelanggan, pemasok, persediaan & jasa diatur pada data master masing-masing.
+  // Seluruh akun posting otomatis kini diatur pada data master; kunci lama disaring (tetap ada untuk kompatibilitas API).
   account_map: { get: () => Object.fromEntries(Object.entries(accountMap()).filter(([k]) => !MASTER_KEYS.has(k))) },
   approval_policy: { get: approvalPolicy },
 };

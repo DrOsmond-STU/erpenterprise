@@ -204,8 +204,11 @@ try {
   await page.waitForTimeout(1200);
   check(/CC-300/.test(await page.textContent('[data-report-body]')), 'anggaran: rincian per pusat biaya');
   await page.click('[data-budget-copy]');
-  await page.fill('[data-budget-copy-form] [name=toYear]', '2027');
+  await page.waitForSelector('[data-budget-copy-form] [name=toYear]');
+  await page.waitForTimeout(300); // modal selesai dirender sebelum diisi
   await page.fill('[data-budget-copy-form] [name=fromYear]', '2026');
+  await page.fill('[data-budget-copy-form] [name=toYear]', '2027');
+  await page.waitForFunction(() => document.querySelector('[data-budget-copy-form] [name=toYear]')?.value === '2027');
   await page.click('[data-budget-copy-run]');
   await page.waitForTimeout(1500);
   check(/2027/.test(await page.textContent('.report-head')), 'salin anggaran 2026 → 2027 (draf) & tampil di versi semua');

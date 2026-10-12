@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount, vatAccount, pphAccount, defaultTax, getTax } from './accounts.js';
+import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount, vatAccount, pphAccount, defaultTax, getTax, masterAcct } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -40,11 +40,11 @@ const sameCurrency = (a, b) => (a.currency_id || null) === (b.currency_id || nul
 const isBaseCurrency = (id) => !!db.get('SELECT is_base FROM currencies WHERE id = ?', id)?.is_base;
 const fxCopy = (d) => ({ currency_id: d.currency_id ?? null, exchange_rate: d.exchange_rate ?? 1 });
 
-/** Baris selisih kurs: positif = laba (kredit), negatif = rugi (debit). */
-function fxLine(diff, branchId, memo) {
+/** Baris selisih kurs: positif = laba (kredit), negatif = rugi (debit); akun dari data mata uang dokumen. */
+function fxLine(diff, branchId, memo, currencyId = null) {
   const d = round2(diff);
   if (Math.abs(d) < 0.005) return null;
-  return d > 0 ? { account_id: acct('fx_gain'), branch_id: branchId, credit: d, memo } : { account_id: acct('fx_loss'), branch_id: branchId, debit: -d, memo };
+  return d > 0 ? { account_id: masterAcct('currencies', currencyId, 'gain'), branch_id: branchId, credit: d, memo } : { account_id: masterAcct('currencies', currencyId, 'loss'), branch_id: branchId, debit: -d, memo };
 }
 
 /* --- Penawaran ------------------------------------------------------------------ */
@@ -353,7 +353,7 @@ function postReceipt(ctx, r) {
     }
     if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: partyAcct('customer', cust, 'discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
     if (pph > 0) { const v = toBase(pph, r); jl.push({ account_id: pphAccount(r.pph_tax_id, 'out'), debit: v, memo: 'PPh 23 dipotong pelanggan', partner_type: 'customer', partner_id: cust.id }); debitBase += v; }
-    const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
+    const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi', r.currency_id);
     if (fx) jl.push(fx);
   }
   postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : mode === 'pakai_deposit' ? 'Pemakaian deposit' : r.method === 'giro' ? `Giro mundur ${r.giro_no}` : 'Penerimaan'} ${r.number} — ${cust.name}`, sourceType: 'customer_receipts', sourceId: r.id, sourceNo: r.number, lines: jl });
@@ -512,7 +512,7 @@ function postPayment(ctx, pay) {
     }
     if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: partyAcct('supplier', sup, 'discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
     if (pph > 0) { const v = toBase(pph, pay); jl.push({ account_id: pphAccount(pay.pph_tax_id || sup.pph_tax_id, 'in'), credit: v, memo: `PPh 23 dipotong — ${sup.name}`, partner_type: 'supplier', partner_id: sup.id }); creditBase += v; }
-    const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi');
+    const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi', pay.currency_id);
     if (fx) jl.push(fx);
   }
   postJournal(ctx, { companyId: pay.company_id, branchId: pay.branch_id, date: pay.date, description: `${mode === 'uang_muka' ? 'Uang muka' : mode === 'pakai_uang_muka' ? 'Pemakaian uang muka' : mode === 'pakai_deposit' ? 'Pemakaian deposit' : pay.method === 'giro' ? `Giro mundur ${pay.giro_no}` : 'Pembayaran'} ${pay.number} — ${sup.name}`, sourceType: 'supplier_payments', sourceId: pay.id, sourceNo: pay.number, lines: jl });
@@ -819,7 +819,7 @@ function depositActions(table) {
       if (!(amount > 0)) throw bad('Isi jumlahnya.');
       depositMove(table, d.id, 'forfeited', amount);
       const depLine = { account_id: depositAcct(table, d), [ar ? 'debit' : 'credit']: amount, memo: `${ar ? 'Pencairan' : 'Jaminan hangus'} ${d.number}`, ...ref(d) };
-      const other = { account_id: p.account_id || acct(cfg.forfeit), [ar ? 'credit' : 'debit']: amount, memo: String(p.reason).slice(0, 200) };
+      const other = { account_id: p.account_id || partyAcct(cfg.ptype, pt, 'forfeit'), [ar ? 'credit' : 'debit']: amount, memo: String(p.reason).slice(0, 200) };
       journal(ctx, d, p.date, `${ar ? 'Pencairan jaminan' : 'Jaminan hangus'} ${d.number} — ${pt.name}: ${String(p.reason).slice(0, 120)}`, ar ? [depLine, other] : [other, depLine]);
       return { message: ar ? `Jaminan Rp ${amount.toLocaleString('id-ID')} dicairkan sebagai kompensasi.` : `Jaminan Rp ${amount.toLocaleString('id-ID')} dibebankan (hangus).` };
     },
@@ -938,6 +938,7 @@ function postAdjustment(ctx, a) {
   const ls = lines('stock_adjustment_lines', a.id);
   needLines(ls, 'penyesuaian');
   const wh = warehouse(a.warehouse_id);
+  const adj = a.account_id || masterAcct('warehouses', wh.id, 'adjustment'); // kosong → akun penyesuaian gudang
   const jl = [];
   let total = 0;
   for (const l of ls) {
@@ -948,17 +949,17 @@ function postAdjustment(ctx, a) {
       const unit = l.unit_cost || db.get('SELECT avg_cost FROM stock_balances WHERE product_id = ? AND warehouse_id = ?', p.id, wh.id)?.avg_cost || p.standard_cost || 0;
       const v = stockIn(ctx, { warehouseId: wh.id, productId: p.id, qty: l.qty, unitCost: unit, date: a.date, sourceType: 'stock_adjustments', sourceId: a.id, sourceNo: a.number });
       jl.push({ account_id: invAcct, debit: v, branch_id: wh.branch_id, memo: `${p.code} +${l.qty}` });
-      jl.push({ account_id: a.account_id, credit: v, branch_id: wh.branch_id, memo: a.reason });
+      jl.push({ account_id: adj, credit: v, branch_id: wh.branch_id, memo: a.reason });
       total += v;
     } else if (l.qty < 0) {
       const { value } = stockOut(ctx, { warehouseId: wh.id, productId: p.id, qty: -l.qty, date: a.date, sourceType: 'stock_adjustments', sourceId: a.id, sourceNo: a.number });
-      jl.push({ account_id: a.account_id, debit: value, branch_id: wh.branch_id, memo: a.reason });
+      jl.push({ account_id: adj, debit: value, branch_id: wh.branch_id, memo: a.reason });
       jl.push({ account_id: invAcct, credit: value, branch_id: wh.branch_id, memo: `${p.code} ${l.qty}` });
       total -= value;
     }
   }
   if (jl.length) postJournal(ctx, { companyId: a.company_id, branchId: wh.branch_id, date: a.date, description: `Penyesuaian stok ${a.number}: ${a.reason}`, sourceType: 'stock_adjustments', sourceId: a.id, sourceNo: a.number, lines: jl });
-  setStatus('stock_adjustments', a.id, 'diposting', { total: round2(total) });
+  setStatus('stock_adjustments', a.id, 'diposting', { total: round2(total), account_id: adj });
 }
 
 function postStockTransfer(ctx, t) {
@@ -1003,6 +1004,10 @@ function completeWorkOrder(ctx, wo) {
   const outQty = round2((bom.output_qty || 1) * wo.qty * 10000) / 10000;
   const date = today();
   stockIn(ctx, { warehouseId: wh.id, productId: fg.id, qty: outQty, unitCost: outQty ? total / outQty : 0, date, sourceType: 'work_orders', sourceId: wo.id, sourceNo: wo.number });
+  // Bahan → barang dalam proses (akun WIP pada BOM) → persediaan barang jadi.
+  const wip = masterAcct('boms', bom, 'wip');
+  jl.push({ account_id: wip, branch_id: wh.branch_id, debit: round2(total), memo: `Bahan ke barang dalam proses ${wo.number}` });
+  jl.push({ account_id: wip, branch_id: wh.branch_id, credit: round2(total), memo: `Barang dalam proses selesai ${wo.number}` });
   jl.push({ account_id: productAcct(fg, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: round2(total), memo: `Hasil produksi ${fg.code} × ${outQty}` });
   if (total > 0) postJournal(ctx, { companyId: wo.company_id, branchId: wh.branch_id, date, description: `Penyelesaian ${wo.number} — ${fg.name}`, sourceType: 'work_orders', sourceId: wo.id, sourceNo: wo.number, lines: jl });
   setStatus('work_orders', wo.id, 'selesai', { progress: 100, total: round2(total) });
@@ -1257,6 +1262,7 @@ function postPurchaseReturn(ctx, r) {
   const wh = warehouse(r.warehouse_id);
   const jl = [];
   let stockValue = 0;
+  const variance = new Map(); // akun selisih harga per barang/jasa → nilai (IDR)
   for (const l of ls) {
     const bought = billLines.filter((x) => x.product_id === l.product_id).reduce((a, x) => a + x.qty, 0);
     if (!bought) throw bad('Barang retur tidak terdapat pada tagihan asal.');
@@ -1267,11 +1273,20 @@ function postPurchaseReturn(ctx, r) {
       db.run('UPDATE purchase_return_lines SET unit_cost = ? WHERE id = ?', unitCost, l.id);
       if (value > 0) jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, credit: value, memo: `Retur ${p.code}` });
       stockValue += value;
+      const va = productAccount(p, 'variance');
+      variance.set(va, round2((variance.get(va) || 0) + toBase(l.amount, bill) - value));
+    } else {
+      const va = productAccount(p, 'variance');
+      variance.set(va, round2((variance.get(va) || 0) + toBase(l.amount, bill)));
     }
   }
   const subtotalBase = toBase(r.subtotal, bill);
   const nonStock = round2(subtotalBase - stockValue);
-  if (Math.abs(nonStock) >= 0.005) jl.push(nonStock > 0 ? { account_id: acct('purchase_variance'), credit: nonStock, memo: 'Selisih harga retur' } : { account_id: acct('purchase_variance'), debit: -nonStock, memo: 'Selisih harga retur' });
+  // Selisih pembulatan (DPP dokumen vs jumlah baris) ikut akun selisih barang terakhir.
+  const keys = [...variance.keys()];
+  const fallbackVa = keys.at(-1) || productAccount(null, 'variance');
+  variance.set(fallbackVa, round2((variance.get(fallbackVa) || 0) + nonStock - round2([...variance.values()].reduce((a, v) => a + v, 0))));
+  for (const [va, v] of variance) if (Math.abs(v) >= 0.005) jl.push(v > 0 ? { account_id: va, credit: v, memo: 'Selisih harga retur' } : { account_id: va, debit: -v, memo: 'Selisih harga retur' });
   if (r.tax > 0) jl.push({ account_id: vatAccount(r, 'in'), credit: toBase(r.tax, bill), memo: 'Koreksi PPN masukan' });
   const debit = round2(jl.reduce((a, x) => a + (x.credit || 0) - (x.debit || 0), 0));
   const ref = { partner_type: 'supplier', partner_id: sup.id };
@@ -1379,7 +1394,7 @@ function closeYear(ctx, period) {
     JOIN accounts a ON a.id = jl.account_id WHERE j.status = 'diposting' AND jl.company_id = ? AND j.date BETWEEN ? AND ?
     AND a.type IN ('revenue','cogs','expense','other_income','other_expense','tax') GROUP BY jl.account_id, jl.branch_id HAVING ABS(net) > 0.004`, period.company_id, `${year}-01-01`, end);
   if (!rows.length) throw bad(`Tidak ada saldo laba rugi tahun ${year}.`);
-  const re = acct('retained_earnings');
+  const re = masterAcct('companies', period.company_id, 'retained'); // akun saldo laba perusahaan
   const jl = rows.map((r) => (r.net > 0 ? { account_id: r.account_id, branch_id: r.branch_id, credit: r.net } : { account_id: r.account_id, branch_id: r.branch_id, debit: -r.net }));
   const perBranch = new Map();
   for (const r of rows) perBranch.set(r.branch_id, round2((perBranch.get(r.branch_id) || 0) + r.net));

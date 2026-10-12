@@ -53,6 +53,7 @@ export async function seed({ demo = true, adminPassword = '' } = {}) {
       if (cid) db.insert('branches', { company_id: cid, code, name, city, is_head_office: ho, status: 'aktif', created_at: nowIso() });
     }
   });
+  upgrade(); // isi akun buku besar bawaan pada perusahaan & cabang baru
   if (!demo) {
     await createUser({ username: 'admin', full_name: 'Administrator', email: 'admin@localhost', role: 'ADMIN', password: adminPassword, mustChange: true });
     return;
@@ -67,6 +68,7 @@ export async function seed({ demo = true, adminPassword = '' } = {}) {
   await createUser({ username: 'yoga.kasir', full_name: 'Yoga Prasetyo', email: 'yoga@knm.co.id', role: 'KASIR', company: 'KNM', branch: 'MDN', password: DEMO_PASSWORD });
   await createUser({ username: 'auditor', full_name: 'Maya Hidayat', email: 'maya.audit@knm.co.id', role: 'AUDITOR', password: DEMO_PASSWORD });
   await seedDemo();
+  upgrade(); // lengkapi akun bawaan data master demo yang dibuat langsung
 }
 
 /* ======================================================================== */

@@ -80,18 +80,23 @@ akses ke baris di luar cakupan (pencegahan IDOR).
 
 ### Akun buku besar per data master
 
-Akun yang terkait mitra dan barang **disimpan di data master masing-masing**, sehingga
-setiap pelanggan, pemasok, barang, dan jasa dapat memakai akun berbeda
+Seluruh akun posting otomatis **disimpan di data master masing-masing**, sehingga
+setiap pelanggan, pemasok, barang, jasa, gudang, cabang, perusahaan, mata uang, dan BOM dapat memakai akun berbeda
 (mis. piutang ekspor terpisah, hutang impor, persediaan per lini produk, beban per jenis jasa).
 Saat data master disimpan, kolom akun yang kosong diisi akun bawaan; nilainya dapat diubah
 per data (`server/ledger/accounts.js`).
 
 | Data master | Akun (kolom) | Bawaan |
 | --- | --- | --- |
-| Pelanggan | Piutang usaha (`ar_account_id`) · Pendapatan penjualan (`sales_account_id`, kosong = akun barang/jasa) · Potongan penjualan · Titipan/uang muka pelanggan · Uang muka penjualan (faktur UM) · Deposit · Uang jaminan | 1-1200 (antar perusahaan 1-1600) · — (antar perusahaan 4-1400) · 4-1900 · 2-1600 · 2-1610 · 2-1620 · 2-1630 |
-| Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 |
-| Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 |
-| Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) | 4-1100 · 4-1900 · 5-1100 |
+| Pelanggan | Piutang usaha (`ar_account_id`) · Pendapatan penjualan (`sales_account_id`, kosong = akun barang/jasa) · Potongan penjualan · Titipan/uang muka pelanggan · Uang muka penjualan (faktur UM) · Deposit · Uang jaminan · Pendapatan kompensasi (jaminan dicairkan) | 1-1200 (antar perusahaan 1-1600) · — (antar perusahaan 4-1400) · 4-1900 · 2-1600 · 2-1610 · 2-1620 · 2-1630 · 7-1400 |
+| Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan · Beban jaminan hangus | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 · 7-2400 |
+| Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan · Selisih harga pembelian/retur | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 · 6-2700 |
+| Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) · Selisih harga retur | 4-1100 · 4-1900 · 5-1100 · 6-2700 |
+| Gudang | Penyesuaian / selisih stok (akun lawan bawaan penyesuaian stok) | 6-2700 |
+| BOM | Barang dalam proses (bahan → WIP → barang jadi saat perintah kerja selesai) | 1-1320 |
+| Cabang | Rekening antar cabang (RAK, penyeimbang otomatis jurnal lintas cabang) | 1-1700 |
+| Mata uang | Laba selisih kurs · Rugi selisih kurs (terealisasi saat pelunasan) | 7-1200 · 7-2300 |
+| Perusahaan | Modal disetor · Saldo laba (tujuan jurnal penutup, dasar NCI) · Investasi pada entitas anak (eliminasi konsolidasi) | 3-1000 · 3-2000 · 1-2900 |
 | Karyawan | Beban gaji & tunjangan (gaji pokok, tunjangan, lembur) · Hutang gaji · Hutang PPh 21 · Hutang BPJS | 6-1000 (mis. 5-1400 tenaga kerja langsung produksi) · 2-1300 · 2-1310 · 2-1320 |
 | Kas & bank | Kas/bank (`account_id`, wajib) · Biaya administrasi bank · Giro mundur diterima (rekening setor) · Giro mundur diberikan (rekening penerbit) · Selisih kas kasir | — · 7-2100 · 1-1250 · 2-1150 · 6-2950 |
 | Aset tetap | Aset tetap · Akumulasi penyusutan · Beban penyusutan · Laba pelepasan · Rugi pelepasan · Beban pemeliharaan | aset & akumulasi menurut kategori (Bangunan 1-2200/1-2210, Mesin & Peralatan 1-2300/1-2310, Kendaraan 1-2400/1-2410, Peralatan Kantor & TI 1-2500/1-2510) · 6-2500 · 7-1100 · 7-2200 · 6-2200 |
@@ -124,11 +129,12 @@ pada penerimaan/pembayaran (bawaan pemasok untuk pembayaran). Posting PPN & PPh 
 kode pajak; rekap pajak menjumlahkan seluruh akun PPN dari master pajak dan seluruh akun PPh 21
 karyawan. Kode yang sudah dipakai tidak dapat dihapus (nonaktifkan).
 
-**Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: RAK, investasi
-& ekuitas, selisih kurs, penyesuaian persediaan & selisih harga, barang dalam proses, serta akun
-kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset, akun gaji/
-PPh 21/BPJS di master karyawan, akun biaya bank/giro/selisih kas di master kas & bank, akun PPN
-& PPh 23 di master pajak). Saat pemutakhiran, penyesuaian akun mitra/barang/pajak
+Akun RAK cabang dan akun modal, saldo laba & investasi perusahaan tidak dapat diganti selama masih
+bersaldo di akun lama (laporan arus kas mengelompokkan seluruh akun RAK cabang sebagai arus antar
+cabang; konsolidasi mengeliminasi investasi induk terhadap akun modal masing-masing anak).
+
+**Pengaturan** tidak lagi berisi akun buku besar; halaman Pengaturan hanya menampilkan peta data
+master beserta akun yang diaturnya. Saat pemutakhiran, penyesuaian akun
 yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)

@@ -108,12 +108,11 @@ test('pemasok dengan akun hutang khusus & jasa dengan akun beban: tagihan dan pe
   await reconciled();
 });
 
-test('Pengaturan hanya berisi akun sistem; akun data master tidak dapat diatur di sana', async () => {
+test('Pengaturan tidak lagi berisi akun buku besar; seluruh akun diatur di data master', async () => {
   const s = (await admin.get('/api/settings')).body.account_map;
-  assert.ok(s.inter_branch && s.retained_earnings && s.fx_gain, 'akun sistem tersedia');
-  for (const k of ['ar', 'ap', 'inventory', 'cogs', 'sales', 'customer_advance', 'supplier_advance', 'deposit_saldo', 'sales_returns']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
+  assert.deepEqual(s, {}, 'tidak ada akun tersisa di Pengaturan');
   assert.equal((await admin.put('/api/settings/account_map', { ar: '1-1210' })).status, 400, 'akun piutang tidak lagi di Pengaturan');
-  ok(await admin.put('/api/settings/account_map', { fx_gain: '7-1200' }), 'akun sistem tetap dapat diubah');
+  assert.equal((await admin.put('/api/settings/account_map', { fx_gain: '7-1200' })).status, 400, 'akun selisih kurs pindah ke master mata uang');
 });
 
 test('migrasi: kolom akun kosong diisi dari pemetaan lama di Pengaturan, lalu kunci data master dihapus dari Pengaturan', async () => {
@@ -122,12 +121,14 @@ test('migrasi: kolom akun kosong diisi dari pemetaan lama di Pengaturan, lalu ku
   const cid = id('customers', 'C002');
   db.run('UPDATE customers SET ar_account_id = NULL WHERE id = ?', cid);
   db.run("UPDATE products SET revenue_account_id = NULL WHERE code = 'SV-301'");
-  setSetting('account_map', { ar: '1-1210', sales: '4-1150', fx_gain: '7-1200' }, null);
+  db.run("UPDATE branches SET rak_account_id = NULL WHERE code = 'SBY'");
+  setSetting('account_map', { ar: '1-1210', sales: '4-1150', fx_gain: '7-1200', inter_branch: '1-1700' }, null);
   clearSettingsCache();
   upgrade();
+  assert.equal(db.get("SELECT rak_account_id v FROM branches WHERE code = 'SBY'").v, acc('1-1700'), 'akun RAK pindah ke cabang');
   assert.equal(db.get('SELECT ar_account_id v FROM customers WHERE id = ?', cid).v, acc('1-1210'), 'penyesuaian lama pindah ke pelanggan');
   assert.equal(db.get("SELECT revenue_account_id v FROM products WHERE code = 'SV-301'").v, acc('4-1150'), 'penyesuaian lama pindah ke barang/jasa');
-  assert.deepEqual(getSetting('account_map', {}), { fx_gain: '7-1200' }, 'hanya akun sistem tersisa');
+  assert.deepEqual(getSetting('account_map', {}), {}, 'Pengaturan akun kosong');
   assert.equal(db.get("SELECT ar_account_id v FROM customers WHERE code = 'C001'").v, acc('1-1200'), 'data master lain tidak berubah');
 });
 
@@ -273,4 +274,90 @@ test('master pajak: kode PPN/PPh 23 dengan akun sendiri; dokumen, pelanggan & pe
 
   const s = (await admin.get('/api/settings')).body.account_map;
   for (const k of ['vat_out', 'vat_in', 'pph23_prepaid', 'pph23_payable']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
+});
+
+test('data master lain: cabang (RAK), gudang (penyesuaian stok), BOM (WIP), produk (selisih harga retur), mitra (jaminan hangus), mata uang (selisih kurs), perusahaan (saldo laba & modal)', async () => {
+  for (const [code, name, type, par, subtype] of [
+    ['1-1710', 'RAK — Cabang Uji', 'asset', '1-1000', 'current_asset'], ['6-2710', 'Selisih Stok Opname — Jakarta', 'expense', '6', ''],
+    ['1-1325', 'Barang Dalam Proses — Lini C', 'asset', '1-1300', 'inventory'], ['6-2720', 'Selisih Harga Pembelian — Bahan Baku', 'expense', '6', ''],
+    ['7-1410', 'Pendapatan Ganti Rugi — Sewa Palet', 'other_income', '7', ''], ['7-1210', 'Laba Selisih Kurs — USD', 'other_income', '7', ''],
+  ]) {
+    if (!db.get('SELECT id FROM accounts WHERE code = ?', code)) ok(await admin.post('/api/e/accounts', { code, name, type, parent_id: acc(par), is_header: 0, subtype, status: 'aktif' }), code);
+  }
+  const put = async (table, rid, data) => { const cur = (await admin.get(`/api/e/${table}/${rid}`)).body; return admin.put(`/api/e/${table}/${rid}`, { row_version: cur.row_version, ...data }); };
+  const KNM = id('companies', 'KNM');
+  // Data master baru terisi akun bawaan.
+  assert.equal(db.get('SELECT retained_earnings_account_id v FROM companies WHERE id = ?', KNM).v, acc('3-2000'));
+  assert.equal(db.get('SELECT share_capital_account_id v FROM companies WHERE id = ?', KNM).v, acc('3-1000'));
+  assert.equal(db.get("SELECT fx_gain_account_id v FROM currencies WHERE code = 'USD'").v, acc('7-1200'));
+
+  // Cabang: akun RAK sendiri pada jurnal lintas cabang; dikunci selama bersaldo.
+  const uji = ok(await admin.post('/api/e/branches', { company_id: KNM, code: 'UJI', name: 'Cabang Uji', city: 'Bekasi', rak_account_id: acc('1-1710') }));
+  const whU = ok(await admin.post('/api/e/warehouses', { branch_id: uji.id, code: 'WH-UJI', name: 'Gudang Uji' }));
+  assert.equal(whU.adjustment_account_id, acc('6-2700'), 'akun penyesuaian bawaan gudang');
+  const tr = ok(await admin.post('/api/e/stock_transfers', { branch_id: id('branches', 'CKR'), date: '2026-10-07', from_warehouse_id: id('warehouses', 'WH-CKR'), to_warehouse_id: whU.id, lines: [{ product_id: id('products', 'FG-103'), qty: 20 }] }));
+  const tp = ok(await admin.post(`/api/e/stock_transfers/${tr.id}/actions/post`));
+  const jid = tp.record.__journals[0].id;
+  const rak = (b) => db.get('SELECT account_id FROM journal_lines WHERE parent_id = ? AND is_system = 1 AND branch_id = ?', jid, b).account_id;
+  assert.equal(rak(uji.id), acc('1-1710'), 'RAK cabang uji'); assert.equal(rak(id('branches', 'CKR')), acc('1-1700'), 'RAK cabang lain');
+  assert.equal((await put('branches', uji.id, { rak_account_id: acc('1-1700') })).status, 409, 'RAK bersaldo dikunci');
+  assert.ok((await admin.get(`/api/reports/neraca?company=${KNM}&mode=branch&to=2026-10-07`)).body.balanced, 'neraca per cabang seimbang');
+  ok(await admin.get(`/api/reports/arus-kas?company=${KNM}&from=2026-01-01&to=2026-10-07`), 'arus kas');
+
+  // Gudang: penyesuaian stok tanpa akun lawan memakai akun penyesuaian gudang.
+  const WJ = id('warehouses', 'WH-JKT');
+  ok(await put('warehouses', WJ, { adjustment_account_id: acc('6-2710') }));
+  const sp = db.get('SELECT product_id FROM stock_balances WHERE warehouse_id = ? AND qty >= 5 ORDER BY product_id LIMIT 1', WJ).product_id;
+  const g0 = gl('6-2710');
+  const adj = ok(await admin.post('/api/e/stock_adjustments', { branch_id: JKT(), date: '2026-10-07', warehouse_id: WJ, reason: 'Stock opname — selisih kurang', lines: [{ product_id: sp, qty: -1 }] }));
+  assert.equal(adj.account_id, acc('6-2710'), 'akun lawan dari gudang');
+  ok(await admin.post(`/api/e/stock_adjustments/${adj.id}/actions/post`));
+  assert.ok(gl('6-2710') - g0 > 0, 'beban selisih stok gudang');
+
+  // BOM: bahan → barang dalam proses (akun BOM) → barang jadi.
+  const bom = id('boms', 'BOM-103');
+  ok(await put('boms', bom, { wip_account_id: acc('1-1325') }));
+  const wo = ok(await admin.post('/api/e/work_orders', { branch_id: id('branches', 'CKR'), date: '2026-10-07', bom_id: bom, qty: 5, warehouse_id: id('warehouses', 'WH-CKR') }));
+  for (const a of ['start', 'to_qc']) ok(await admin.post(`/api/e/work_orders/${wo.id}/actions/${a}`));
+  const done = ok(await osmond.post(`/api/e/work_orders/${wo.id}/actions/complete`));
+  const wj = db.get("SELECT id FROM journals WHERE source_type = 'work_orders' AND source_id = ?", wo.id).id;
+  const w = db.get('SELECT ROUND(SUM(debit),2) d, ROUND(SUM(credit),2) c FROM journal_lines WHERE parent_id = ? AND account_id = ?', wj, acc('1-1325'));
+  near(w.d, done.record.total, 'bahan masuk WIP'); near(w.c, done.record.total, 'WIP ke barang jadi');
+
+  // Produk: selisih harga retur pembelian ke akun selisih barang.
+  const rm = id('products', 'RM-003');
+  ok(await put('products', rm, { variance_account_id: acc('6-2720') }));
+  const v0 = gl('6-2720'), vd0 = gl('6-2700');
+  const bill = ok(await admin.post('/api/e/purchase_bills', { branch_id: id('branches', 'CKR'), date: '2026-10-07', supplier_id: id('suppliers', 'S003'), warehouse_id: id('warehouses', 'WH-CKR'), supplier_invoice_no: 'UJI-VAR', lines: [{ product_id: rm, qty: 10, price: 999_999 }] }));
+  ok(await osmond.post(`/api/e/purchase_bills/${bill.id}/actions/post`));
+  const pr = ok(await admin.post('/api/e/purchase_returns', { branch_id: id('branches', 'CKR'), date: '2026-10-07', purchase_bill_id: bill.id, warehouse_id: id('warehouses', 'WH-CKR'), reason: 'Uji selisih', lines: [{ product_id: rm, qty: 2 }] }));
+  ok(await osmond.post(`/api/e/purchase_returns/${pr.id}/actions/post`));
+  assert.ok(gl('6-2720') - v0 < 0, 'selisih harga ke akun barang'); near(gl('6-2700') - vd0, 0, 'bukan akun selisih bawaan');
+
+  // Pelanggan: jaminan dicairkan ke akun kompensasi pelanggan.
+  const c8 = id('customers', 'C008');
+  ok(await put('customers', c8, { forfeit_account_id: acc('7-1410') }));
+  const d = ok(await admin.post('/api/e/customer_deposits', { branch_id: JKT(), date: '2026-10-07', customer_id: c8, kind: 'jaminan', bank_account_id: id('bank_accounts', 'BCA-JKT'), amount: 2_000_000 }));
+  ok(await osmond.post(`/api/e/customer_deposits/${d.id}/actions/post`));
+  const f0 = gl('7-1410'), fd0 = gl('7-1400');
+  ok(await osmond.post(`/api/e/customer_deposits/${d.id}/actions/forfeit`, { date: '2026-10-07', amount: 500_000, reason: 'Palet rusak' }));
+  near(gl('7-1410') - f0, -500_000, 'kompensasi ke akun pelanggan'); near(gl('7-1400') - fd0, 0, 'bukan akun bawaan');
+
+  // Mata uang: laba selisih kurs ke akun mata uang dokumen.
+  const usd = id('currencies', 'USD');
+  ok(await put('currencies', usd, { fx_gain_account_id: acc('7-1210') }));
+  const inv = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-05', customer_id: id('customers', 'C009'), warehouse_id: WJ, currency_id: usd, exchange_rate: 16000, tax_rate: 0, lines: [{ product_id: id('products', 'SV-301'), qty: 1, price: 100 }] }));
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/post`));
+  const x0 = gl('7-1210'), xd0 = gl('7-1200');
+  const rc = ok(await admin.post('/api/e/customer_receipts', { branch_id: JKT(), date: '2026-10-07', customer_id: id('customers', 'C009'), bank_account_id: id('bank_accounts', 'BCA-USD'), currency_id: usd, exchange_rate: 16500, lines: [{ invoice_id: inv.id, amount: 100 }] }));
+  ok(await osmond.post(`/api/e/customer_receipts/${rc.id}/actions/post`));
+  near(gl('7-1210') - x0, -100 * 500, 'laba kurs USD'); near(gl('7-1200') - xd0, 0, 'bukan akun kurs bawaan');
+
+  assert.equal((await put('companies', KNM, { share_capital_account_id: acc('3-2000') })).status, 409, 'akun modal bersaldo dikunci');
+  // Perusahaan: konsolidasi tetap seimbang memakai akun modal/investasi/saldo laba per perusahaan.
+  const cons = (await admin.get(`/api/reports/neraca?company=${KNM}&mode=consolidated&to=2026-10-07`)).body;
+  assert.ok(cons.balanced, 'neraca konsolidasi seimbang');
+  await reconciled();
+  const s = (await admin.get('/api/settings')).body.account_map;
+  assert.deepEqual(s, {});
 });

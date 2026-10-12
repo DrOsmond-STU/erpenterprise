@@ -1,6 +1,7 @@
 /* ==========================================================================
    Akun buku besar per data master.
-   Setiap pelanggan, pemasok, barang/jasa, aset tetap, karyawan, dan rekening kas/bank menyimpan akun buku
+   Setiap pelanggan, pemasok, barang/jasa, aset tetap, karyawan, rekening kas/bank, kode pajak,
+   gudang, cabang, perusahaan, mata uang, dan BOM menyimpan akun buku
    besarnya sendiri (piutang/hutang, uang muka, deposit, potongan; persediaan,
    HPP, pendapatan, retur, beban jasa; aset, akumulasi & beban penyusutan,
    laba/rugi pelepasan, beban pemeliharaan; beban gaji, hutang gaji, PPh 21, BPJS;
@@ -27,6 +28,7 @@ export const PARTY_ACCOUNTS = {
       dp: ['dp_account_id', 'sales_dp', 'Akun uang muka penjualan (faktur uang muka)'],
       deposit: ['deposit_account_id', 'deposit_saldo', 'Akun deposit pelanggan (saldo)'],
       guarantee: ['guarantee_account_id', 'deposit_guarantee', 'Akun uang jaminan pelanggan'],
+      forfeit: ['forfeit_account_id', 'deposit_forfeit', 'Akun pendapatan kompensasi (jaminan dicairkan)'],
     },
   },
   supplier: {
@@ -38,6 +40,7 @@ export const PARTY_ACCOUNTS = {
       dp: ['dp_account_id', 'purchase_dp', 'Akun uang muka pembelian (faktur uang muka)'],
       deposit: ['deposit_account_id', 'sdeposit_saldo', 'Akun deposit di pemasok (saldo)'],
       guarantee: ['guarantee_account_id', 'sdeposit_guarantee', 'Akun uang jaminan di pemasok'],
+      forfeit: ['forfeit_account_id', 'sdeposit_forfeit', 'Akun beban jaminan hangus'],
     },
   },
 };
@@ -52,6 +55,7 @@ export const PRODUCT_ACCOUNTS = {
   revenue: ['revenue_account_id', 'sales', 'Akun pendapatan'],
   returns: ['sales_return_account_id', 'sales_returns', 'Akun retur penjualan'],
   expense: ['expense_account_id', (p) => (isService(p) ? 'cogs' : null), 'Akun beban pembelian (jasa / non-persediaan)'],
+  variance: ['variance_account_id', 'purchase_variance', 'Akun selisih harga pembelian / retur'],
 };
 
 /* Aset tetap: akun aset & akumulasi bawaan menurut kategori; beban penyusutan, laba/rugi pelepasan, pemeliharaan. */
@@ -85,6 +89,25 @@ export const BANK_ACCOUNTS = {
   cash_diff: ['cash_diff_account_id', 'cash_over_short', 'Akun selisih kas (kasir)'],
 };
 
+/* Data master lain yang terhubung ke bagan akun & laporan keuangan:
+   gudang (akun penyesuaian/selisih stok bawaan), cabang (rekening antar cabang/RAK), perusahaan
+   (modal disetor, saldo laba untuk tutup buku & konsolidasi, investasi pada entitas anak), mata uang
+   (laba/rugi selisih kurs), dan BOM (barang dalam proses produksi). */
+export const MASTER_ACCOUNTS = {
+  warehouses: { adjustment: ['adjustment_account_id', 'stock_adjustment', 'Akun penyesuaian / selisih stok'] },
+  branches: { rak: ['rak_account_id', 'inter_branch', 'Akun rekening antar cabang (RAK)'] },
+  companies: {
+    capital: ['share_capital_account_id', 'share_capital', 'Akun modal disetor'],
+    retained: ['retained_earnings_account_id', 'retained_earnings', 'Akun saldo laba'],
+    investment: ['investment_account_id', 'investment_sub', 'Akun investasi pada entitas anak'],
+  },
+  currencies: {
+    gain: ['fx_gain_account_id', 'fx_gain', 'Akun laba selisih kurs'],
+    loss: ['fx_loss_account_id', 'fx_loss', 'Akun rugi selisih kurs'],
+  },
+  boms: { wip: ['wip_account_id', 'wip', 'Akun barang dalam proses'] },
+};
+
 /** Semua kunci akun bawaan yang kini diatur di data master (tidak lagi di Pengaturan). */
 export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_discount', 'customer_advance', 'sales_dp', 'deposit_saldo', 'deposit_guarantee',
   'ap', 'ic_payable', 'purchase_discount', 'supplier_advance', 'purchase_dp', 'sdeposit_saldo', 'sdeposit_guarantee',
@@ -92,7 +115,9 @@ export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_di
   'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense',
   'salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable',
   'bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short',
-  'vat_out', 'vat_in', 'pph23_prepaid', 'pph23_payable']);
+  'vat_out', 'vat_in', 'pph23_prepaid', 'pph23_payable',
+  'deposit_forfeit', 'sdeposit_forfeit', 'purchase_variance',
+  'stock_adjustment', 'inter_branch', 'share_capital', 'retained_earnings', 'investment_sub', 'fx_gain', 'fx_loss', 'wip']);
 
 const keyOf = (def, row) => (typeof def === 'function' ? def(row || {}) : def);
 /* Bawaan berupa kunci pemetaan (mis. 'ar') atau kode akun langsung ({ code }) — mis. akun aset per kategori. */
@@ -174,6 +199,22 @@ export function bankAccountSet(key) {
   const ids = new Set(db.all(`SELECT DISTINCT ${field} id FROM bank_accounts WHERE ${field} IS NOT NULL`).map((r) => r.id));
   const d = defaultId(def, {}); if (d) ids.add(d);
   return [...ids];
+}
+
+/** id akun data master lain (gudang, cabang, perusahaan, mata uang, BOM); kolom kosong → akun bawaan. */
+export function masterAcct(table, rowOrId, key) {
+  const [field, def] = MASTER_ACCOUNTS[table][key];
+  const r = rowOrId && typeof rowOrId === 'object' ? rowOrId : rowOrId ? db.get(`SELECT * FROM ${table} WHERE id = ?`, rowOrId) : null;
+  return r?.[field] || defaultId(def, r);
+}
+export function fillMasterDefaults(table, row) {
+  for (const [field, def] of Object.values(MASTER_ACCOUNTS[table])) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
+  return row;
+}
+/** Seluruh akun satu jenis pada data master lain (+ bawaan) — mis. semua akun RAK cabang. */
+export function masterKeySet(table, key) {
+  const [field, def] = MASTER_ACCOUNTS[table][key];
+  return masterAccountSet(table, field, def);
 }
 
 /* --- Master pajak ---------------------------------------------------------------------

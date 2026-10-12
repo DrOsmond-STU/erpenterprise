@@ -74,9 +74,10 @@ function prepareLines(companyId, headerBranchId, lines) {
   // Penyeimbang antar cabang (RAK).
   const per = new Map();
   for (const l of out) per.set(l.branch_id, round2((per.get(l.branch_id) || 0) + l.debit - l.credit));
-  const rak = acct('inter_branch');
   for (const [branchId, net] of per) {
     if (Math.abs(net) > EPS) {
+      // Akun RAK dari data cabang (kosong → akun RAK bawaan).
+      const rak = db.get('SELECT rak_account_id FROM branches WHERE id = ?', branchId)?.rak_account_id || acct('inter_branch');
       out.push({ account_id: rak, branch_id: branchId, debit: net < 0 ? -net : 0, credit: net > 0 ? net : 0, memo: 'Rekening antar cabang (otomatis)', is_system: 1 });
     }
   }

@@ -9,7 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, fillTaxDefaults, applyTax, PARTY_ACCOUNTS } from '../ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, fillTaxDefaults, applyTax, fillMasterDefaults, masterAcct, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -331,7 +331,18 @@ export const HOOKS = {
       if (db.get('SELECT id FROM product_locations WHERE product_id = ? AND warehouse_id = ? AND id IS NOT ?', row.product_id, row.warehouse_id, row.id ?? null)) throw conflict('Barang ini sudah memiliki lokasi di gudang tersebut.');
     },
   },
-  currencies: { beforeDelete: (_c, r) => { if (r.is_base) throw conflict('Mata uang dasar tidak dapat dihapus.'); } },
+  currencies: { compute: (_c, row) => { fillMasterDefaults('currencies', row); }, beforeDelete: (_c, r) => { if (r.is_base) throw conflict('Mata uang dasar tidak dapat dihapus.'); } },
+  warehouses: { compute: (_c, row) => { fillMasterDefaults('warehouses', row); } },
+  boms: { compute: (_c, row) => { fillMasterDefaults('boms', row); } },
+  // Cabang: akun RAK sendiri; tidak dapat diganti selama cabang masih bersaldo di akun RAK lama.
+  branches: {
+    compute: (_c, row) => { fillMasterDefaults('branches', row); },
+    beforeUpdate: (_c, row, existing) => {
+      if (!('rak_account_id' in row) || !existing.rak_account_id || Number(row.rak_account_id) === existing.rak_account_id) return;
+      const v = db.get("SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.branch_id = ? AND jl.account_id = ?", existing.id, existing.rak_account_id).v;
+      if (Math.abs(v) > 0.005) throw conflict(`Akun RAK cabang ${existing.code} tidak dapat diganti: masih bersaldo ${v.toLocaleString('id-ID')} di akun lama. Pindahkan saldonya dengan jurnal umum terlebih dahulu.`);
+    },
+  },
   purchase_bills: {
     compute: (ctx, row, lines) => {
       if (lines) for (const l of lines) if (!l.product_id && !l.account_id) throw bad('Setiap baris tagihan harus memilih barang atau akun.');
@@ -395,7 +406,12 @@ export const HOOKS = {
       row.source_type = row.source_type || 'manual';
     },
   },
-  stock_adjustments: { compute: (_c, row, lines) => { if (lines) row.total = sum(lines, (l) => (l.qty || 0) * (l.unit_cost || 0)); } },
+  stock_adjustments: {
+    compute: (_c, row, lines) => {
+      if (lines) row.total = sum(lines, (l) => (l.qty || 0) * (l.unit_cost || 0));
+      if (!row.account_id && row.warehouse_id) row.account_id = masterAcct('warehouses', row.warehouse_id, 'adjustment'); // akun penyesuaian gudang
+    },
+  },
   payroll_runs: {
     compute: (_c, row, lines) => {
       if (!lines) return;
@@ -442,7 +458,16 @@ export const HOOKS = {
   bank_transfers: { compute: (_c, row) => { if (row.from_bank_id === row.to_bank_id) throw bad('Rekening asal dan tujuan tidak boleh sama.'); } },
   stock_transfers: { compute: (_c, row) => { if (row.from_warehouse_id === row.to_warehouse_id) throw bad('Gudang asal dan tujuan tidak boleh sama.'); } },
   companies: {
-    beforeUpdate: (_c, row, existing) => { if (row.parent_id && row.parent_id === existing.id) throw bad('Perusahaan tidak boleh menjadi induk dirinya sendiri.'); },
+    compute: (_c, row) => { fillMasterDefaults('companies', row); },
+    beforeUpdate: (_c, row, existing) => {
+      if (row.parent_id && row.parent_id === existing.id) throw bad('Perusahaan tidak boleh menjadi induk dirinya sendiri.');
+      // Akun modal, saldo laba & investasi dipakai eliminasi konsolidasi: dikunci selama masih bersaldo di akun lama.
+      for (const [field, label] of [['share_capital_account_id', 'modal disetor'], ['retained_earnings_account_id', 'saldo laba'], ['investment_account_id', 'investasi pada entitas anak']]) {
+        if (!(field in row) || !existing[field] || Number(row[field]) === existing[field]) continue;
+        const v = db.get("SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?", existing.id, existing[field]).v;
+        if (Math.abs(v) > 0.005) throw conflict(`Akun ${label} ${existing.code} tidak dapat diganti: masih bersaldo ${Math.abs(v).toLocaleString('id-ID')} di akun lama. Pindahkan saldonya dengan jurnal umum terlebih dahulu.`);
+      }
+    },
   },
   accounts: {
     beforeUpdate: (_c, row, existing) => {
