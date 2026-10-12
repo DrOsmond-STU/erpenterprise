@@ -9,6 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
+import { fillPartyDefaults, fillProductDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -256,6 +257,31 @@ function depositCompute(_c, row) {
   row.used = row.used || 0; row.refunded = row.refunded || 0; row.forfeited = row.forfeited || 0;
 }
 
+/* Akun bersaldo pada data master tidak boleh diganti selama mitra/barang masih bersaldo di akun lama —
+   pindahkan saldonya dulu dengan jurnal umum (bertanda mitra), agar sub-buku tetap cocok dengan buku besar. */
+const BALANCE_KEYS = ['control', 'advance', 'dp', 'deposit', 'guarantee'];
+function guardPartyAccounts(type, row, existing) {
+  for (const key of BALANCE_KEYS) {
+    const [field, , label] = PARTY_ACCOUNTS[type].keys[key];
+    if (!(field in row) || !existing[field] || Number(row[field]) === existing[field]) continue;
+    const bal = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
+      WHERE j.status = 'diposting' AND jl.account_id = ? AND jl.partner_type = ? AND jl.partner_id = ?`, existing[field], type, existing.id).v;
+    if (Math.abs(bal) > 0.005) {
+      const code = db.get('SELECT code FROM accounts WHERE id = ?', existing[field])?.code;
+      throw conflict(`${label} tidak dapat diganti: masih ada saldo Rp ${Math.abs(bal).toLocaleString('id-ID')} di akun ${code} untuk ${existing.name}. Pindahkan saldonya dulu dengan jurnal umum.`);
+    }
+  }
+}
+function guardProductAccounts(row, existing) {
+  for (const field of ['inventory_account_id', 'delivered_account_id']) {
+    if (!(field in row) || !existing[field] || Number(row[field]) === existing[field]) continue;
+    const onHand = field === 'inventory_account_id'
+      ? db.get('SELECT COALESCE(SUM(qty),0) v FROM stock_balances WHERE product_id = ?', existing.id).v
+      : db.get("SELECT COUNT(*) v FROM delivery_order_lines l JOIN delivery_orders d ON d.id = l.parent_id WHERE l.product_id = ? AND d.status = 'dikirim'", existing.id).v;
+    if (Math.abs(onHand) > 1e-9) throw conflict(field === 'inventory_account_id' ? `Akun persediaan ${existing.code} tidak dapat diganti selama masih ada stok; pindahkan nilai persediaan dengan jurnal umum setelah stok habis atau lakukan reklasifikasi.` : `Akun persediaan terkirim ${existing.code} tidak dapat diganti selama masih ada surat jalan yang belum difakturkan.`);
+  }
+}
+
 const STAGE_PROB = { prospek: 10, kualifikasi: 25, penawaran: 50, negosiasi: 75, menang: 100, kalah: 0 };
 
 export const HOOKS = {
@@ -323,6 +349,10 @@ export const HOOKS = {
   supplier_credit_notes: { compute: noteCompute('suppliers', 'supplier_id', 'purchase_bills', 'bill_id', false) },
   sales_advances: { compute: advanceCompute('sales_advances') },
   purchase_advances: { compute: advanceCompute('purchase_advances') },
+  // Data master: kolom akun buku besar yang kosong diisi akun bawaan (dapat diubah per data).
+  customers: { compute: (_c, row) => { fillPartyDefaults('customer', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('customer', row, existing) },
+  suppliers: { compute: (_c, row) => { fillPartyDefaults('supplier', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('supplier', row, existing) },
+  products: { compute: (_c, row) => { fillProductDefaults(row); }, beforeUpdate: (_c, row, existing) => guardProductAccounts(row, existing) },
   customer_deposits: { compute: depositCompute },
   supplier_deposits: { compute: depositCompute },
   cash_transactions: { compute: amountTotal },

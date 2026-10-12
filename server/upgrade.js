@@ -9,6 +9,8 @@ import { clearPermCache } from './security/rbac.js';
 import { spread } from './ledger/budget.js';
 import { syncInstallments } from './ledger/payments.js';
 import { BUDGET_MONTHS } from './modules/entities.js';
+import { fillPartyDefaults, fillProductDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
+import { getSetting, setSetting, clearSettingsCache } from './lib/settings.js';
 
 export function upgrade() {
   db.tx(() => {
@@ -53,4 +55,28 @@ export function upgrade() {
   });
   clearAccountCache();
   clearPermCache();
+  // Akun buku besar pindah ke data master: isi kolom akun pelanggan, pemasok, dan barang/jasa yang kosong
+  // dari pemetaan lama (termasuk penyesuaian yang pernah disimpan di Pengaturan), lalu hapus kunci tersebut
+  // dari Pengaturan sehingga hanya akun sistem yang tersisa di sana.
+  db.tx(() => {
+    for (const [type, table] of [['customer', 'customers'], ['supplier', 'suppliers']]) {
+      const fields = Object.values(PARTY_ACCOUNTS[type].keys).map(([f]) => f);
+      for (const row of db.all(`SELECT * FROM ${table} WHERE ${fields.map((f) => `${f} IS NULL`).join(' OR ')}`)) {
+        const next = fillPartyDefaults(type, { ...row });
+        const upd = Object.fromEntries(fields.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
+        if (Object.keys(upd).length) db.update(table, row.id, upd);
+      }
+    }
+    const pf = Object.values(PRODUCT_ACCOUNTS).map(([f]) => f);
+    for (const row of db.all(`SELECT * FROM products WHERE ${pf.map((f) => `${f} IS NULL`).join(' OR ')}`)) {
+      const next = fillProductDefaults({ ...row });
+      const upd = Object.fromEntries(pf.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
+      if (Object.keys(upd).length) db.update('products', row.id, upd);
+    }
+    const saved = getSetting('account_map', null);
+    if (saved && Object.keys(saved).some((k) => MASTER_KEYS.has(k))) {
+      setSetting('account_map', Object.fromEntries(Object.entries(saved).filter(([k]) => !MASTER_KEYS.has(k))), null);
+      clearSettingsCache();
+    }
+  });
 }

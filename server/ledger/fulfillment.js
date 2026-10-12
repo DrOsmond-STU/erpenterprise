@@ -5,7 +5,7 @@
    Belum Difakturkan" di buku besar.
    ========================================================================== */
 import * as db from '../db.js';
-import { acct } from './posting.js';
+import { productAccountSet, inList } from './accounts.js';
 import { round2, today } from '../lib/util.js';
 
 const days = (from, to) => Math.max(0, Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 864e5));
@@ -34,7 +34,7 @@ export function fulfillmentReport(ctx, { companyId, branchId, asOf }) {
   for (const d of unbilled) { d.age = days(d.date, t); d.valueIdr = round2(d.value * d.rate); }
   // Akun barang terkirim dicatat di cabang gudang; untuk tampilan per cabang gunakan cabang gudang surat jalan.
   const glBranch = branchId ? ' AND jl.branch_id = ?' : '';
-  const gl = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?${glBranch}`, companyId, acct('goods_delivered'), ...bp).v;
+  const gl = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${inList(productAccountSet('delivered'))}${glBranch}`, companyId, ...bp).v;
   const unbilledCostGl = branchId
     ? round2(db.get(`SELECT COALESCE(SUM(d.cost),0) v FROM delivery_orders d JOIN warehouses w ON w.id = d.warehouse_id WHERE d.company_id = ? AND d.status = 'dikirim' AND w.branch_id = ?`, companyId, branchId).v)
     : round2(unbilled.reduce((s, d) => s + (d.cost || 0), 0));

@@ -9,6 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
+import { partyAcct, productAccount } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -89,22 +90,21 @@ function postSalesInvoice(ctx, inv) {
   needLines(ls, 'faktur');
   const cust = db.get('SELECT * FROM customers WHERE id = ?', inv.customer_id);
   if (cust.status === 'ditahan') throw bad(`Pelanggan ${cust.name} sedang ditahan; faktur tidak dapat diterbitkan.`);
-  const ic = !!cust.related_company_id;
   const wh = warehouse(inv.warehouse_id);
   if (wh.company_id !== inv.company_id) throw bad('Gudang harus milik perusahaan yang sama.');
   const jl = [];
-  const arLine = { account_id: acct(ic ? 'ic_receivable' : 'ar'), debit: 0, memo: `Piutang ${cust.name}`, partner_type: 'customer', partner_id: cust.id };
+  const arLine = { account_id: partyAcct('customer', cust, 'control'), debit: 0, memo: `Piutang ${cust.name}`, partner_type: 'customer', partner_id: cust.id };
   jl.push(arLine);
   for (const l of ls) {
     const p = product(l.product_id);
-    jl.push({ account_id: ic ? acct('ic_sales') : productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
+    jl.push({ account_id: partyAcct('customer', cust, 'sales') || productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
     if (l.delivery_line_id) {
       // Barang sudah keluar saat surat jalan dikirim: HPP diakui sekarang dari akun persediaan terkirim belum difakturkan.
       const dl = db.get('SELECT dl.*, w.branch_id wb FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id JOIN warehouses w ON w.id = d.warehouse_id WHERE dl.id = ?', l.delivery_line_id);
       db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', dl.unit_cost || 0, l.id);
       if (dl.cost > 0) {
         jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: dl.cost, branch_id: dl.wb, memo: `HPP ${p.code} (surat jalan)`, project_id: inv.project_id });
-        jl.push({ account_id: acct('goods_delivered'), credit: dl.cost, branch_id: dl.wb, memo: `Barang terkirim ${p.code} difakturkan` });
+        jl.push({ account_id: productAccount(p, 'delivered', 'goods_delivered'), credit: dl.cost, branch_id: dl.wb, memo: `Barang terkirim ${p.code} difakturkan` });
       }
     } else if (isStockable(p)) {
       const { value, unitCost } = stockOut(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, date: inv.date, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number });
@@ -118,7 +118,7 @@ function postSalesInvoice(ctx, inv) {
   if (inv.tax > 0) jl.push({ account_id: acct('vat_out'), credit: toBase(inv.tax, inv), memo: 'PPN keluaran' });
   // Potongan uang muka: DPP uang muka (sudah dikenai PPN saat faktur uang muka) mengurangi piutang.
   const adv = applyAdvance('sales_advances', inv, 1);
-  if (adv) jl.push({ account_id: acct('sales_dp'), debit: round2(inv.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'customer', partner_id: cust.id });
+  if (adv) jl.push({ account_id: partyAcct('customer', cust, 'dp'), debit: round2(inv.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'customer', partner_id: cust.id });
   // Piutang (IDR) = jumlah pendapatan + PPN yang sudah dikonversi — menghindari selisih pembulatan.
   arLine.debit = round2(jl.filter((x) => x.credit && !x.branch_id).reduce((a, x) => a + x.credit, 0) - (adv ? inv.advance_amount : 0));
   postJournal(ctx, { companyId: inv.company_id, branchId: inv.branch_id, date: inv.date, description: `Faktur ${inv.number} — ${cust.name}`, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number, lines: jl });
@@ -195,7 +195,7 @@ function shipDelivery(ctx, d) {
     if (isStockable(p)) {
       ({ unitCost: unit, value } = stockOut(ctx, { warehouseId: wh.id, productId: p.id, qty: l.qty, date: d.date, sourceType: 'delivery_orders', sourceId: d.id, sourceNo: d.number }));
       if (value > 0) {
-        jl.push({ account_id: acct('goods_delivered'), debit: value, branch_id: wh.branch_id, memo: `Kirim ${p.code} → ${cust.name}`, project_id: so.project_id });
+        jl.push({ account_id: productAccount(p, 'delivered', 'goods_delivered'), debit: value, branch_id: wh.branch_id, memo: `Kirim ${p.code} → ${cust.name}`, project_id: so.project_id });
         jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), credit: value, branch_id: wh.branch_id, memo: `Persediaan keluar ${p.code}` });
       }
     }
@@ -306,7 +306,7 @@ function postReceipt(ctx, r) {
     const b = bank(r.bank_account_id);
     jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: round2(r.advance - charge), memo: `Uang muka ${cust.name}` });
     if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya bank' });
-    jl.push({ account_id: acct('customer_advance'), credit: r.advance, memo: `Uang muka ${cust.name}${r.reference ? ` · ${r.reference}` : ''}`, partner_type: 'customer', partner_id: cust.id });
+    jl.push({ account_id: partyAcct('customer', cust, 'advance'), credit: r.advance, memo: `Uang muka ${cust.name}${r.reference ? ` · ${r.reference}` : ''}`, partner_type: 'customer', partner_id: cust.id });
   } else {
     const ls = lines('customer_receipt_lines', r.id);
     needLines(ls, 'penerimaan');
@@ -322,7 +322,7 @@ function postReceipt(ctx, r) {
       settle(tg.table, inv.id, st);
       const base = toBase(st, inv);
       arCredit += base; cash += l.amount; disc += l.discount || 0; pph += l.pph23 || 0;
-      jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: base, memo: `Pelunasan ${inv.number}${st < inv.total - (inv.paid || 0) - 0.005 ? ' (sebagian)' : ''}`, partner_type: 'customer', partner_id: cust.id });
+      jl.push({ account_id: partyAcct('customer', cust, 'control'), branch_id: inv.branch_id, credit: base, memo: `Pelunasan ${inv.number}${st < inv.total - (inv.paid || 0) - 0.005 ? ' (sebagian)' : ''}`, partner_type: 'customer', partner_id: cust.id });
     }
     let debitBase = 0;
     if (mode === 'pakai_deposit') {
@@ -336,7 +336,7 @@ function postReceipt(ctx, r) {
       if (!isBaseDoc(r)) throw bad('Pemakaian uang muka hanya untuk faktur IDR.');
       const avail = advanceBalance('customer', cust.id, r.company_id);
       if (cash > avail + 0.005) throw bad(`Saldo uang muka ${cust.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
-      if (cash > 0) jl.push({ account_id: acct('customer_advance'), debit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'customer', partner_id: cust.id });
+      if (cash > 0) jl.push({ account_id: partyAcct('customer', cust, 'advance'), debit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'customer', partner_id: cust.id });
       debitBase += round2(cash);
     } else if (r.method === 'giro') {
       // Giro mundur diterima: piutang dilunasi ke "giro diterima belum cair"; kas bertambah saat giro cair.
@@ -351,7 +351,7 @@ function postReceipt(ctx, r) {
       if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya bank' });
       debitBase += bankDebit + chargeBase;
     }
-    if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: acct('sales_discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
+    if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: partyAcct('customer', cust, 'discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
     if (pph > 0) { const v = toBase(pph, r); jl.push({ account_id: acct('pph23_prepaid'), debit: v, memo: 'PPh 23 dipotong pelanggan', partner_type: 'customer', partner_id: cust.id }); debitBase += v; }
     const fx = fxLine(round2(debitBase - arCredit), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
@@ -420,7 +420,7 @@ function postBill(ctx, bill) {
       stockIn(ctx, { warehouseId: bill.warehouse_id, productId: p.id, qty: l.qty, unitCost: unit, date: bill.date, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number });
       jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: round2(baseAmt), memo: `${p.code} ${p.name}`, project_id: l.project_id || bill.project_id });
     } else {
-      const account = l.account_id || (p ? productAcct(p, 'cogs_account_id', 'cogs') : null);
+      const account = l.account_id || (p ? productAccount(p, 'expense') || productAcct(p, 'cogs_account_id', 'cogs') : null);
       if (!account) throw bad('Baris jasa/beban harus memilih akun.');
       jl.push({ account_id: account, debit: toBase(l.amount, bill), memo: l.description || p?.name, cost_center_id: l.cost_center_id, project_id: l.project_id || bill.project_id });
     }
@@ -429,8 +429,8 @@ function postBill(ctx, bill) {
   if (bill.tax > 0) jl.push({ account_id: acct('vat_in'), debit: toBase(bill.tax, bill), memo: 'PPN masukan' });
   const adv = applyAdvance('purchase_advances', bill, 1);
   const apAmount = round2(jl.reduce((a, x) => a + (x.debit || 0), 0) - (adv ? bill.advance_amount : 0));
-  if (adv) jl.push({ account_id: acct('purchase_dp'), credit: round2(bill.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'supplier', partner_id: sup.id });
-  jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), credit: apAmount, memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
+  if (adv) jl.push({ account_id: partyAcct('supplier', sup, 'dp'), credit: round2(bill.advance_amount), memo: `Potongan uang muka ${adv.number}`, partner_type: 'supplier', partner_id: sup.id });
+  jl.push({ account_id: partyAcct('supplier', sup, 'control'), credit: apAmount, memo: `Hutang ${sup.name}`, partner_type: 'supplier', partner_id: sup.id });
   postJournal(ctx, { companyId: bill.company_id, branchId: bill.branch_id, date: bill.date, description: `Tagihan ${bill.number} (${bill.supplier_invoice_no || '-'}) — ${sup.name}`, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number, lines: jl });
   setStatus('purchase_bills', bill.id, 'terbit');
   createInstallments('purchase_bills', db.get('SELECT * FROM purchase_bills WHERE id = ?', bill.id));
@@ -464,7 +464,7 @@ function postPayment(ctx, pay) {
     if (!isBaseDoc(pay)) throw bad('Uang muka dicatat dalam IDR.');
     if (!(pay.advance > 0)) throw bad('Isi nilai uang muka yang dibayar.');
     const b = bank(pay.bank_account_id);
-    jl.push({ account_id: acct('supplier_advance'), debit: pay.advance, memo: `Uang muka ${sup.name}${pay.reference ? ` · ${pay.reference}` : ''}`, partner_type: 'supplier', partner_id: sup.id });
+    jl.push({ account_id: partyAcct('supplier', sup, 'advance'), debit: pay.advance, memo: `Uang muka ${sup.name}${pay.reference ? ` · ${pay.reference}` : ''}`, partner_type: 'supplier', partner_id: sup.id });
     if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer' });
     jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: round2(pay.advance + charge), memo: `Uang muka ${sup.name}` });
   } else {
@@ -482,7 +482,7 @@ function postPayment(ctx, pay) {
       settle(tg.table, bill.id, st);
       const base = toBase(st, bill);
       apDebit += base; cash += l.amount; disc += l.discount || 0; pph += l.pph23 || 0;
-      jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit: base, memo: `Pelunasan ${bill.number}`, partner_type: 'supplier', partner_id: sup.id });
+      jl.push({ account_id: partyAcct('supplier', sup, 'control'), branch_id: bill.branch_id, debit: base, memo: `Pelunasan ${bill.number}`, partner_type: 'supplier', partner_id: sup.id });
     }
     let creditBase = 0;
     if (mode === 'pakai_deposit') {
@@ -496,7 +496,7 @@ function postPayment(ctx, pay) {
       if (!isBaseDoc(pay)) throw bad('Pemakaian uang muka hanya untuk tagihan IDR.');
       const avail = advanceBalance('supplier', sup.id, pay.company_id);
       if (cash > avail + 0.005) throw bad(`Saldo uang muka ke ${sup.name} hanya Rp ${Math.round(avail).toLocaleString('id-ID')}.`);
-      if (cash > 0) jl.push({ account_id: acct('supplier_advance'), credit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'supplier', partner_id: sup.id });
+      if (cash > 0) jl.push({ account_id: partyAcct('supplier', sup, 'advance'), credit: round2(cash), memo: 'Pemakaian uang muka', partner_type: 'supplier', partner_id: sup.id });
       creditBase += round2(cash);
     } else if (pay.method === 'giro') {
       // Giro mundur diserahkan: hutang dilunasi ke "giro diberikan belum cair"; kas berkurang saat giro cair.
@@ -510,7 +510,7 @@ function postPayment(ctx, pay) {
       if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya transfer' });
       creditBase += cashBase;
     }
-    if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: acct('purchase_discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
+    if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: partyAcct('supplier', sup, 'discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
     if (pph > 0) { const v = toBase(pph, pay); jl.push({ account_id: acct('pph23_payable'), credit: v, memo: `PPh 23 dipotong — ${sup.name}`, partner_type: 'supplier', partner_id: sup.id }); creditBase += v; }
     const fx = fxLine(round2(apDebit - creditBase), null, 'Selisih kurs terealisasi');
     if (fx) jl.push(fx);
@@ -582,8 +582,7 @@ function postNote(table) {
     needLines(ls, cfg.title.toLowerCase());
     const party = cfg.ar ? db.get('SELECT * FROM customers WHERE id = ?', n.customer_id) : db.get('SELECT * FROM suppliers WHERE id = ?', n.supplier_id);
     const partyRef = { partner_type: cfg.ar ? 'customer' : 'supplier', partner_id: party.id };
-    const ic = !!party.related_company_id;
-    const control = acct(cfg.ar ? (ic ? 'ic_receivable' : 'ar') : (ic ? 'ic_payable' : 'ap'));
+    const control = partyAcct(cfg.ar ? 'customer' : 'supplier', party, 'control');
     const vat = acct(cfg.ar ? 'vat_out' : 'vat_in');
     const total = round2(n.total);
     const jl = [];
@@ -601,7 +600,7 @@ function postNote(table) {
       settle(cfg.docTable, applied.id, total);
       jl.push({ account_id: control, branch_id: applied.branch_id, [side]: total, memo: `${cfg.title} ${n.number} atas ${applied.number}`, ...partyRef });
     } else if (cfg.reduces) {
-      jl.push({ account_id: acct(cfg.ar ? 'customer_advance' : 'supplier_advance'), [side]: total, memo: `Saldo kredit ${party.name} dari ${n.number}`, ...partyRef });
+      jl.push({ account_id: partyAcct(cfg.ar ? 'customer' : 'supplier', party, 'advance'), [side]: total, memo: `Saldo kredit ${party.name} dari ${n.number}`, ...partyRef });
     } else {
       jl.push({ account_id: control, [side]: total, memo: `${cfg.title} ${n.number} — ${party.name}`, ...partyRef });
     }
@@ -683,18 +682,17 @@ function postAdvance(table) {
     if (!ADV_ORDER_OPEN[table].includes(o.status)) throw bad(`Pesanan ${o.number} berstatus "${o.status}" — uang muka hanya untuk pesanan yang disetujui dan belum selesai.`);
     if (cfg.ar && party.status === 'ditahan') throw bad(`Pelanggan ${party.name} sedang ditahan.`);
     if (!(a.amount > 0) || !(a.total > 0)) throw bad('Nilai uang muka belum diisi.');
-    const ic = !!party.related_company_id;
     const ref = { partner_type: cfg.ar ? 'customer' : 'supplier', partner_id: party.id };
     const jl = cfg.ar
       ? [
-        { account_id: acct(ic ? 'ic_receivable' : 'ar'), debit: round2(a.total), memo: `Piutang uang muka ${o.number}`, ...ref },
-        { account_id: acct('sales_dp'), credit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
+        { account_id: partyAcct('customer', party, 'control'), debit: round2(a.total), memo: `Piutang uang muka ${o.number}`, ...ref },
+        { account_id: partyAcct('customer', party, 'dp'), credit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
         ...(a.tax > 0 ? [{ account_id: acct('vat_out'), credit: round2(a.tax), memo: `PPN keluaran uang muka ${a.number}` }] : []),
       ]
       : [
-        { account_id: acct('purchase_dp'), debit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
+        { account_id: partyAcct('supplier', party, 'dp'), debit: round2(a.amount), memo: `Uang muka ${o.number} — ${party.name}`, ...ref },
         ...(a.tax > 0 ? [{ account_id: acct('vat_in'), debit: round2(a.tax), memo: `PPN masukan uang muka ${a.supplier_invoice_no || a.number}` }] : []),
-        { account_id: acct(ic ? 'ic_payable' : 'ap'), credit: round2(a.total), memo: `Hutang uang muka ${o.number}`, ...ref },
+        { account_id: partyAcct('supplier', party, 'control'), credit: round2(a.total), memo: `Hutang uang muka ${o.number}`, ...ref },
       ];
     postJournal(ctx, { companyId: a.company_id, branchId: a.branch_id, date: a.date, description: `Uang muka ${a.number} atas ${o.number} — ${party.name}`, sourceType: table, sourceId: a.id, sourceNo: a.number, lines: jl });
     setStatus(table, a.id, 'terbit');
@@ -749,7 +747,7 @@ export const DEPOSIT = {
   customer_deposits: { ar: true, party: 'customer_id', partyTable: 'customers', ptype: 'customer', fresh: 'diterima', open: ['diterima', 'terpakai'], saldo: 'deposit_saldo', jaminan: 'deposit_guarantee', forfeit: 'deposit_forfeit' },
   supplier_deposits: { ar: false, party: 'supplier_id', partyTable: 'suppliers', ptype: 'supplier', fresh: 'dibayar', open: ['dibayar', 'terpakai'], saldo: 'sdeposit_saldo', jaminan: 'sdeposit_guarantee', forfeit: 'sdeposit_forfeit' },
 };
-const depositAcct = (table, d) => acct(DEPOSIT[table][d.kind === 'jaminan' ? 'jaminan' : 'saldo']);
+const depositAcct = (table, d) => partyAcct(DEPOSIT[table].ptype, d[DEPOSIT[table].party], d.kind === 'jaminan' ? 'guarantee' : 'deposit');
 const depositRemaining = (d) => round2(d.amount - (d.used || 0) - (d.refunded || 0) - (d.forfeited || 0));
 /** Catat pemakaian/pengembalian/pencairan deposit dan perbarui status (diterima/dibayar → terpakai → habis). */
 function depositMove(table, id, field, delta) {
@@ -1156,7 +1154,7 @@ function postSalesReturn(ctx, r) {
     const sold = invLines.filter((x) => x.product_id === l.product_id).reduce((a, x) => a + x.qty, 0);
     if (returnedQty('sales_returns', 'sales_invoice_id', inv.id, l.product_id, r.id) + l.qty > sold + 1e-9) throw bad(`Qty retur ${product(l.product_id).code} melebihi qty pada faktur (${sold}).`);
     const p = product(l.product_id);
-    jl.push({ account_id: acct('sales_returns'), debit: toBase(l.amount, inv), memo: `Retur ${p.code}`, project_id: inv.project_id });
+    jl.push({ account_id: productAccount(p, 'returns', 'sales_returns'), debit: toBase(l.amount, inv), memo: `Retur ${p.code}`, project_id: inv.project_id });
     if (isStockable(p)) {
       const unit = src.unit_cost || 0;
       const v = stockIn(ctx, { warehouseId: wh.id, productId: p.id, qty: l.qty, unitCost: unit, date: r.date, sourceType: 'sales_returns', sourceId: r.id, sourceNo: r.number });
@@ -1182,7 +1180,7 @@ function postSalesReturn(ctx, r) {
     const applied = round2((restoredAdv.applied || 0) - restore);
     if (applied < -0.005) throw conflict(`Uang muka ${restoredAdv.number} tidak memiliki potongan sebesar ini untuk dipulihkan.`);
     db.update('sales_advances', restoredAdv.id, { applied: Math.max(0, applied), status: 'lunas' });
-    jl.push({ account_id: acct('sales_dp'), credit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
+    jl.push({ account_id: partyAcct('customer', cust, 'dp'), credit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
   }
   // Bagian piutang: mengurangi sisa faktur; kelebihannya (faktur sudah dibayar, atau bagian uang muka
   // pada mode "saldo") menjadi saldo kredit pelanggan atau dikembalikan lewat rekening.
@@ -1195,10 +1193,10 @@ function postSalesReturn(ctx, r) {
     if (r.refund_bank_id) {
       const b = bank(r.refund_bank_id);
       jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: toCreditBase, memo: `Pengembalian dana retur ${r.number} — ${cust.name}` });
-    } else jl.push({ account_id: acct('customer_advance'), credit: toCreditBase, memo: `Saldo kredit dari retur ${r.number}`, ...ref });
+    } else jl.push({ account_id: partyAcct('customer', cust, 'advance'), credit: toCreditBase, memo: `Saldo kredit dari retur ${r.number}`, ...ref });
   }
   const arCredit = round2(credit - restore - (toCredit > 0.005 ? toCreditBase : 0));
-  if (arCredit > 0.005) jl.push({ account_id: acct(cust.related_company_id ? 'ic_receivable' : 'ar'), branch_id: inv.branch_id, credit: arCredit, memo: `Nota retur ${r.number} atas ${inv.number}`, ...ref });
+  if (arCredit > 0.005) jl.push({ account_id: partyAcct('customer', cust, 'control'), branch_id: inv.branch_id, credit: arCredit, memo: `Nota retur ${r.number} atas ${inv.number}`, ...ref });
   if (toInvoice > 0) settle('sales_invoices', inv.id, toInvoice);
   postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `Retur penjualan ${r.number} atas ${inv.number} — ${cust.name}`, sourceType: 'sales_returns', sourceId: r.id, sourceNo: r.number, lines: jl });
   setStatus('sales_returns', r.id, 'diposting', { to_invoice: toInvoice, to_credit: toCredit });
@@ -1268,7 +1266,7 @@ function postPurchaseReturn(ctx, r) {
     const applied = round2((restoredAdv.applied || 0) - restore);
     if (applied < -0.005) throw conflict(`Uang muka ${restoredAdv.number} tidak memiliki potongan sebesar ini untuk dipulihkan.`);
     db.update('purchase_advances', restoredAdv.id, { applied: Math.max(0, applied), status: 'lunas' });
-    jl.push({ account_id: acct('purchase_dp'), debit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
+    jl.push({ account_id: partyAcct('supplier', sup, 'dp'), debit: restore, memo: `Uang muka ${restoredAdv.number} dipulihkan (retur)`, ...ref });
   }
   // Bagian hutang: mengurangi sisa tagihan; kelebihannya (tagihan sudah dibayar, atau bagian uang muka
   // pada mode "saldo") menjadi saldo uang muka ke pemasok atau diterima kembali di rekening.
@@ -1281,10 +1279,10 @@ function postPurchaseReturn(ctx, r) {
     if (r.refund_bank_id) {
       const b = bank(r.refund_bank_id);
       jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: toCreditBase, memo: `Pengembalian dana retur ${r.number} dari ${sup.name}` });
-    } else jl.push({ account_id: acct('supplier_advance'), debit: toCreditBase, memo: `Saldo uang muka dari retur ${r.number}`, ...ref });
+    } else jl.push({ account_id: partyAcct('supplier', sup, 'advance'), debit: toCreditBase, memo: `Saldo uang muka dari retur ${r.number}`, ...ref });
   }
   const apDebit = round2(debit - restore - (toCredit > 0.005 ? toCreditBase : 0));
-  if (apDebit > 0.005) jl.push({ account_id: acct(sup.related_company_id ? 'ic_payable' : 'ap'), branch_id: bill.branch_id, debit: apDebit, memo: `Nota retur ${r.number} atas ${bill.number}`, ...ref });
+  if (apDebit > 0.005) jl.push({ account_id: partyAcct('supplier', sup, 'control'), branch_id: bill.branch_id, debit: apDebit, memo: `Nota retur ${r.number} atas ${bill.number}`, ...ref });
   if (toBill > 0) settle('purchase_bills', bill.id, toBill);
   postJournal(ctx, { companyId: r.company_id, branchId: r.branch_id, date: r.date, description: `Retur pembelian ${r.number} atas ${bill.number} — ${sup.name}`, sourceType: 'purchase_returns', sourceId: r.id, sourceNo: r.number, lines: jl });
   setStatus('purchase_returns', r.id, 'diposting', { to_invoice: toBill, to_credit: toCredit });

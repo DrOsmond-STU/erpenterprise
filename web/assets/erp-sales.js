@@ -278,10 +278,10 @@
       `<section class="kpi-grid-erp">
         ${kpi('Belum dibayar', esc(FMT.rpCompact(t.unpaid)), `${t.unpaidCount} dokumen · ${ar ? 'tagih pelanggan' : 'ajukan pembayaran'}`, t.unpaidCount ? 'neg' : '')}
         ${kpi('Siap dipotong', esc(FMT.rpCompact(t.ready)), `${t.readyCount} dokumen lunas`)}
-        ${kpi('Sisa DPP belum dipotong', esc(FMT.rpCompact(t.remaining)), `akun ${ar ? '2-1610' : '1-1520'}`)}
+        ${kpi('Sisa DPP belum dipotong', esc(FMT.rpCompact(t.remaining)), `akun ${r.accounts}`)}
         ${kpi('Sudah dipotong', esc(FMT.rpCompact(t.applied)), `pada ${ar ? 'faktur' : 'tagihan'} akhir`, 'pos')}
       </section>
-      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Sisa uang muka cocok dengan saldo akun ${ar ? '2-1610 Uang Muka Penjualan' : '1-1520 Uang Muka Pembelian'} (${FMT.rp(r.glBalance)}).` : `Tidak cocok: register ${FMT.rp(t.remaining)} vs buku besar ${FMT.rp(r.glBalance)}.`)}</div>
+      <div class="notice" data-tone="${r.reconciled ? 'ok' : 'danger'}">${icon(r.reconciled ? 'check' : 'alert')} ${esc(r.reconciled ? `Sisa uang muka cocok dengan saldo akun uang muka ${ar ? 'penjualan' : 'pembelian'} ${r.accounts} (${FMT.rp(r.glBalance)}).` : `Tidak cocok: register ${FMT.rp(t.remaining)} vs buku besar ${FMT.rp(r.glBalance)}.`)}</div>
       <article class="card report-card"><div class="report-body"><div class="table-scroll"><table class="table report-table tbl-sm"><thead><tr><th>Uang muka</th><th>${ar ? 'Pelanggan' : 'Pemasok'}</th><th>Pesanan</th><th class="ta-r">DPP</th><th class="ta-r">Total + PPN</th><th class="ta-r">Dipotong</th><th class="ta-r">Sisa DPP</th><th>Status</th></tr></thead><tbody>
         ${r.rows.map((x) => `<tr><td class="code"><button class="link" data-open="${table}:${x.id}">${esc(x.number)}</button><span class="cell-sub">${esc(ERP.date(x.date))}</span></td><td>${esc(x.party)}</td>
           <td class="code"><button class="link" data-open="${ar ? 'sales_orders' : 'purchase_orders'}:${x.order_id}">${esc(x.order_no)}</button>${x.pct != null ? `<span class="cell-sub">${esc(num(x.pct))}% dari DPP ${money(x.order_dpp)}</span>` : ''}</td>

@@ -105,7 +105,9 @@
     let r;
     try { r = await api('GET', `/api/e/${key}/${id}`); } catch (err) { return fail(err); }
     const title = r.number || (e.title && r[e.title]) || r.code || r.name || `#${r.id}`;
-    const details = e.fields.filter((f) => !f.hidden && f.type !== 'password' && f.name !== 'number')
+    // Bidang bertanda section (mis. "Akun buku besar") tampil di bagian tersendiri setelah Rincian.
+    const sections = [...new Set(e.fields.filter((f) => f.section && !f.hidden).map((f) => f.section))].map((sec) => `<div class="section"><span class="section-title">${esc(sec)}</span><dl class="deflist">${e.fields.filter((f) => f.section === sec && !f.hidden).map((f) => `<dt>${esc(f.label)}</dt><dd>${r[f.name] ? fieldHtml(f, r) : `<span class="muted">— ${esc(f.help || '')}</span>`}</dd>`).join('')}</dl></div>`).join('');
+    const details = e.fields.filter((f) => !f.hidden && !f.section && f.type !== 'password' && f.name !== 'number')
       .map((f) => `<dt>${esc(f.label)}</dt><dd>${fieldHtml(f, r)}</dd>`).join('') +
       Object.entries(e.computed || {}).map(([n, c]) => `<dt>${esc(c.label)}</dt><dd>${c.type === 'money' ? money(r[n]) : c.type === 'pct' ? `${esc(num(r[n], 1))}%` : esc(num(r[n]))}</dd>`).join('') +
       (e.scope === 'branch' ? `<dt>Cabang</dt><dd>${esc(r.branch_id__label || '')}</dd>` : '') +
@@ -146,7 +148,7 @@
       eyebrow: `<span class="code">${esc(r.number || r.code || `#${r.id}`)}</span>${e.statusField ? pill(r[e.statusField]) : ''}${r.__masked ? ' <span class="pill" data-tone="warn"><i class="pill-dot"></i>Data sensitif disamarkan</span>' : ''}`,
       title: String(title), subtitle: e.label,
       body: `${r.approval_note ? `<div class="section"><div class="notice" data-tone="${r.status === 'menunggu' ? 'warn' : 'info'}">${icon('alert')} ${esc(r.approval_note)}</div></div>` : ''}
-        <div class="section"><span class="section-title">Rincian</span><dl class="deflist">${details}</dl></div>${linesHtml}${extra}${journals}<div class="section" data-attachments="${key}:${r.id}"></div>${auditHtml}`,
+        <div class="section"><span class="section-title">Rincian</span><dl class="deflist">${details}</dl></div>${sections}${linesHtml}${extra}${journals}<div class="section" data-attachments="${key}:${r.id}"></div>${auditHtml}`,
       foot: `${actions}<div class="toolbar-spacer"></div>
         ${r.__editable && e.canWrite ? `<button class="btn" data-edit="${key}:${r.id}">${icon('edit')} Ubah</button><button class="btn btn-ghost btn-danger-ghost" data-delete="${key}:${r.id}" aria-label="Hapus">Hapus</button>` : ''}
         <button class="btn btn-ghost" data-print-record="${key}:${r.id}">${icon('print')} Cetak</button>`,
@@ -192,7 +194,7 @@
       title: id ? `Ubah ${e.one}` : `${e.one[0].toUpperCase()}${e.one.slice(1)} baru`,
       note: id ? `${row.number || row.code || ''} · versi ${row.row_version}` : (e.number ? 'Nomor dibuat otomatis saat disimpan.' : ''),
       wide: !!e.lines || fields.length > 10,
-      body: `<form class="form-grid" data-record-form novalidate>${branchPicker}${fields.map((f) => F().input(f, row[f.name])).join('')}${e.lines ? F().linesEditor(e, row.lines || []) : ''}</form><div class="form-error" role="alert" hidden></div>`,
+      body: `<form class="form-grid" data-record-form novalidate>${branchPicker}${fields.map((f, i) => (f.section && f.section !== fields[i - 1]?.section ? `<div class="form-grid-full form-section"><span class="section-title">${esc(f.section)}</span><span class="field-hint">Kosong saat disimpan = diisi akun bawaan; dapat berbeda untuk setiap data.</span></div>` : '') + F().input(f, row[f.name])).join('')}${e.lines ? F().linesEditor(e, row.lines || []) : ''}</form><div class="form-error" role="alert" hidden></div>`,
       foot: `<button class="btn btn-primary" data-save>${icon('check')} Simpan</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" data-close>Batal</button>`,
     });
     const form = $('form', m);

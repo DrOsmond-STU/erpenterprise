@@ -19,7 +19,7 @@ export const clearAccountCache = () => acctCache.clear();
 export function accountByCode(code) {
   if (acctCache.has(code)) return acctCache.get(code);
   const a = db.get('SELECT * FROM accounts WHERE code = ?', code);
-  if (!a) throw bad(`Akun ${code} belum ada di bagan akun. Periksa Pengaturan → Pemetaan akun.`);
+  if (!a) throw bad(`Akun ${code} belum ada di bagan akun. Periksa akun pada data master atau Pengaturan → Akun sistem.`);
   acctCache.set(code, a);
   return a;
 }

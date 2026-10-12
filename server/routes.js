@@ -8,6 +8,7 @@ import * as audit from './security/audit.js';
 import { MODULES, STATUS, ENTITIES } from './modules/entities.js';
 import { LEVEL, can, requirePerm, resolveScope, permissionsFor, clearPermCache } from './security/rbac.js';
 import { getSetting, setSetting, securityPolicy, accountMap, approvalPolicy, clearSettingsCache } from './lib/settings.js';
+import { MASTER_KEYS } from './ledger/accounts.js';
 import { clearAccountCache } from './ledger/posting.js';
 import { copyBudgets } from './ledger/budget.js';
 import { expireQuotations, portalRespond, quotationReport } from './ledger/quotation.js';
@@ -362,7 +363,8 @@ route('PUT', '/api/roles/:id/permissions', (ctx, body, p) => {
 /* --- Pengaturan ----------------------------------------------------------------------- */
 const SETTING_KEYS = {
   security_policy: { get: securityPolicy, defaults: DEFAULT_SECURITY_POLICY },
-  account_map: { get: accountMap },
+  // Hanya akun sistem; akun pelanggan, pemasok, persediaan & jasa diatur pada data master masing-masing.
+  account_map: { get: () => Object.fromEntries(Object.entries(accountMap()).filter(([k]) => !MASTER_KEYS.has(k))) },
   approval_policy: { get: approvalPolicy },
 };
 route('GET', '/api/settings', (ctx) => {

@@ -30,8 +30,10 @@ untuk mengulang dari awal.
 3. `sudo systemctl enable --now erp`, pasang `deploy/nginx.conf`.
 4. Masuk sebagai `admin`, ganti sandi (wajib), aktifkan MFA, lalu:
    * Administrasi → Perusahaan & Cabang: lengkapi data entitas.
-   * Keuangan → Bagan Akun: sesuaikan bila perlu; Pengaturan → Pemetaan akun.
-   * Data Master: gudang, rekening kas/bank, produk, pelanggan, pemasok.
+   * Keuangan → Bagan Akun: sesuaikan bila perlu; Pengaturan → Akun sistem (PPN, RAK, ekuitas, dll.).
+   * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
+     **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per
+     lini produk, beban jasa); kolom yang kosong diisi akun bawaan saat disimpan.
    * Administrasi → Peran & Izin, lalu Pengguna (prinsip hak minimum).
    * Saldo awal: jurnal manual (maker–checker) + penyesuaian stok awal.
 

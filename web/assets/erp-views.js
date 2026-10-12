@@ -456,6 +456,14 @@
     requireJournalApproval: 'Jurnal manual wajib disetujui', budgetControl: 'Kontrol anggaran (COA & proyek)',
     soRequiresQuotation: 'Pesanan penjualan wajib dari penawaran yang diterima pelanggan', quoteValidityDays: 'Masa berlaku penawaran bawaan (hari)',
     quoteDiscountLimit: 'Diskon maksimum penawaran tanpa persetujuan (%)', quoteMinMargin: 'Margin kotor minimum penawaran (%)', quoteApprovalThreshold: 'Ambang persetujuan nilai penawaran (Rp)',
+    // Akun sistem (akun pelanggan, pemasok, persediaan & jasa ada di data master masing-masing).
+    vat_in: 'PPN masukan', vat_out: 'PPN keluaran', inter_branch: 'Rekening antar cabang (RAK)', investment_sub: 'Investasi pada entitas anak',
+    salary_payable: 'Hutang gaji', pph21_payable: 'Hutang PPh 21', bpjs_payable: 'Hutang BPJS', share_capital: 'Modal disetor', retained_earnings: 'Saldo laba',
+    salary_expense: 'Beban gaji', maintenance_expense: 'Beban pemeliharaan', stock_adjustment: 'Selisih / penyesuaian persediaan', wip: 'Barang dalam proses (produksi)',
+    gain_disposal: 'Laba pelepasan aset', loss_disposal: 'Rugi pelepasan aset', fx_gain: 'Laba selisih kurs', fx_loss: 'Rugi selisih kurs',
+    purchase_variance: 'Selisih harga pembelian / retur', cash_over_short: 'Selisih kas kasir', pph23_prepaid: 'PPh 23 dibayar di muka', pph23_payable: 'Hutang PPh 23',
+    bank_charge: 'Beban administrasi bank', giro_receivable: 'Giro mundur diterima (belum cair)', giro_payable: 'Giro mundur diberikan (belum cair)',
+    deposit_forfeit: 'Pendapatan kompensasi (jaminan pelanggan dicairkan)', sdeposit_forfeit: 'Beban jaminan hangus (di pemasok)',
   };
   const SETTING_OPTIONS = { budgetControl: [['none', 'Tanpa kontrol'], ['warn', 'Peringatan saat posting'], ['block', 'Blokir transaksi melebihi anggaran']] };
   async function settings(root) {
@@ -468,9 +476,9 @@
         : SETTING_OPTIONS[k] ? `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><select class="select" name="${k}" ${canEdit ? '' : 'disabled'}>${SETTING_OPTIONS[k].map(([v2, l]) => `<option value="${v2}" ${v === v2 ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
         : `<div class="field"><label>${esc(SETTING_LABELS[k] || k)}</label><input class="input ${typeof v === 'number' ? 'num' : 'code'}" name="${k}" type="${typeof v === 'number' ? 'number' : 'text'}" value="${esc(v)}" ${canEdit ? '' : 'disabled'}></div>`).join('')}
       ${canEdit ? `<div class="form-grid-full"><button class="btn btn-primary" type="submit">${icon('check')} Simpan ${esc(title.toLowerCase())}</button></div>` : ''}</form></article>`;
-    root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, pemetaan akun posting otomatis, dan tampilan. Setiap perubahan tercatat di jejak audit.') +
+    root.innerHTML = pageHead('Pengaturan', 'Kebijakan keamanan, persetujuan, akun sistem, dan tampilan. Setiap perubahan tercatat di jejak audit.') +
       `<div class="grid grid-1-1">${group('security_policy', 'Kebijakan keamanan', 'ISO 27001 A.5.17, A.8.5')}${group('approval_policy', 'Kebijakan persetujuan', 'Pemisahan tugas A.5.3')}</div>
-      ${group('account_map', 'Pemetaan akun posting otomatis', 'Kode akun buku besar yang dipakai modul operasional')}
+      ${group('account_map', 'Akun sistem', 'Akun pajak, ekuitas, RAK, gaji, kurs, giro, dan sejenisnya. Akun piutang/hutang, uang muka, deposit, potongan, persediaan, HPP, pendapatan, retur & beban jasa diatur pada data master Pelanggan, Pemasok, dan Produk & Layanan.')}
       <article class="card"><div class="card-head"><div class="card-head-text"><h2 class="card-title">Tampilan</h2></div></div><div class="pad"><div class="segmented" role="group" aria-label="Tema">
         <button data-theme-set="light" aria-pressed="${state.theme === 'light'}">Terang</button><button data-theme-set="dark" aria-pressed="${state.theme === 'dark'}">Gelap</button><button data-theme-set="system" aria-pressed="${state.theme === 'system'}">Ikut sistem</button></div></div></article>`;
   }

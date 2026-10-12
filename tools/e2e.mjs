@@ -293,6 +293,15 @@ try {
   await page.waitForTimeout(1200);
   check(/Saldo deposit cocok/.test(await page.textContent('.view-root')) && (await page.$$('[data-open^="supplier_deposits:"]')).length >= 1, 'deposit di pemasok: register cocok dengan buku besar');
 
+  // Akun buku besar per data master: bagian "Akun buku besar" pada rincian pelanggan.
+  await page.evaluate(() => { location.hash = '#/pelanggan'; });
+  await page.waitForSelector('tr[data-open^="customers:"]', { timeout: 8000 });
+  await page.click('tr[data-open^="customers:"]');
+  await page.waitForSelector('.drawer', { timeout: 8000 });
+  await page.waitForTimeout(800);
+  check(/Akun buku besar/.test(await page.textContent('.drawer')) && /Akun piutang usaha/.test(await page.textContent('.drawer')), 'pelanggan: akun buku besar tampil pada data master');
+  await page.keyboard.press('Escape');
+
   // Nota debet pelanggan: dokumen piutang terbuka yang dapat dilunasi.
   await page.evaluate(() => { location.hash = '#/nota-debet-pelanggan'; });
   await page.waitForSelector('tr[data-open^="customer_debit_notes:"]', { timeout: 8000 });

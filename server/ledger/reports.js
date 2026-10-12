@@ -6,6 +6,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct } from './posting.js';
+import { partyAccountSet, inList } from './accounts.js';
 import { bad, round2, isDate, today, monthEnd } from '../lib/util.js';
 
 export const DEBIT_NORMAL = new Set(['asset', 'cogs', 'expense', 'other_expense', 'tax']);
@@ -343,7 +344,8 @@ function aging(tables, partyTable, partyField, ctx, { companyId, branchId, asOf 
 export function arAging(ctx, q) {
   const r = aging(['sales_invoices', 'customer_debit_notes', 'sales_advances'], 'customers', 'customer_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
-  r.glBalance = round2(netOf(gl, acct('ar')) + netOf(gl, acct('ic_receivable')));
+  // Seluruh akun piutang yang dipakai data master pelanggan (termasuk antar perusahaan).
+  r.glBalance = round2(partyAccountSet('customer', 'control').reduce((s2, id) => s2 + netOf(gl, id), 0));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;
   return { title: 'Umur Piutang Usaha', asOf: q.asOf, ...r };
 }
@@ -351,7 +353,7 @@ export function arAging(ctx, q) {
 export function apAging(ctx, q) {
   const r = aging(['purchase_bills', 'supplier_credit_notes', 'purchase_advances'], 'suppliers', 'supplier_id', ctx, q);
   const gl = balances({ companyIds: [q.companyId], branchId: q.branchId, to: q.asOf });
-  r.glBalance = round2(-(netOf(gl, acct('ap')) + netOf(gl, acct('ic_payable'))));
+  r.glBalance = round2(-partyAccountSet('supplier', 'control').reduce((s2, id) => s2 + netOf(gl, id), 0));
   r.reconciled = Math.abs(r.glBalance - r.totals.total) < 1;
   return { title: 'Umur Hutang Usaha', asOf: q.asOf, ...r };
 }
@@ -692,12 +694,12 @@ export function partnerStatement(ctx, { companyId, from, to, partnerType, partne
   const isCust = partnerType === 'customer';
   const party = db.get(`SELECT id, code, name, company_id FROM ${isCust ? 'customers' : 'suppliers'} WHERE id = ?`, Number(partnerId));
   if (!party || party.company_id !== companyId) throw bad('Pilih pelanggan/pemasok.');
-  const accts = isCust ? [acct('ar'), acct('ic_receivable')] : [acct('ap'), acct('ic_payable')];
+  const accts = inList(partyAccountSet(isCust ? 'customer' : 'supplier', 'control'));
   const sign = isCust ? 1 : -1; // piutang: debit menambah; hutang: kredit menambah
-  const base = `FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.partner_type = ? AND jl.partner_id = ? AND jl.account_id IN (?, ?)`;
-  const opening = round2(sign * db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v ${base} AND j.date < ?`, companyId, partnerType, party.id, ...accts, from).v);
+  const base = `FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.partner_type = ? AND jl.partner_id = ? AND jl.account_id IN ${accts}`;
+  const opening = round2(sign * db.get(`SELECT COALESCE(SUM(jl.debit - jl.credit),0) v ${base} AND j.date < ?`, companyId, partnerType, party.id, from).v);
   let bal = opening;
-  const lines = db.all(`SELECT j.id journal_id, j.date, j.number, j.source_type, j.source_id, j.source_no, j.description, jl.debit, jl.credit ${base} AND j.date BETWEEN ? AND ? ORDER BY j.date, j.id`, companyId, partnerType, party.id, ...accts, from, to)
+  const lines = db.all(`SELECT j.id journal_id, j.date, j.number, j.source_type, j.source_id, j.source_no, j.description, jl.debit, jl.credit ${base} AND j.date BETWEEN ? AND ? ORDER BY j.date, j.id`, companyId, partnerType, party.id, from, to)
     .map((l) => { bal = round2(bal + sign * (l.debit - l.credit)); return { ...l, balance: bal }; });
   return { title: `Kartu ${isCust ? 'Piutang' : 'Hutang'} — ${party.name}`, party, period: { from, to }, opening, closing: bal, lines };
 }

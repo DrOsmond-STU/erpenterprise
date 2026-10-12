@@ -5,6 +5,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct } from './posting.js';
+import { partyAccountSet, inList } from './accounts.js';
 import { bad, round2, today } from '../lib/util.js';
 
 export const DOC = { sales_invoices: 'customer', purchase_bills: 'supplier' };
@@ -76,10 +77,10 @@ export function installmentsOf(docType, docId, asOf = today()) {
 
 /** Saldo uang muka mitra (IDR) dari buku besar: pelanggan = saldo kredit akun uang muka pelanggan; pemasok = saldo debit uang muka pembelian. */
 export function advanceBalance(partyType, partyId, companyId = null) {
-  const account = acct(partyType === 'customer' ? 'customer_advance' : 'supplier_advance');
+  const accounts = inList(partyAccountSet(partyType, 'advance'));
   const cf = companyId ? ' AND jl.company_id = ?' : '';
   const v = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
-    WHERE j.status = 'diposting' AND jl.account_id = ? AND jl.partner_type = ? AND jl.partner_id = ?${cf}`, account, partyType, partyId, ...(companyId ? [companyId] : [])).v;
+    WHERE j.status = 'diposting' AND jl.account_id IN ${accounts} AND jl.partner_type = ? AND jl.partner_id = ?${cf}`, partyType, partyId, ...(companyId ? [companyId] : [])).v;
   return round2(partyType === 'customer' ? -v : v);
 }
 
@@ -104,10 +105,10 @@ export function installmentSchedule(ctx, { companyId, branchId, asOf, side = 'ar
   }
   const sumBy = (xs) => round2(xs.reduce((s, r) => s + r.openIdr, 0));
   // Saldo uang muka per mitra (belum dipakai).
-  const advAcct = acct(side === 'ap' ? 'supplier_advance' : 'customer_advance');
+  const advAccts = inList(partyAccountSet(side === 'ap' ? 'supplier' : 'customer', 'advance'));
   const ptype = side === 'ap' ? 'supplier' : 'customer';
   const advances = db.all(`SELECT jl.partner_id id, p.name party, ROUND(SUM(jl.debit - jl.credit),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id JOIN "${party[0]}" p ON p.id = jl.partner_id
-    WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ? AND jl.partner_type = ? GROUP BY jl.partner_id HAVING ABS(v) > 0.004 ORDER BY p.name`, companyId, advAcct, ptype)
+    WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${advAccts} AND jl.partner_type = ? GROUP BY jl.partner_id HAVING ABS(v) > 0.004 ORDER BY p.name`, companyId, ptype)
     .map((a) => ({ id: a.id, party: a.party, balance: round2(side === 'ap' ? a.v : -a.v) }));
   return {
     title: side === 'ap' ? 'Jadwal Angsuran Hutang' : 'Jadwal Angsuran Piutang', side, asOf: t, until,
@@ -215,13 +216,14 @@ export function advanceRegister(ctx, { companyId, branchId, side = 'ar' }) {
   for (const r of rows) r.pct = r.order_dpp > 0 ? round2(r.amount * 100 / r.order_dpp) : null;
   const sumBy = (xs, f) => round2(xs.reduce((s, r) => s + f(r), 0));
   const unpaid = rows.filter((r) => ['terbit', 'sebagian'].includes(r.status));
-  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(ar ? 'sales_dp' : 'purchase_dp')).v;
+  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${inList(partyAccountSet(ar ? 'customer' : 'supplier', 'dp'))}`, companyId).v;
   const glBalance = round2(ar ? -glRaw : glRaw);
   const remainingAll = branchId
     ? round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(applied,0)),0) v FROM "${table}" WHERE company_id = ? AND status IN ('terbit','sebagian','lunas','diterapkan')`, companyId).v)
     : sumBy(rows, (r) => r.remaining);
   return {
     title: ar ? 'Register Uang Muka Penjualan' : 'Register Uang Muka Pembelian', side: ar ? 'ar' : 'ap',
+    accounts: partyAccountSet(ar ? 'customer' : 'supplier', 'dp').map((id) => db.get('SELECT code FROM accounts WHERE id = ?', id)?.code).filter(Boolean).join(', '),
     rows,
     totals: {
       unpaid: sumBy(unpaid, (r) => r.total - r.paid), unpaidCount: unpaid.length,
@@ -252,13 +254,14 @@ export function depositRegister(ctx, { companyId, branchId, asOf, side = 'ar' })
   const open = rows.filter((r) => r.remaining > 0.005);
   const sumBy = (xs) => round2(xs.reduce((s2, r) => s2 + r.remaining, 0));
   const sign = ar ? -1 : 1; // liabilitas bersaldo kredit, aset bersaldo debit
-  const gl = (code) => round2(sign * db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, acct(code)).v);
+  const gl = (key) => round2(sign * db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${inList(partyAccountSet(ar ? 'customer' : 'supplier', key))}`, companyId).v);
   const all = (kind) => round2(db.get(`SELECT COALESCE(SUM(amount - COALESCE(used,0) - COALESCE(refunded,0) - COALESCE(forfeited,0)),0) v FROM "${table}" WHERE company_id = ? AND kind = ? AND status IN ${live}`, companyId, kind).v);
-  const glSaldo = gl(ar ? 'deposit_saldo' : 'sdeposit_saldo'), glJaminan = gl(ar ? 'deposit_guarantee' : 'sdeposit_guarantee');
+  const glSaldo = gl('deposit'), glJaminan = gl('guarantee');
   const dueSoon = open.filter((r) => r.kind === 'jaminan' && r.daysToReturn != null && r.daysToReturn <= 30);
   return {
     title: ar ? 'Register Deposit Pelanggan' : 'Register Deposit di Pemasok', side: ar ? 'ar' : 'ap', asOf: t,
-    accounts: ar ? ['2-1620', '2-1630'] : ['1-1530', '1-1540'],
+    // Kode akun yang dipakai data master (untuk keterangan register).
+    accounts: ['deposit', 'guarantee'].map((k) => partyAccountSet(ar ? 'customer' : 'supplier', k).map((id) => db.get('SELECT code FROM accounts WHERE id = ?', id)?.code).filter(Boolean).join(', ')),
     rows,
     totals: {
       saldo: sumBy(open.filter((r) => r.kind === 'saldo')), jaminan: sumBy(open.filter((r) => r.kind === 'jaminan')),

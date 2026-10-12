@@ -55,6 +55,9 @@ const returnLines = (table) => {
   return t;
 };
 
+/* Akun buku besar pada data master: kosong saat disimpan = diisi akun bawaan, dapat diubah per data. */
+const acctRef = (name, label, help, filter = {}) => F.ref(name, label, 'accounts', { refFilter: { is_header: 0, ...filter }, help, section: 'Akun buku besar' });
+
 /* Status dokumen: label + nada warna untuk pil di klien. */
 export const STATUS = {
   draf: ['Draf', 'neutral'], menunggu: ['Menunggu', 'warn'], diajukan: ['Diajukan', 'warn'],
@@ -480,9 +483,12 @@ export const ENTITIES = {
       F.money('standard_cost', 'Biaya standar'),
       F.num('min_stock', 'Stok minimum', { default: 0 }),
       F.num('max_stock', 'Stok maksimum', { default: 0 }),
-      F.ref('inventory_account_id', 'Akun persediaan', 'accounts', { refFilter: { subtype: 'inventory' } }),
-      F.ref('revenue_account_id', 'Akun pendapatan', 'accounts', { refFilter: { type: 'revenue', is_header: 0 } }),
-      F.ref('cogs_account_id', 'Akun HPP', 'accounts', { refFilter: { type: 'cogs', is_header: 0 } }),
+      acctRef('inventory_account_id', 'Akun persediaan', 'Barang persediaan. Kosong = 1-1340 (jasa: tidak dipakai).', { subtype: 'inventory' }),
+      acctRef('cogs_account_id', 'Akun HPP', 'Barang persediaan. Kosong = 5-1100.', { type: 'cogs' }),
+      acctRef('delivered_account_id', 'Akun persediaan terkirim belum difakturkan', 'Barang yang dikirim dengan surat jalan sebelum faktur. Kosong = 1-1350.', { subtype: 'unbilled_delivery' }),
+      acctRef('revenue_account_id', 'Akun pendapatan', 'Kosong = 4-1100.', { type: 'revenue' }),
+      acctRef('sales_return_account_id', 'Akun retur penjualan', 'Kosong = 4-1900.', { type: 'revenue' }),
+      acctRef('expense_account_id', 'Akun beban pembelian (jasa)', 'Jasa / barang non-persediaan yang dibeli tanpa akun pada baris tagihan. Kosong = 5-1100.'),
       F.status(['aktif', 'nonaktif'], 'aktif'),
     ],
     computed: {
@@ -538,6 +544,13 @@ export const ENTITIES = {
       F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
+      acctRef('ar_account_id', 'Akun piutang usaha', 'Kosong = 1-1200 Piutang Usaha (1-1600 untuk pelanggan antar perusahaan).'),
+      acctRef('sales_account_id', 'Akun pendapatan penjualan', 'Kosong = akun pendapatan pada barang/jasa (4-1400 untuk pelanggan antar perusahaan).', { type: 'revenue' }),
+      acctRef('discount_account_id', 'Akun potongan penjualan', 'Potongan saat pelunasan. Kosong = 4-1900.'),
+      acctRef('advance_account_id', 'Akun titipan / uang muka pelanggan', 'Titipan tanpa faktur & saldo kredit pelanggan. Kosong = 2-1600.'),
+      acctRef('dp_account_id', 'Akun uang muka penjualan', 'Faktur uang muka atas SO. Kosong = 2-1610.'),
+      acctRef('deposit_account_id', 'Akun deposit pelanggan', 'Deposit saldo prabayar. Kosong = 2-1620.'),
+      acctRef('guarantee_account_id', 'Akun uang jaminan pelanggan', 'Kosong = 2-1630.'),
       F.status(['aktif', 'ditahan', 'nonaktif'], 'aktif'),
     ],
     computed: {
@@ -744,6 +757,12 @@ export const ENTITIES = {
       F.int('terms_days', 'Termin (hari)', { default: 30 }), F.ref('payment_term_id', 'Termin bertahap', 'payment_terms', { help: 'Jadwal angsuran bawaan (mis. DP 30% / 70% 30 hari). Kosong = sekali bayar sesuai termin hari.' }), F.int('lead_time_days', 'Waktu tunggu (hari)', { default: 7, list: true }),
       F.ref('related_company_id', 'Perusahaan grup (antar perusahaan)', 'companies'),
       F.ref('currency_id', 'Mata uang transaksi', 'currencies'),
+      acctRef('ap_account_id', 'Akun hutang usaha', 'Kosong = 2-1100 Hutang Usaha (2-1500 untuk pemasok antar perusahaan).'),
+      acctRef('discount_account_id', 'Akun potongan pembelian', 'Potongan saat pelunasan. Kosong = 7-1300.'),
+      acctRef('advance_account_id', 'Akun titipan / uang muka ke pemasok', 'Titipan tanpa faktur & saldo kredit di pemasok. Kosong = 1-1510.'),
+      acctRef('dp_account_id', 'Akun uang muka pembelian', 'Faktur uang muka atas PO. Kosong = 1-1520.'),
+      acctRef('deposit_account_id', 'Akun deposit di pemasok', 'Deposit saldo prabayar. Kosong = 1-1530.'),
+      acctRef('guarantee_account_id', 'Akun uang jaminan di pemasok', 'Kosong = 1-1540.'),
       F.status(['aktif', 'pantau', 'nonaktif'], 'aktif'),
     ],
     computed: {

@@ -78,8 +78,33 @@ akses ke baris di luar cakupan (pencegahan IDOR).
 | Jurnal manual — *Setujui* | sesuai baris | sesuai baris | Maker–checker (pembuat ≠ penyetuju) |
 | Pembatalan (void) dokumen | — jurnal pembalik — | | Stok & status pelunasan dikembalikan |
 
-Akun yang dipakai dapat diubah di **Pengaturan → Pemetaan akun posting
-otomatis**; akun per produk (persediaan, pendapatan, HPP) diatur di data produk.
+### Akun buku besar per data master
+
+Akun yang terkait mitra dan barang **disimpan di data master masing-masing**, sehingga
+setiap pelanggan, pemasok, barang, dan jasa dapat memakai akun berbeda
+(mis. piutang ekspor terpisah, hutang impor, persediaan per lini produk, beban per jenis jasa).
+Saat data master disimpan, kolom akun yang kosong diisi akun bawaan; nilainya dapat diubah
+per data (`server/ledger/accounts.js`).
+
+| Data master | Akun (kolom) | Bawaan |
+| --- | --- | --- |
+| Pelanggan | Piutang usaha (`ar_account_id`) · Pendapatan penjualan (`sales_account_id`, kosong = akun barang/jasa) · Potongan penjualan · Titipan/uang muka pelanggan · Uang muka penjualan (faktur UM) · Deposit · Uang jaminan | 1-1200 (antar perusahaan 1-1600) · — (antar perusahaan 4-1400) · 4-1900 · 2-1600 · 2-1610 · 2-1620 · 2-1630 |
+| Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 |
+| Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 |
+| Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) | 4-1100 · 4-1900 · 5-1100 |
+
+Posting membaca akun dari data master (akun bawaan hanya cadangan bila kolom kosong).
+Rekonsiliasi sub-buku (umur piutang/hutang, kartu mitra, register uang muka & deposit,
+barang terkirim belum difakturkan) menjumlahkan **seluruh akun yang dipakai data master**.
+Akun bersaldo (piutang/hutang, titipan, uang muka, deposit, jaminan) tidak dapat diganti
+selama mitra masih bersaldo di akun lama, dan akun persediaan tidak dapat diganti selama
+barang masih berstok — pindahkan saldonya dulu dengan jurnal umum.
+
+**Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: PPN masukan/
+keluaran, RAK, investasi & ekuitas, gaji/PPh 21/BPJS, selisih kurs, laba/rugi pelepasan aset,
+penyesuaian persediaan & selisih harga, barang dalam proses, selisih kas, PPh 23, biaya bank,
+giro, serta akun kompensasi/jaminan hangus. Saat pemutakhiran, penyesuaian akun mitra/barang
+yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)
 
