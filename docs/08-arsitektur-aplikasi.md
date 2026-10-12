@@ -92,18 +92,22 @@ per data (`server/ledger/accounts.js`).
 | Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 |
 | Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 |
 | Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) | 4-1100 · 4-1900 · 5-1100 |
+| Aset tetap | Aset tetap · Akumulasi penyusutan · Beban penyusutan · Laba pelepasan · Rugi pelepasan · Beban pemeliharaan | aset & akumulasi menurut kategori (Bangunan 1-2200/1-2210, Mesin & Peralatan 1-2300/1-2310, Kendaraan 1-2400/1-2410, Peralatan Kantor & TI 1-2500/1-2510) · 6-2500 · 7-1100 · 7-2200 · 6-2200 |
 
 Posting membaca akun dari data master (akun bawaan hanya cadangan bila kolom kosong).
 Rekonsiliasi sub-buku (umur piutang/hutang, kartu mitra, register uang muka & deposit,
 barang terkirim belum difakturkan) menjumlahkan **seluruh akun yang dipakai data master**.
 Akun bersaldo (piutang/hutang, titipan, uang muka, deposit, jaminan) tidak dapat diganti
 selama mitra masih bersaldo di akun lama, dan akun persediaan tidak dapat diganti selama
-barang masih berstok — pindahkan saldonya dulu dengan jurnal umum.
+barang masih berstok — pindahkan saldonya dulu dengan jurnal umum. Pada aset tetap yang sudah
+aktif, nilai perolehan dan akun aset/akumulasi terkunci; yang masih dapat diubah hanya nama,
+lokasi, dan akun beban penyusutan (berlaku untuk penyusutan berikutnya), laba/rugi pelepasan,
+serta beban pemeliharaan. Aset aktif tidak dapat dihapus (gunakan *Lepas / jual aset*).
 
 **Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: PPN masukan/
 keluaran, RAK, investasi & ekuitas, gaji/PPh 21/BPJS, selisih kurs, laba/rugi pelepasan aset,
 penyesuaian persediaan & selisih harga, barang dalam proses, selisih kas, PPh 23, biaya bank,
-giro, serta akun kompensasi/jaminan hangus. Saat pemutakhiran, penyesuaian akun mitra/barang
+giro, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset). Saat pemutakhiran, penyesuaian akun mitra/barang
 yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)

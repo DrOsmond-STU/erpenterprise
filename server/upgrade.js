@@ -9,7 +9,7 @@ import { clearPermCache } from './security/rbac.js';
 import { spread } from './ledger/budget.js';
 import { syncInstallments } from './ledger/payments.js';
 import { BUDGET_MONTHS } from './modules/entities.js';
-import { fillPartyDefaults, fillProductDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, ASSET_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
 import { getSetting, setSetting, clearSettingsCache } from './lib/settings.js';
 
 export function upgrade() {
@@ -72,6 +72,12 @@ export function upgrade() {
       const next = fillProductDefaults({ ...row });
       const upd = Object.fromEntries(pf.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
       if (Object.keys(upd).length) db.update('products', row.id, upd);
+    }
+    const af = Object.values(ASSET_ACCOUNTS).map(([f]) => f);
+    for (const row of db.all(`SELECT * FROM fixed_assets WHERE ${af.map((f) => `${f} IS NULL`).join(' OR ')}`)) {
+      const next = fillAssetDefaults({ ...row });
+      const upd = Object.fromEntries(af.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
+      if (Object.keys(upd).length) db.update('fixed_assets', row.id, upd);
     }
     const saved = getSetting('account_map', null);
     if (saved && Object.keys(saved).some((k) => MASTER_KEYS.has(k))) {

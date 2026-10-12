@@ -9,7 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
-import { fillPartyDefaults, fillProductDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -379,7 +379,17 @@ export const HOOKS = {
     compute: (_c, row) => {
       if (row.status === 'draf' || !row.status) { row.accumulated = 0; row.book_value = row.cost; }
       if ((row.salvage_value || 0) > (row.cost || 0)) throw bad('Nilai sisa tidak boleh melebihi harga perolehan.');
+      fillAssetDefaults(row);
     },
+    // Aset aktif hanya boleh diubah nama, lokasi, dan akun beban penyusutan/pelepasan/pemeliharaan;
+    // nilai perolehan & akun aset/akumulasi terkunci setelah perolehan diposting.
+    beforeUpdate: (_c, row, existing) => {
+      if (existing.status !== 'aktif') return;
+      const allowed = new Set(['name', 'location', 'expense_account_id', 'gain_account_id', 'loss_account_id', 'maintenance_account_id']);
+      const locked = Object.keys(row).filter((k) => !allowed.has(k) && row[k] !== undefined && String(row[k] ?? '') !== String(existing[k] ?? ''));
+      if (locked.length) throw conflict(`Aset aktif: ${locked.join(', ')} tidak dapat diubah setelah perolehan diposting (koreksi dengan pelepasan/jurnal).`);
+    },
+    beforeDelete: (_c, a) => { if (a.status !== 'draf') throw conflict('Aset yang sudah diaktifkan tidak dapat dihapus; gunakan aksi Lepas / jual aset.'); },
   },
   leads: {
     beforeUpdate: (_c, row, existing) => { if (row.stage && row.stage !== existing.stage && row.probability === undefined) row.probability = STAGE_PROB[row.stage]; },

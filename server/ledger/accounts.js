@@ -1,14 +1,15 @@
 /* ==========================================================================
    Akun buku besar per data master.
-   Setiap pelanggan, pemasok, dan barang/jasa menyimpan akun buku besarnya
-   sendiri (piutang/hutang, uang muka, deposit, potongan; persediaan, HPP,
-   pendapatan, retur, beban jasa). Saat data master dibuat, kolom akun yang
+   Setiap pelanggan, pemasok, barang/jasa, dan aset tetap menyimpan akun buku
+   besarnya sendiri (piutang/hutang, uang muka, deposit, potongan; persediaan,
+   HPP, pendapatan, retur, beban jasa; aset, akumulasi & beban penyusutan,
+   laba/rugi pelepasan, beban pemeliharaan). Saat data master dibuat, kolom akun yang
    kosong diisi akun bawaan; nilainya dapat diubah per data. Posting membaca
    akun dari data master (akun bawaan hanya cadangan bila kolom kosong) dan
    rekonsiliasi sub-buku menjumlahkan seluruh akun yang dipakai data master.
    ========================================================================== */
 import * as db from '../db.js';
-import { acct } from './posting.js';
+import { acct, accountByCode } from './posting.js';
 
 const ic = (p) => !!p?.related_company_id;
 
@@ -51,13 +52,29 @@ export const PRODUCT_ACCOUNTS = {
   expense: ['expense_account_id', (p) => (isService(p) ? 'cogs' : null), 'Akun beban pembelian (jasa / non-persediaan)'],
 };
 
+/* Aset tetap: akun aset & akumulasi bawaan menurut kategori; beban penyusutan, laba/rugi pelepasan, pemeliharaan. */
+const ASSET_CATEGORY = {
+  Bangunan: ['1-2200', '1-2210'], 'Mesin & Peralatan': ['1-2300', '1-2310'], Kendaraan: ['1-2400', '1-2410'], 'Peralatan Kantor & TI': ['1-2500', '1-2510'],
+};
+const byCategory = (i) => (a) => { const c = ASSET_CATEGORY[a?.category]; return c ? { code: c[i] } : null; };
+export const ASSET_ACCOUNTS = {
+  asset: ['asset_account_id', byCategory(0), 'Akun aset tetap'],
+  accum: ['accum_account_id', byCategory(1), 'Akun akumulasi penyusutan'],
+  expense: ['expense_account_id', 'depreciation_expense', 'Akun beban penyusutan'],
+  gain: ['gain_account_id', 'gain_disposal', 'Akun laba pelepasan aset'],
+  loss: ['loss_account_id', 'loss_disposal', 'Akun rugi pelepasan aset'],
+  maintenance: ['maintenance_account_id', 'maintenance_expense', 'Akun beban pemeliharaan'],
+};
+
 /** Semua kunci akun bawaan yang kini diatur di data master (tidak lagi di Pengaturan). */
 export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_discount', 'customer_advance', 'sales_dp', 'deposit_saldo', 'deposit_guarantee',
   'ap', 'ic_payable', 'purchase_discount', 'supplier_advance', 'purchase_dp', 'sdeposit_saldo', 'sdeposit_guarantee',
-  'inventory', 'cogs', 'goods_delivered', 'sales', 'sales_returns']);
+  'inventory', 'cogs', 'goods_delivered', 'sales', 'sales_returns',
+  'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense']);
 
 const keyOf = (def, row) => (typeof def === 'function' ? def(row || {}) : def);
-const defaultId = (def, row) => { const k = keyOf(def, row); return k ? acct(k) : null; };
+/* Bawaan berupa kunci pemetaan (mis. 'ar') atau kode akun langsung ({ code }) — mis. akun aset per kategori. */
+const defaultId = (def, row) => { const k = keyOf(def, row); return !k ? null : typeof k === 'object' ? accountByCode(k.code).id : acct(k); };
 
 /** id akun mitra untuk satu jenis (dari master; bila kosong → akun bawaan). */
 export function partyAcct(type, partyOrId, key) {
@@ -97,6 +114,16 @@ export function fillPartyDefaults(type, row) {
 }
 export function fillProductDefaults(row) {
   for (const [field, def] of Object.values(PRODUCT_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
+  return row;
+}
+
+/** id akun aset tetap (dari master; bila kosong → akun bawaan). */
+export function assetAccount(a, key) {
+  const [field, def] = ASSET_ACCOUNTS[key];
+  return a?.[field] || defaultId(def, a);
+}
+export function fillAssetDefaults(row) {
+  for (const [field, def] of Object.values(ASSET_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
   return row;
 }
 

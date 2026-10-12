@@ -417,7 +417,7 @@ export const ENTITIES = {
   /* ------------------------------------------------------------ Aset */
   fixed_assets: {
     label: 'Aset Tetap', one: 'aset', module: 'assets', scope: 'branch', title: 'name', sort: 'code',
-    editable: ['draf'],
+    editable: ['draf', 'aktif'], // aset aktif: hanya nama, lokasi & akun beban/pelepasan/pemeliharaan (dijaga kait)
     fields: [
       F.code(), F.name(),
       F.sel('category', 'Kategori', ['Bangunan', 'Mesin & Peralatan', 'Kendaraan', 'Peralatan Kantor & TI'], { required: true, list: true }),
@@ -425,13 +425,16 @@ export const ENTITIES = {
       F.money('cost', 'Harga perolehan', { required: true, list: true }),
       F.money('salvage_value', 'Nilai sisa', { default: 0 }),
       F.int('useful_life_months', 'Umur manfaat (bulan)', { required: true, min: 1, max: 600 }),
-      F.ref('asset_account_id', 'Akun aset', 'accounts', { required: true, refFilter: { subtype: 'fixed_asset' } }),
-      F.ref('accum_account_id', 'Akun akumulasi', 'accounts', { required: true, refFilter: { subtype: 'accum_depr' } }),
-      F.ref('expense_account_id', 'Akun beban penyusutan', 'accounts', { required: true, refFilter: { type: 'expense', is_header: 0 } }),
       F.ref('credit_account_id', 'Akun pembayaran perolehan', 'accounts', { required: true, refFilter: { is_header: 0 }, help: 'Kas/bank, hutang, atau modal (setoran inbreng).' }),
       F.text('location', 'Lokasi'),
       F.money('accumulated', 'Akumulasi penyusutan', { readonly: true }),
       F.money('book_value', 'Nilai buku', { readonly: true, list: true }),
+      acctRef('asset_account_id', 'Akun aset tetap', 'Kosong = akun aset sesuai kategori (Bangunan 1-2200, Mesin 1-2300, Kendaraan 1-2400, Peralatan Kantor & TI 1-2500).', { subtype: 'fixed_asset' }),
+      acctRef('accum_account_id', 'Akun akumulasi penyusutan', 'Kosong = akun akumulasi sesuai kategori (1-2210 / 1-2310 / 1-2410 / 1-2510).', { subtype: 'accum_depr' }),
+      acctRef('expense_account_id', 'Akun beban penyusutan', 'Kosong = 6-2500. Dapat diganti saat aset aktif (berlaku untuk penyusutan berikutnya).'),
+      acctRef('gain_account_id', 'Akun laba pelepasan aset', 'Kosong = 7-1100.'),
+      acctRef('loss_account_id', 'Akun rugi pelepasan aset', 'Kosong = 7-2200.'),
+      acctRef('maintenance_account_id', 'Akun beban pemeliharaan', 'Biaya perintah pemeliharaan aset ini. Kosong = 6-2200.'),
       F.status(['draf', 'aktif', 'dilepas'], 'draf'),
     ],
     actions: [

@@ -43,6 +43,7 @@ export const DEFAULT_ACCOUNT_MAP = {
   sales_dp: '2-1610', purchase_dp: '1-1520',
   deposit_saldo: '2-1620', deposit_guarantee: '2-1630', deposit_forfeit: '7-1400',
   sdeposit_saldo: '1-1530', sdeposit_guarantee: '1-1540', sdeposit_forfeit: '7-2400',
+  depreciation_expense: '6-2500',
 };
 
 export const accountMap = () => ({ ...DEFAULT_ACCOUNT_MAP, ...(getSetting('account_map', {}) || {}) });

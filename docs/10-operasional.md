@@ -34,6 +34,8 @@ untuk mengulang dari awal.
    * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
      **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per
      lini produk, beban jasa); kolom yang kosong diisi akun bawaan saat disimpan.
+   * Aset → Aset Tetap: akun aset & akumulasi terisi sesuai kategori; atur akun beban penyusutan,
+     laba/rugi pelepasan, dan beban pemeliharaan per aset bila berbeda (mis. per pusat biaya).
    * Administrasi → Peran & Izin, lalu Pengguna (prinsip hak minimum).
    * Saldo awal: jurnal manual (maker–checker) + penyesuaian stok awal.
 

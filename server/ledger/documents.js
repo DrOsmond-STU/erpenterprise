@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount } from './accounts.js';
+import { partyAcct, productAccount, assetAccount } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -1057,7 +1057,7 @@ function payPayroll(ctx, run) {
 function activateAsset(ctx, a) {
   postJournal(ctx, {
     companyId: a.company_id, branchId: a.branch_id, date: a.acquisition_date, description: `Perolehan aset ${a.code} ${a.name}`, sourceType: 'fixed_assets', sourceId: a.id, sourceNo: a.code,
-    lines: [{ account_id: a.asset_account_id, debit: a.cost }, { account_id: a.credit_account_id, credit: a.cost }],
+    lines: [{ account_id: assetAccount(a, 'asset'), debit: a.cost }, { account_id: a.credit_account_id, credit: a.cost }],
   });
   setStatus('fixed_assets', a.id, 'aktif', { accumulated: 0, book_value: a.cost });
 }
@@ -1067,13 +1067,13 @@ function disposeAsset(ctx, a, p) {
   if (proceeds > 0 && !p.bank_account_id) throw bad('Pilih rekening penerimaan hasil penjualan.');
   const book = round2(a.cost - a.accumulated);
   const jl = [
-    { account_id: a.accum_account_id, debit: a.accumulated },
-    { account_id: a.asset_account_id, credit: a.cost },
+    { account_id: assetAccount(a, 'accum'), debit: a.accumulated },
+    { account_id: assetAccount(a, 'asset'), credit: a.cost },
   ];
   if (proceeds > 0) { const b = bank(p.bank_account_id); jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: proceeds }); }
   const gain = round2(proceeds - book);
-  if (gain > 0) jl.push({ account_id: acct('gain_disposal'), credit: gain });
-  if (gain < 0) jl.push({ account_id: acct('loss_disposal'), debit: -gain });
+  if (gain > 0) jl.push({ account_id: assetAccount(a, 'gain'), credit: gain });
+  if (gain < 0) jl.push({ account_id: assetAccount(a, 'loss'), debit: -gain });
   postJournal(ctx, { companyId: a.company_id, branchId: a.branch_id, date: p.date, description: `Pelepasan aset ${a.code} ${a.name}`, sourceType: 'fixed_assets', sourceId: a.id, sourceNo: a.code, lines: jl.filter((l) => (l.debit || l.credit) > 0) });
   setStatus('fixed_assets', a.id, 'dilepas', { book_value: 0 });
 }
@@ -1097,8 +1097,8 @@ function postDepreciation(ctx, run) {
     const monthly = round2(base / a.useful_life_months);
     const amount = round2(Math.min(monthly, base - a.accumulated));
     if (amount <= 0) continue;
-    jl.push({ account_id: a.expense_account_id, branch_id: a.branch_id, debit: amount, memo: `${a.code} ${a.name}` });
-    jl.push({ account_id: a.accum_account_id, branch_id: a.branch_id, credit: amount, memo: a.code });
+    jl.push({ account_id: assetAccount(a, 'expense'), branch_id: a.branch_id, debit: amount, memo: `${a.code} ${a.name}` });
+    jl.push({ account_id: assetAccount(a, 'accum'), branch_id: a.branch_id, credit: amount, memo: a.code });
     db.update('fixed_assets', a.id, { accumulated: round2(a.accumulated + amount), book_value: round2(a.cost - a.accumulated - amount) });
     total += amount; count++;
   }
@@ -1123,10 +1123,10 @@ function completeMaintenance(ctx, mo) {
   if (mo.cost > 0) {
     if (!mo.bank_account_id) throw bad('Pilih rekening pembayaran biaya pemeliharaan.');
     const b = bank(mo.bank_account_id);
-    const asset = db.get('SELECT code, name FROM fixed_assets WHERE id = ?', mo.asset_id);
+    const asset = db.get('SELECT * FROM fixed_assets WHERE id = ?', mo.asset_id);
     postJournal(ctx, {
       companyId: mo.company_id, branchId: mo.branch_id, date: today(), description: `Biaya pemeliharaan ${mo.number} — ${asset.code} ${asset.name}`, sourceType: 'maintenance_orders', sourceId: mo.id, sourceNo: mo.number,
-      lines: [{ account_id: acct('maintenance_expense'), debit: mo.cost }, { account_id: b.account_id, branch_id: b.branch_id, credit: mo.cost }],
+      lines: [{ account_id: assetAccount(asset, 'maintenance'), debit: mo.cost }, { account_id: b.account_id, branch_id: b.branch_id, credit: mo.cost }],
     });
   }
   setStatus('maintenance_orders', mo.id, 'selesai');

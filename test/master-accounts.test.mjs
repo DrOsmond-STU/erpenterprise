@@ -130,3 +130,28 @@ test('migrasi: kolom akun kosong diisi dari pemetaan lama di Pengaturan, lalu ku
   assert.deepEqual(getSetting('account_map', {}), { bank_charge: '7-2100' }, 'hanya akun sistem tersisa');
   assert.equal(db.get("SELECT ar_account_id v FROM customers WHERE code = 'C001'").v, acc('1-1200'), 'data master lain tidak berubah');
 });
+
+test('aset tetap: akun bawaan menurut kategori, akun pelepasan & pemeliharaan per aset, aset aktif hanya boleh ganti akun beban', async () => {
+  const pre = acc('6-2970'); // beban jasa subkon (dibuat di before) dipakai sebagai akun pemeliharaan khusus
+  const a = ok(await admin.post('/api/e/fixed_assets', { branch_id: JKT(), code: 'AST-UJI-1', name: 'Truk uji', category: 'Kendaraan', acquisition_date: '2026-01-10', cost: 120_000_000, salvage_value: 0, useful_life_months: 60, credit_account_id: acc('1-1130') }));
+  assert.equal(a.asset_account_id, acc('1-2400')); assert.equal(a.accum_account_id, acc('1-2410')); assert.equal(a.expense_account_id, acc('6-2500'));
+  assert.equal(a.gain_account_id, acc('7-1100')); assert.equal(a.loss_account_id, acc('7-2200')); assert.equal(a.maintenance_account_id, acc('6-2200'));
+  ok(await osmond.post(`/api/e/fixed_assets/${a.id}/actions/activate`), 'aktifkan');
+  // Aset aktif: akun pemeliharaan & laba pelepasan boleh diganti, nilai perolehan & akun aset tidak.
+  let cur = (await admin.get(`/api/e/fixed_assets/${a.id}`)).body;
+  ok(await admin.put(`/api/e/fixed_assets/${a.id}`, { row_version: cur.row_version, maintenance_account_id: pre, location: 'Pool Cikarang' }), 'ganti akun pemeliharaan');
+  cur = (await admin.get(`/api/e/fixed_assets/${a.id}`)).body;
+  assert.equal((await admin.put(`/api/e/fixed_assets/${a.id}`, { row_version: cur.row_version, cost: 1 })).status, 409, 'harga perolehan terkunci');
+  assert.equal((await admin.put(`/api/e/fixed_assets/${a.id}`, { row_version: cur.row_version, asset_account_id: acc('1-2300') })).status, 409, 'akun aset terkunci');
+  assert.equal((await admin.del(`/api/e/fixed_assets/${a.id}`)).status, 409, 'aset aktif tidak dapat dihapus');
+  // Pemeliharaan dibebankan ke akun pemeliharaan aset.
+  const before = gl('6-2970'), maint0 = gl('6-2200');
+  const mo = ok(await admin.post('/api/e/maintenance_orders', { branch_id: JKT(), asset_id: a.id, scheduled_date: '2026-10-07', cost: 750_000, bank_account_id: id('bank_accounts', 'BCA-JKT'), description: 'Ganti ban' }));
+  ok(await osmond.post(`/api/e/maintenance_orders/${mo.id}/actions/complete`));
+  near(gl('6-2970') - before, 750_000, 'beban pemeliharaan di akun aset'); near(gl('6-2200') - maint0, 0, 'bukan akun pemeliharaan umum');
+  // Pelepasan dengan laba → akun laba pelepasan aset.
+  const gain0 = gl('7-1100');
+  ok(await osmond.post(`/api/e/fixed_assets/${a.id}/actions/dispose`, { date: '2026-10-07', proceeds: 125_000_000, bank_account_id: id('bank_accounts', 'BCA-JKT') }), 'lepas');
+  near(gl('7-1100') - gain0, -5_000_000, 'laba pelepasan');
+  assert.ok(!('gain_disposal' in (await admin.get('/api/settings')).body.account_map), 'akun pelepasan tidak lagi di Pengaturan');
+});
