@@ -9,8 +9,8 @@ import { clearPermCache } from './security/rbac.js';
 import { spread } from './ledger/budget.js';
 import { syncInstallments } from './ledger/payments.js';
 import { BUDGET_MONTHS } from './modules/entities.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, ASSET_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
-import { getSetting, setSetting, clearSettingsCache } from './lib/settings.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, PARTY_ACCOUNTS, PRODUCT_ACCOUNTS, ASSET_ACCOUNTS, EMPLOYEE_ACCOUNTS, MASTER_KEYS } from './ledger/accounts.js';
+import { getSetting, setSetting, clearSettingsCache, accountMap } from './lib/settings.js';
 
 export function upgrade() {
   db.tx(() => {
@@ -79,6 +79,14 @@ export function upgrade() {
       const upd = Object.fromEntries(af.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
       if (Object.keys(upd).length) db.update('fixed_assets', row.id, upd);
     }
+    const ef = Object.values(EMPLOYEE_ACCOUNTS).map(([f]) => f);
+    for (const row of db.all(`SELECT * FROM employees WHERE ${ef.map((f) => `${f} IS NULL`).join(' OR ')}`)) {
+      const next = fillEmployeeDefaults({ ...row });
+      const upd = Object.fromEntries(ef.filter((f) => row[f] == null && next[f] != null).map((f) => [f, next[f]]));
+      if (Object.keys(upd).length) db.update('employees', row.id, upd);
+    }
+    // Slip gaji terposting sebelum akun per karyawan: akun hutang gaji = akun bawaan saat itu.
+    db.run("UPDATE payroll_lines SET payable_account_id = (SELECT id FROM accounts WHERE code = ?) WHERE payable_account_id IS NULL AND parent_id IN (SELECT id FROM payroll_runs WHERE status = 'diposting')", accountMap().salary_payable);
     const saved = getSetting('account_map', null);
     if (saved && Object.keys(saved).some((k) => MASTER_KEYS.has(k))) {
       setSetting('account_map', Object.fromEntries(Object.entries(saved).filter(([k]) => !MASTER_KEYS.has(k))), null);

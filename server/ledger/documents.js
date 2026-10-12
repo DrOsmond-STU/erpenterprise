@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount, assetAccount } from './accounts.js';
+import { partyAcct, productAccount, assetAccount, employeeAccount } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -1027,28 +1027,47 @@ function generatePayroll(ctx, run) {
   return { message: `${ls.length} slip gaji dibuat.` };
 }
 
+/**
+ * Posting penggajian memakai akun pada data master karyawan: beban gaji per akun & pusat biaya
+ * karyawan, hutang PPh 21 / BPJS / gaji neto per akun. Akun hutang gaji dicatat pada baris slip
+ * agar pembayaran mendebit akun yang sama meskipun data karyawan diubah kemudian.
+ */
 function postPayroll(ctx, run) {
   const ls = lines('payroll_lines', run.id);
   needLines(ls, 'penggajian');
-  const gross = sum(ls, (l) => l.basic + l.allowance + l.overtime);
-  const pph = sum(ls, (l) => l.pph21), bpjs = sum(ls, (l) => l.bpjs), net = sum(ls, (l) => l.net);
-  postJournal(ctx, {
-    companyId: run.company_id, branchId: run.branch_id, date: run.pay_date, description: `Beban gaji periode ${run.period}`, sourceType: 'payroll_runs', sourceId: run.id, sourceNo: run.number,
-    lines: [
-      { account_id: acct('salary_expense'), debit: gross, memo: `Gaji bruto ${ls.length} karyawan` },
-      { account_id: acct('pph21_payable'), credit: pph, memo: 'PPh 21 terutang' },
-      { account_id: acct('bpjs_payable'), credit: bpjs, memo: 'Iuran BPJS' },
-      { account_id: acct('salary_payable'), credit: net, memo: 'Gaji neto terutang' },
-    ],
-  });
+  const groups = new Map();
+  const add = (side, account_id, amount, memo, cost_center_id = null) => {
+    if (!(amount > 0)) return;
+    const k = `${side}:${account_id}:${cost_center_id || ''}`;
+    const g = groups.get(k) || { account_id, [side]: 0, memo, cost_center_id, n: 0 };
+    g[side] = round2(g[side] + amount); g.n++;
+    groups.set(k, g);
+  };
+  for (const l of ls) {
+    const e = db.get('SELECT * FROM employees WHERE id = ?', l.employee_id);
+    const payable = employeeAccount(e, 'payable');
+    db.run('UPDATE payroll_lines SET payable_account_id = ? WHERE id = ?', payable, l.id);
+    add('debit', employeeAccount(e, 'expense'), round2(l.basic + l.allowance + l.overtime), 'Gaji bruto', e?.cost_center_id);
+    add('credit', employeeAccount(e, 'pph21'), l.pph21, 'PPh 21 terutang');
+    add('credit', employeeAccount(e, 'bpjs'), l.bpjs, 'Iuran BPJS');
+    add('credit', payable, l.net, 'Gaji neto terutang');
+  }
+  const jl = [...groups.values()].map(({ n, ...g }) => ({ ...g, memo: `${g.memo} — ${n} karyawan` }));
+  postJournal(ctx, { companyId: run.company_id, branchId: run.branch_id, date: run.pay_date, description: `Beban gaji periode ${run.period}`, sourceType: 'payroll_runs', sourceId: run.id, sourceNo: run.number, lines: jl });
   setStatus('payroll_runs', run.id, 'diposting');
 }
 
 function payPayroll(ctx, run) {
   const b = bank(run.bank_account_id);
+  const byAcct = new Map();
+  for (const l of lines('payroll_lines', run.id)) {
+    const a = l.payable_account_id || acct('salary_payable');
+    byAcct.set(a, round2((byAcct.get(a) || 0) + (l.net || 0)));
+  }
+  const total = round2([...byAcct.values()].reduce((s2, v) => s2 + v, 0));
   postJournal(ctx, {
     companyId: run.company_id, branchId: run.branch_id, date: run.pay_date, description: `Pembayaran gaji ${run.period}`, sourceType: 'payroll_runs', sourceId: run.id, sourceNo: run.number,
-    lines: [{ account_id: acct('salary_payable'), debit: run.total }, { account_id: b.account_id, branch_id: b.branch_id, credit: run.total }],
+    lines: [...[...byAcct].filter(([, v]) => v > 0).map(([account_id, v]) => ({ account_id, debit: v, memo: 'Pelunasan hutang gaji' })), { account_id: b.account_id, branch_id: b.branch_id, credit: total }],
   });
   setStatus('payroll_runs', run.id, 'dibayar');
 }

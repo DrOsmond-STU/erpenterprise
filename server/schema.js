@@ -111,6 +111,8 @@ const LINE_EXTRA = {
   sales_invoice_lines: ['unit_cost REAL', 'delivery_line_id INTEGER'],
   delivery_order_lines: ['so_line_id INTEGER', 'unit_cost REAL', 'cost REAL'],
   pos_sale_lines: ['unit_cost REAL'],
+  // Akun hutang gaji per karyawan saat posting — pembayaran mendebit akun yang sama.
+  payroll_lines: ['payable_account_id INTEGER'],
   sales_return_lines: ['unit_cost REAL'],
   purchase_return_lines: ['unit_cost REAL'],
 };

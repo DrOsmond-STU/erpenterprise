@@ -182,7 +182,7 @@ async function seedDemo() {
   let ei = 1;
   for (const [co, br, name, dept, pos, sal] of people) {
     const code = `E${String(ei++).padStart(3, '0')}`;
-    EMP[name] = await mk(maker, co, br, 'employees', { code, name, department: dept, position: pos, join_date: `20${rint(15, 24)}-${String(rint(1, 12)).padStart(2, '0')}-0${rint(1, 9)}`, employment_type: sal < 6_100_000 ? 'kontrak' : 'tetap', email: `${name.split(' ')[0].toLowerCase()}@${co.toLowerCase()}.co.id`, phone: `08${rint(11, 99)}${rint(1000000, 9999999)}`, nik: `317${rint(1000000000000, 9999999999999)}`.slice(0, 16), bank_account_no: `${rint(100000000, 999999999)}`, basic_salary: sal, allowance: round2(sal * 0.15), status: 'aktif' });
+    EMP[name] = await mk(maker, co, br, 'employees', { code, name, department: dept, position: pos, join_date: `20${rint(15, 24)}-${String(rint(1, 12)).padStart(2, '0')}-0${rint(1, 9)}`, employment_type: sal < 6_100_000 ? 'kontrak' : 'tetap', email: `${name.split(' ')[0].toLowerCase()}@${co.toLowerCase()}.co.id`, phone: `08${rint(11, 99)}${rint(1000000, 9999999)}`, nik: `317${rint(1000000000000, 9999999999999)}`.slice(0, 16), bank_account_no: `${rint(100000000, 999999999)}`, basic_salary: sal, allowance: round2(sal * 0.15), status: 'aktif', ...(dept === 'Produksi' && co === 'KNM' ? { salary_expense_account_id: A('5-1400') } : {}) });
   }
 
   /* --- Saldo awal 1 Januari 2026 ------------------------------------------- */

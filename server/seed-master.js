@@ -100,6 +100,7 @@ export const COA = [
   ['5-1100', 'HPP Barang Jadi', 'cogs', '5', 0],
   ['5-1200', 'HPP Barang Dagangan', 'cogs', '5', 0],
   ['5-1300', 'Beban Pokok Jasa', 'cogs', '5', 0],
+  ['5-1400', 'Biaya Tenaga Kerja Langsung (Produksi)', 'cogs', '5', 0],
   ['6', 'BEBAN OPERASIONAL', 'expense', null, 1],
   ['6-1000', 'Beban Gaji & Tunjangan', 'expense', '6', 0],
   ['6-1100', 'Beban BPJS Perusahaan', 'expense', '6', 0],

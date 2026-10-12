@@ -155,3 +155,30 @@ test('aset tetap: akun bawaan menurut kategori, akun pelepasan & pemeliharaan pe
   near(gl('7-1100') - gain0, -5_000_000, 'laba pelepasan');
   assert.ok(!('gain_disposal' in (await admin.get('/api/settings')).body.account_map), 'akun pelepasan tidak lagi di Pengaturan');
 });
+
+test('karyawan: akun beban gaji, hutang gaji, PPh 21 & BPJS per karyawan; pembayaran mendebit akun hutang saat posting', async () => {
+  if (!db.get("SELECT id FROM accounts WHERE code = '2-1305'")) ok(await admin.post('/api/e/accounts', { code: '2-1305', name: 'Hutang Gaji — Tenaga Kontrak', type: 'liability', parent_id: acc('2-1000'), is_header: 0, subtype: 'current_liability', status: 'aktif' }));
+  const CKR = id('branches', 'CKR');
+  const e = ok(await admin.post('/api/e/employees', { branch_id: CKR, code: 'EUJI1', name: 'Karyawan Uji', department: 'Produksi', position: 'Operator', basic_salary: 5_000_000, allowance: 0, salary_expense_account_id: acc('5-1400'), salary_payable_account_id: acc('2-1305') }));
+  assert.equal(e.pph21_account_id, acc('2-1310')); assert.equal(e.bpjs_account_id, acc('2-1320'), 'kolom kosong diisi akun bawaan');
+  const office = ok(await admin.post('/api/e/employees', { branch_id: CKR, code: 'EUJI2', name: 'Staf Uji', department: 'Keuangan', position: 'Admin', basic_salary: 6_000_000, allowance: 0 }));
+  assert.equal(office.salary_expense_account_id, acc('6-1000')); assert.equal(office.salary_payable_account_id, acc('2-1300'));
+  const tk0 = gl('5-1400'), hp0 = gl('2-1305');
+  const run = ok(await admin.post('/api/e/payroll_runs', { branch_id: CKR, period: '2026-11', pay_date: '2026-10-07', bank_account_id: id('bank_accounts', 'BCA-CKR') }));
+  ok(await admin.post(`/api/e/payroll_runs/${run.id}/actions/generate`));
+  ok(await osmond.post(`/api/e/payroll_runs/${run.id}/actions/approve`));
+  ok(await osmond.post(`/api/e/payroll_runs/${run.id}/actions/post`), 'posting');
+  const line = db.get('SELECT * FROM payroll_lines WHERE parent_id = ? AND employee_id = ?', run.id, e.id);
+  assert.equal(line.payable_account_id, acc('2-1305'), 'akun hutang dicatat pada slip');
+  assert.ok(gl('5-1400') - tk0 >= 5_000_000, 'beban tenaga kerja langsung');
+  near(gl('2-1305') - hp0, -line.net, 'hutang gaji tenaga kontrak');
+  const j = db.get("SELECT id FROM journals WHERE source_type = 'payroll_runs' AND source_id = ? AND description LIKE 'Beban gaji%'", run.id);
+  assert.ok(db.get('SELECT COUNT(DISTINCT account_id) n FROM journal_lines WHERE parent_id = ? AND debit > 0', j.id).n >= 2, 'beban dipecah per akun karyawan');
+  // Akun hutang diganti setelah posting → pembayaran tetap mendebit akun saat posting.
+  const cur = (await admin.get(`/api/e/employees/${e.id}`)).body;
+  ok(await admin.put(`/api/e/employees/${e.id}`, { row_version: cur.row_version, salary_payable_account_id: acc('2-1300') }));
+  ok(await osmond.post(`/api/e/payroll_runs/${run.id}/actions/pay`), 'bayar');
+  near(gl('2-1305') - hp0, 0, 'hutang gaji tenaga kontrak lunas');
+  const s = (await admin.get('/api/settings')).body.account_map;
+  for (const k of ['salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
+});

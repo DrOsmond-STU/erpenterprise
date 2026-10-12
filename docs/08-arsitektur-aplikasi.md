@@ -69,7 +69,7 @@ akses ke baris di luar cakupan (pencegahan IDOR).
 | Penyesuaian stok | Persediaan / akun lawan | akun lawan / Persediaan | Stok ± |
 | Transfer stok antar cabang | Persediaan (cabang tujuan) | Persediaan (cabang asal) | RAK otomatis |
 | Perintah kerja — *Lolos QC* | Persediaan barang jadi | Persediaan bahan baku (sesuai BOM) | Biaya produksi = nilai bahan terpakai |
-| Penggajian — *Posting* | Beban gaji (bruto) | Hutang PPh 21, Hutang BPJS, Hutang gaji | — |
+| Penggajian — *Posting* | Beban gaji (bruto, per akun & pusat biaya karyawan) | Hutang PPh 21, Hutang BPJS, Hutang gaji (per akun karyawan) | — |
 | Penggajian — *Bayar* | Hutang gaji | Bank | — |
 | Aset — *Aktifkan* | Aset tetap | Akun pembayaran (bank/hutang/modal) | — |
 | Penyusutan bulanan | Beban penyusutan | Akumulasi penyusutan | Nilai buku aset diperbarui; dobel per periode ditolak |
@@ -92,11 +92,15 @@ per data (`server/ledger/accounts.js`).
 | Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 |
 | Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 |
 | Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) | 4-1100 · 4-1900 · 5-1100 |
+| Karyawan | Beban gaji & tunjangan (gaji pokok, tunjangan, lembur) · Hutang gaji · Hutang PPh 21 · Hutang BPJS | 6-1000 (mis. 5-1400 tenaga kerja langsung produksi) · 2-1300 · 2-1310 · 2-1320 |
 | Aset tetap | Aset tetap · Akumulasi penyusutan · Beban penyusutan · Laba pelepasan · Rugi pelepasan · Beban pemeliharaan | aset & akumulasi menurut kategori (Bangunan 1-2200/1-2210, Mesin & Peralatan 1-2300/1-2310, Kendaraan 1-2400/1-2410, Peralatan Kantor & TI 1-2500/1-2510) · 6-2500 · 7-1100 · 7-2200 · 6-2200 |
 
 Posting membaca akun dari data master (akun bawaan hanya cadangan bila kolom kosong).
 Rekonsiliasi sub-buku (umur piutang/hutang, kartu mitra, register uang muka & deposit,
 barang terkirim belum difakturkan) menjumlahkan **seluruh akun yang dipakai data master**.
+Jurnal penggajian dipecah per akun karyawan (beban gaji juga per pusat biaya karyawan); akun hutang
+gaji dicatat pada slip saat posting sehingga pembayaran mendebit akun yang sama walaupun data
+karyawan diubah sesudahnya.
 Akun bersaldo (piutang/hutang, titipan, uang muka, deposit, jaminan) tidak dapat diganti
 selama mitra masih bersaldo di akun lama, dan akun persediaan tidak dapat diganti selama
 barang masih berstok — pindahkan saldonya dulu dengan jurnal umum. Pada aset tetap yang sudah
@@ -105,9 +109,10 @@ lokasi, dan akun beban penyusutan (berlaku untuk penyusutan berikutnya), laba/ru
 serta beban pemeliharaan. Aset aktif tidak dapat dihapus (gunakan *Lepas / jual aset*).
 
 **Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: PPN masukan/
-keluaran, RAK, investasi & ekuitas, gaji/PPh 21/BPJS, selisih kurs, laba/rugi pelepasan aset,
+keluaran, RAK, investasi & ekuitas, selisih kurs, laba/rugi pelepasan aset,
 penyesuaian persediaan & selisih harga, barang dalam proses, selisih kas, PPh 23, biaya bank,
-giro, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset). Saat pemutakhiran, penyesuaian akun mitra/barang
+giro, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset,
+akun gaji/PPh 21/BPJS di master karyawan). Saat pemutakhiran, penyesuaian akun mitra/barang
 yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)

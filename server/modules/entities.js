@@ -1037,8 +1037,12 @@ export const ENTITIES = {
       F.email(), F.text('phone', 'Telepon', { max: 30, sensitive: true }),
       F.text('bank_account_no', 'Rekening gaji', { max: 40, sensitive: true }),
       F.money('basic_salary', 'Gaji pokok', { sensitive: true }), F.money('allowance', 'Tunjangan tetap', { sensitive: true }),
-      F.ref('cost_center_id', 'Pusat biaya', 'cost_centers'),
+      F.ref('cost_center_id', 'Pusat biaya', 'cost_centers', { help: 'Beban gaji karyawan ini dicatat dengan dimensi pusat biaya.' }),
       F.status(['aktif', 'nonaktif'], 'aktif'),
+      acctRef('salary_expense_account_id', 'Akun beban gaji & tunjangan', 'Gaji pokok, tunjangan & lembur. Kosong = 6-1000 (mis. 5-1400 untuk tenaga kerja langsung produksi).'),
+      acctRef('salary_payable_account_id', 'Akun hutang gaji', 'Gaji neto terutang sampai dibayar. Kosong = 2-1300.', { type: 'liability' }),
+      acctRef('pph21_account_id', 'Akun hutang PPh 21', 'Kosong = 2-1310.', { type: 'liability' }),
+      acctRef('bpjs_account_id', 'Akun hutang BPJS', 'Potongan iuran BPJS karyawan. Kosong = 2-1320.', { type: 'liability' }),
     ],
   },
   attendance: {

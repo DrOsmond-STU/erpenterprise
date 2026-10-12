@@ -34,6 +34,8 @@ untuk mengulang dari awal.
    * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
      **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per
      lini produk, beban jasa); kolom yang kosong diisi akun bawaan saat disimpan.
+   * SDM → Karyawan: atur akun beban gaji per karyawan bila berbeda (mis. 5-1400 tenaga kerja
+     langsung produksi, 6-1000 staf kantor) serta akun hutang gaji/PPh 21/BPJS bila dipisah.
    * Aset → Aset Tetap: akun aset & akumulasi terisi sesuai kategori; atur akun beban penyusutan,
      laba/rugi pelepasan, dan beban pemeliharaan per aset bila berbeda (mis. per pusat biaya).
    * Administrasi → Peran & Izin, lalu Pengguna (prinsip hak minimum).

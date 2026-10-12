@@ -1,9 +1,9 @@
 /* ==========================================================================
    Akun buku besar per data master.
-   Setiap pelanggan, pemasok, barang/jasa, dan aset tetap menyimpan akun buku
+   Setiap pelanggan, pemasok, barang/jasa, aset tetap, dan karyawan menyimpan akun buku
    besarnya sendiri (piutang/hutang, uang muka, deposit, potongan; persediaan,
    HPP, pendapatan, retur, beban jasa; aset, akumulasi & beban penyusutan,
-   laba/rugi pelepasan, beban pemeliharaan). Saat data master dibuat, kolom akun yang
+   laba/rugi pelepasan, beban pemeliharaan; beban gaji, hutang gaji, PPh 21, BPJS). Saat data master dibuat, kolom akun yang
    kosong diisi akun bawaan; nilainya dapat diubah per data. Posting membaca
    akun dari data master (akun bawaan hanya cadangan bila kolom kosong) dan
    rekonsiliasi sub-buku menjumlahkan seluruh akun yang dipakai data master.
@@ -66,11 +66,20 @@ export const ASSET_ACCOUNTS = {
   maintenance: ['maintenance_account_id', 'maintenance_expense', 'Akun beban pemeliharaan'],
 };
 
+/* Karyawan: beban gaji (bruto: gaji pokok, tunjangan, lembur) dan akun hutang gaji, PPh 21, BPJS. */
+export const EMPLOYEE_ACCOUNTS = {
+  expense: ['salary_expense_account_id', 'salary_expense', 'Akun beban gaji & tunjangan'],
+  payable: ['salary_payable_account_id', 'salary_payable', 'Akun hutang gaji'],
+  pph21: ['pph21_account_id', 'pph21_payable', 'Akun hutang PPh 21'],
+  bpjs: ['bpjs_account_id', 'bpjs_payable', 'Akun hutang BPJS'],
+};
+
 /** Semua kunci akun bawaan yang kini diatur di data master (tidak lagi di Pengaturan). */
 export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_discount', 'customer_advance', 'sales_dp', 'deposit_saldo', 'deposit_guarantee',
   'ap', 'ic_payable', 'purchase_discount', 'supplier_advance', 'purchase_dp', 'sdeposit_saldo', 'sdeposit_guarantee',
   'inventory', 'cogs', 'goods_delivered', 'sales', 'sales_returns',
-  'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense']);
+  'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense',
+  'salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable']);
 
 const keyOf = (def, row) => (typeof def === 'function' ? def(row || {}) : def);
 /* Bawaan berupa kunci pemetaan (mis. 'ar') atau kode akun langsung ({ code }) — mis. akun aset per kategori. */
@@ -124,6 +133,16 @@ export function assetAccount(a, key) {
 }
 export function fillAssetDefaults(row) {
   for (const [field, def] of Object.values(ASSET_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
+  return row;
+}
+
+/** id akun karyawan (dari master; bila kosong → akun bawaan). */
+export function employeeAccount(e, key) {
+  const [field, def] = EMPLOYEE_ACCOUNTS[key];
+  return e?.[field] || defaultId(def, e);
+}
+export function fillEmployeeDefaults(row) {
+  for (const [field, def] of Object.values(EMPLOYEE_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
   return row;
 }
 

@@ -9,7 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -352,6 +352,7 @@ export const HOOKS = {
   // Data master: kolom akun buku besar yang kosong diisi akun bawaan (dapat diubah per data).
   customers: { compute: (_c, row) => { fillPartyDefaults('customer', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('customer', row, existing) },
   suppliers: { compute: (_c, row) => { fillPartyDefaults('supplier', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('supplier', row, existing) },
+  employees: { compute: (_c, row) => { fillEmployeeDefaults(row); } },
   products: { compute: (_c, row) => { fillProductDefaults(row); }, beforeUpdate: (_c, row, existing) => guardProductAccounts(row, existing) },
   customer_deposits: { compute: depositCompute },
   supplier_deposits: { compute: depositCompute },
