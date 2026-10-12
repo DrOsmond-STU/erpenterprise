@@ -93,6 +93,7 @@ per data (`server/ledger/accounts.js`).
 | Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 |
 | Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) | 4-1100 · 4-1900 · 5-1100 |
 | Karyawan | Beban gaji & tunjangan (gaji pokok, tunjangan, lembur) · Hutang gaji · Hutang PPh 21 · Hutang BPJS | 6-1000 (mis. 5-1400 tenaga kerja langsung produksi) · 2-1300 · 2-1310 · 2-1320 |
+| Kas & bank | Kas/bank (`account_id`, wajib) · Biaya administrasi bank · Giro mundur diterima (rekening setor) · Giro mundur diberikan (rekening penerbit) · Selisih kas kasir | — · 7-2100 · 1-1250 · 2-1150 · 6-2950 |
 | Aset tetap | Aset tetap · Akumulasi penyusutan · Beban penyusutan · Laba pelepasan · Rugi pelepasan · Beban pemeliharaan | aset & akumulasi menurut kategori (Bangunan 1-2200/1-2210, Mesin & Peralatan 1-2300/1-2310, Kendaraan 1-2400/1-2410, Peralatan Kantor & TI 1-2500/1-2510) · 6-2500 · 7-1100 · 7-2200 · 6-2200 |
 
 Posting membaca akun dari data master (akun bawaan hanya cadangan bila kolom kosong).
@@ -101,6 +102,9 @@ barang terkirim belum difakturkan) menjumlahkan **seluruh akun yang dipakai data
 Jurnal penggajian dipecah per akun karyawan (beban gaji juga per pusat biaya karyawan); akun hutang
 gaji dicatat pada slip saat posting sehingga pembayaran mendebit akun yang sama walaupun data
 karyawan diubah sesudahnya.
+Giro mundur dicatat di akun giro rekening tempat giro disetor/diterbitkan dan dikreditkan/didebit
+dari akun yang sama saat cair (walau dicairkan ke rekening lain); register giro menjumlahkan seluruh
+akun giro rekening. Akun giro rekening tidak dapat diganti selama masih ada giro belum cair melaluinya.
 Akun bersaldo (piutang/hutang, titipan, uang muka, deposit, jaminan) tidak dapat diganti
 selama mitra masih bersaldo di akun lama, dan akun persediaan tidak dapat diganti selama
 barang masih berstok — pindahkan saldonya dulu dengan jurnal umum. Pada aset tetap yang sudah
@@ -109,10 +113,9 @@ lokasi, dan akun beban penyusutan (berlaku untuk penyusutan berikutnya), laba/ru
 serta beban pemeliharaan. Aset aktif tidak dapat dihapus (gunakan *Lepas / jual aset*).
 
 **Pengaturan → Akun sistem** hanya berisi akun yang tidak terkait data master: PPN masukan/
-keluaran, RAK, investasi & ekuitas, selisih kurs, laba/rugi pelepasan aset,
-penyesuaian persediaan & selisih harga, barang dalam proses, selisih kas, PPh 23, biaya bank,
-giro, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset,
-akun gaji/PPh 21/BPJS di master karyawan). Saat pemutakhiran, penyesuaian akun mitra/barang
+keluaran, RAK, investasi & ekuitas, selisih kurs, penyesuaian persediaan & selisih harga,
+barang dalam proses, PPh 23, serta akun kompensasi/jaminan hangus (akun pelepasan & pemeliharaan aset kini di master aset,
+akun gaji/PPh 21/BPJS di master karyawan, akun biaya bank/giro/selisih kas di master kas & bank). Saat pemutakhiran, penyesuaian akun mitra/barang
 yang pernah disimpan di Pengaturan dipindahkan ke data master lalu dihapus dari Pengaturan.
 
 ## Laporan (`server/ledger/reports.js`)

@@ -110,10 +110,10 @@ test('pemasok dengan akun hutang khusus & jasa dengan akun beban: tagihan dan pe
 
 test('Pengaturan hanya berisi akun sistem; akun data master tidak dapat diatur di sana', async () => {
   const s = (await admin.get('/api/settings')).body.account_map;
-  assert.ok(s.vat_out && s.retained_earnings && s.bank_charge, 'akun sistem tersedia');
+  assert.ok(s.vat_out && s.retained_earnings && s.fx_gain, 'akun sistem tersedia');
   for (const k of ['ar', 'ap', 'inventory', 'cogs', 'sales', 'customer_advance', 'supplier_advance', 'deposit_saldo', 'sales_returns']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
   assert.equal((await admin.put('/api/settings/account_map', { ar: '1-1210' })).status, 400, 'akun piutang tidak lagi di Pengaturan');
-  ok(await admin.put('/api/settings/account_map', { bank_charge: '7-2100' }), 'akun sistem tetap dapat diubah');
+  ok(await admin.put('/api/settings/account_map', { fx_gain: '7-1200' }), 'akun sistem tetap dapat diubah');
 });
 
 test('migrasi: kolom akun kosong diisi dari pemetaan lama di Pengaturan, lalu kunci data master dihapus dari Pengaturan', async () => {
@@ -122,12 +122,12 @@ test('migrasi: kolom akun kosong diisi dari pemetaan lama di Pengaturan, lalu ku
   const cid = id('customers', 'C002');
   db.run('UPDATE customers SET ar_account_id = NULL WHERE id = ?', cid);
   db.run("UPDATE products SET revenue_account_id = NULL WHERE code = 'SV-301'");
-  setSetting('account_map', { ar: '1-1210', sales: '4-1150', bank_charge: '7-2100' }, null);
+  setSetting('account_map', { ar: '1-1210', sales: '4-1150', fx_gain: '7-1200' }, null);
   clearSettingsCache();
   upgrade();
   assert.equal(db.get('SELECT ar_account_id v FROM customers WHERE id = ?', cid).v, acc('1-1210'), 'penyesuaian lama pindah ke pelanggan');
   assert.equal(db.get("SELECT revenue_account_id v FROM products WHERE code = 'SV-301'").v, acc('4-1150'), 'penyesuaian lama pindah ke barang/jasa');
-  assert.deepEqual(getSetting('account_map', {}), { bank_charge: '7-2100' }, 'hanya akun sistem tersisa');
+  assert.deepEqual(getSetting('account_map', {}), { fx_gain: '7-1200' }, 'hanya akun sistem tersisa');
   assert.equal(db.get("SELECT ar_account_id v FROM customers WHERE code = 'C001'").v, acc('1-1200'), 'data master lain tidak berubah');
 });
 
@@ -181,4 +181,37 @@ test('karyawan: akun beban gaji, hutang gaji, PPh 21 & BPJS per karyawan; pembay
   near(gl('2-1305') - hp0, 0, 'hutang gaji tenaga kontrak lunas');
   const s = (await admin.get('/api/settings')).body.account_map;
   for (const k of ['salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
+});
+
+test('kas & bank: akun biaya bank, giro mundur & selisih kas per rekening; register giro terekonsiliasi; akun giro bersaldo dikunci', async () => {
+  for (const [code, name, type, par, subtype] of [['7-2110', 'Biaya Administrasi Bank — Rekening Proyek', 'other_expense', '7', ''], ['1-1255', 'Giro Mundur Diterima — Rekening Proyek', 'asset', '1-1000', 'current_asset'], ['1-1135', 'Bank Mandiri — Rekening Proyek', 'asset', '1-1100', 'cash']]) {
+    if (!db.get('SELECT id FROM accounts WHERE code = ?', code)) ok(await admin.post('/api/e/accounts', { code, name, type, parent_id: acc(par), is_header: 0, subtype, status: 'aktif' }), code);
+  }
+  const plain = ok(await admin.post('/api/e/bank_accounts', { branch_id: JKT(), code: 'KAS-UJI', name: 'Kas uji', bank_name: '—', account_id: acc('1-1110') }));
+  assert.equal(plain.charge_account_id, acc('7-2100')); assert.equal(plain.giro_in_account_id, acc('1-1250'));
+  assert.equal(plain.giro_out_account_id, acc('2-1150')); assert.equal(plain.cash_diff_account_id, acc('6-2950'));
+  const b = ok(await admin.post('/api/e/bank_accounts', { branch_id: JKT(), code: 'MDR-PRJ', name: 'Mandiri Proyek', bank_name: 'Mandiri', account_id: acc('1-1135'), charge_account_id: acc('7-2110'), giro_in_account_id: acc('1-1255') }));
+  // Pelunasan transfer dengan biaya bank → akun biaya rekening ini.
+  const inv = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: id('customers', 'C002'), warehouse_id: WH(), tax_rate: 11, lines: [{ product_id: id('products', 'SV-301'), qty: 4, price: 1_000_000 }] }));
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/post`));
+  const ch0 = gl('7-2110'), gen0 = gl('7-2100');
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/receive`, { date: '2026-10-07', source: 'bank', bank_account_id: b.id, amount: 1_000_000, discount: 0, pph23: 0, bank_charge: 6_500 }));
+  near(gl('7-2110') - ch0, 6_500, 'biaya bank rekening proyek'); near(gl('7-2100') - gen0, 0, 'bukan akun biaya bank umum');
+  // Giro disetor ke rekening proyek → akun giro rekening tersebut; register giro tetap cocok.
+  const g0 = gl('1-1255');
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/receive`, { date: '2026-10-07', source: 'giro', bank_account_id: b.id, giro_no: 'BG-UJI-1255', giro_bank: 'BRI', giro_due: '2026-10-07', amount: 2_000_000, discount: 0, pph23: 0, bank_charge: 0 }));
+  near(gl('1-1255') - g0, 2_000_000, 'giro belum cair di akun rekening proyek');
+  let reg = (await admin.get('/api/reports/giro?side=in')).body;
+  assert.ok(reg.reconciled, `register giro ${reg.totals.open} = buku besar ${reg.glBalance}`);
+  const cur = (await admin.get(`/api/e/bank_accounts/${b.id}`)).body;
+  assert.equal((await admin.put(`/api/e/bank_accounts/${b.id}`, { row_version: cur.row_version, giro_in_account_id: acc('1-1250') })).status, 409, 'akun giro dikunci selama ada giro belum cair');
+  const rcp = db.get("SELECT id FROM customer_receipts WHERE giro_no = 'BG-UJI-1255'");
+  ok(await osmond.post(`/api/e/customer_receipts/${rcp.id}/actions/giro_clear`, { date: '2026-10-07', bank_charge: 3_000 }), 'giro cair');
+  near(gl('1-1255') - g0, 0, 'giro cair mengkredit akun giro rekening'); near(gl('7-2110') - ch0, 9_500, 'biaya kliring di akun rekening');
+  reg = (await admin.get('/api/reports/giro?side=in')).body;
+  assert.ok(reg.reconciled, 'register giro setelah cair');
+  const cur2 = (await admin.get(`/api/e/bank_accounts/${b.id}`)).body;
+  ok(await admin.put(`/api/e/bank_accounts/${b.id}`, { row_version: cur2.row_version, giro_in_account_id: acc('1-1250') }), 'akun giro dapat diganti setelah tidak ada giro beredar');
+  const s = (await admin.get('/api/settings')).body.account_map;
+  for (const k of ['bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short']) assert.ok(!(k in s), `${k} tidak di Pengaturan`);
 });

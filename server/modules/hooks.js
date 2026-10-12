@@ -9,7 +9,7 @@ import { clearAccountCache } from '../ledger/posting.js';
 import { phaseBudget } from '../ledger/budget.js';
 import { termDueDate, validateTerm, applyAdvanceDeduction, ADVANCE } from '../ledger/payments.js';
 import { approvalPolicy } from '../lib/settings.js';
-import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
+import { fillPartyDefaults, fillProductDefaults, fillAssetDefaults, fillEmployeeDefaults, fillBankDefaults, PARTY_ACCOUNTS } from '../ledger/accounts.js';
 
 /** Baris dagang: jumlah = qty × harga × (1 − diskon). Header: subtotal, PPN, total. */
 function tradeTotals(_ctx, row, lines) {
@@ -353,6 +353,17 @@ export const HOOKS = {
   customers: { compute: (_c, row) => { fillPartyDefaults('customer', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('customer', row, existing) },
   suppliers: { compute: (_c, row) => { fillPartyDefaults('supplier', row); }, beforeUpdate: (_c, row, existing) => guardPartyAccounts('supplier', row, existing) },
   employees: { compute: (_c, row) => { fillEmployeeDefaults(row); } },
+  // Rekening kas/bank: akun giro tidak dapat diganti selama masih ada giro belum cair melalui rekening ini.
+  bank_accounts: {
+    compute: (_c, row) => { fillBankDefaults(row); },
+    beforeUpdate: (_c, row, existing) => {
+      for (const [field, table] of [['giro_in_account_id', 'customer_receipts'], ['giro_out_account_id', 'supplier_payments']]) {
+        if (!(field in row) || !existing[field] || Number(row[field]) === existing[field]) continue;
+        const n = db.get(`SELECT COUNT(*) n FROM ${table} WHERE bank_account_id = ? AND method = 'giro' AND giro_status = 'beredar'`, existing.id).n;
+        if (n) throw conflict(`Akun giro rekening ${existing.code} tidak dapat diganti: masih ada ${n} giro belum cair melalui rekening ini.`);
+      }
+    },
+  },
   products: { compute: (_c, row) => { fillProductDefaults(row); }, beforeUpdate: (_c, row, existing) => guardProductAccounts(row, existing) },
   customer_deposits: { compute: depositCompute },
   supplier_deposits: { compute: depositCompute },

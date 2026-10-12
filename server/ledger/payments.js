@@ -5,7 +5,7 @@
    ========================================================================== */
 import * as db from '../db.js';
 import { acct } from './posting.js';
-import { partyAccountSet, inList } from './accounts.js';
+import { partyAccountSet, bankAccountSet, inList } from './accounts.js';
 import { bad, round2, today } from '../lib/util.js';
 
 export const DOC = { sales_invoices: 'customer', purchase_bills: 'supplier' };
@@ -141,8 +141,9 @@ export function giroRegister(ctx, { companyId, branchId, asOf, side = 'in', from
   }
   const open = rows.filter((r) => r.giro_status === 'beredar');
   const sumBy = (xs) => round2(xs.reduce((s, r) => s + r.amount, 0));
-  const account = acct(incoming ? 'giro_receivable' : 'giro_payable');
-  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id = ?`, companyId, account).v;
+  // Seluruh akun giro yang dipakai rekening kas/bank (master) — saldo giro belum cair.
+  const accounts = inList(bankAccountSet(incoming ? 'giro_in' : 'giro_out'));
+  const glRaw = db.get(`SELECT ROUND(COALESCE(SUM(jl.debit - jl.credit),0),2) v FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id WHERE j.status = 'diposting' AND jl.company_id = ? AND jl.account_id IN ${accounts}`, companyId).v;
   const glBalance = round2(incoming ? glRaw : -glRaw);
   const openAll = branchId ? round2(db.get(`SELECT COALESCE(SUM(total),0) v FROM "${table}" WHERE company_id = ? AND method = 'giro' AND giro_status = 'beredar'`, companyId).v) : sumBy(open);
   return {

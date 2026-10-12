@@ -1,9 +1,10 @@
 /* ==========================================================================
    Akun buku besar per data master.
-   Setiap pelanggan, pemasok, barang/jasa, aset tetap, dan karyawan menyimpan akun buku
+   Setiap pelanggan, pemasok, barang/jasa, aset tetap, karyawan, dan rekening kas/bank menyimpan akun buku
    besarnya sendiri (piutang/hutang, uang muka, deposit, potongan; persediaan,
    HPP, pendapatan, retur, beban jasa; aset, akumulasi & beban penyusutan,
-   laba/rugi pelepasan, beban pemeliharaan; beban gaji, hutang gaji, PPh 21, BPJS). Saat data master dibuat, kolom akun yang
+   laba/rugi pelepasan, beban pemeliharaan; beban gaji, hutang gaji, PPh 21, BPJS;
+   biaya bank, giro mundur, selisih kas). Saat data master dibuat, kolom akun yang
    kosong diisi akun bawaan; nilainya dapat diubah per data. Posting membaca
    akun dari data master (akun bawaan hanya cadangan bila kolom kosong) dan
    rekonsiliasi sub-buku menjumlahkan seluruh akun yang dipakai data master.
@@ -74,12 +75,22 @@ export const EMPLOYEE_ACCOUNTS = {
   bpjs: ['bpjs_account_id', 'bpjs_payable', 'Akun hutang BPJS'],
 };
 
+/* Kas & bank: akun kas/bank (account_id, wajib) + biaya administrasi bank, giro mundur diterima
+   (rekening setor) / diberikan (rekening penerbit), dan selisih kas kasir (laci kas). */
+export const BANK_ACCOUNTS = {
+  charge: ['charge_account_id', 'bank_charge', 'Akun biaya administrasi bank'],
+  giro_in: ['giro_in_account_id', 'giro_receivable', 'Akun giro mundur diterima (belum cair)'],
+  giro_out: ['giro_out_account_id', 'giro_payable', 'Akun giro mundur diberikan (belum cair)'],
+  cash_diff: ['cash_diff_account_id', 'cash_over_short', 'Akun selisih kas (kasir)'],
+};
+
 /** Semua kunci akun bawaan yang kini diatur di data master (tidak lagi di Pengaturan). */
 export const MASTER_KEYS = new Set(['ar', 'ic_receivable', 'ic_sales', 'sales_discount', 'customer_advance', 'sales_dp', 'deposit_saldo', 'deposit_guarantee',
   'ap', 'ic_payable', 'purchase_discount', 'supplier_advance', 'purchase_dp', 'sdeposit_saldo', 'sdeposit_guarantee',
   'inventory', 'cogs', 'goods_delivered', 'sales', 'sales_returns',
   'depreciation_expense', 'gain_disposal', 'loss_disposal', 'maintenance_expense',
-  'salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable']);
+  'salary_expense', 'salary_payable', 'pph21_payable', 'bpjs_payable',
+  'bank_charge', 'giro_receivable', 'giro_payable', 'cash_over_short']);
 
 const keyOf = (def, row) => (typeof def === 'function' ? def(row || {}) : def);
 /* Bawaan berupa kunci pemetaan (mis. 'ar') atau kode akun langsung ({ code }) — mis. akun aset per kategori. */
@@ -144,6 +155,23 @@ export function employeeAccount(e, key) {
 export function fillEmployeeDefaults(row) {
   for (const [field, def] of Object.values(EMPLOYEE_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
   return row;
+}
+
+/** id akun rekening kas/bank (dari master; bila kosong → akun bawaan). */
+export function bankAccount(b, key) {
+  const [field, def] = BANK_ACCOUNTS[key];
+  return b?.[field] || defaultId(def, b);
+}
+export function fillBankDefaults(row) {
+  for (const [field, def] of Object.values(BANK_ACCOUNTS)) if (row[field] == null || row[field] === '') row[field] = defaultId(def, row);
+  return row;
+}
+/** Seluruh akun giro yang dipakai rekening (override master + bawaan) — rekonsiliasi register giro. */
+export function bankAccountSet(key) {
+  const [field, def] = BANK_ACCOUNTS[key];
+  const ids = new Set(db.all(`SELECT DISTINCT ${field} id FROM bank_accounts WHERE ${field} IS NOT NULL`).map((r) => r.id));
+  const d = defaultId(def, {}); if (d) ids.add(d);
+  return [...ids];
 }
 
 /** SQL "IN (…)" aman untuk daftar id akun. */

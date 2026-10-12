@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount, assetAccount, employeeAccount } from './accounts.js';
+import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -305,7 +305,7 @@ function postReceipt(ctx, r) {
     if (!(r.advance > 0)) throw bad('Isi nilai uang muka yang diterima.');
     const b = bank(r.bank_account_id);
     jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: round2(r.advance - charge), memo: `Uang muka ${cust.name}` });
-    if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya bank' });
+    if (charge > 0) jl.push({ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya bank' });
     jl.push({ account_id: partyAcct('customer', cust, 'advance'), credit: r.advance, memo: `Uang muka ${cust.name}${r.reference ? ` · ${r.reference}` : ''}`, partner_type: 'customer', partner_id: cust.id });
   } else {
     const ls = lines('customer_receipt_lines', r.id);
@@ -341,14 +341,14 @@ function postReceipt(ctx, r) {
     } else if (r.method === 'giro') {
       // Giro mundur diterima: piutang dilunasi ke "giro diterima belum cair"; kas bertambah saat giro cair.
       if (!isBaseDoc(r)) throw bad('Giro/cek mundur dicatat dalam IDR.');
-      jl.push({ account_id: acct('giro_receivable'), debit: round2(cash), memo: `Giro ${r.giro_no}${r.giro_bank ? ` (${r.giro_bank})` : ''} jatuh tempo ${r.giro_due}`, partner_type: 'customer', partner_id: cust.id });
+      jl.push({ account_id: bankAccount(bank(r.bank_account_id), 'giro_in'), debit: round2(cash), memo: `Giro ${r.giro_no}${r.giro_bank ? ` (${r.giro_bank})` : ''} jatuh tempo ${r.giro_due}`, partner_type: 'customer', partner_id: cust.id });
       debitBase += round2(cash);
     } else {
       const b = bank(r.bank_account_id);
       const bankDebit = toBase(cash - charge, r), chargeBase = toBase(charge, r);
       if (bankDebit < 0) throw bad('Biaya bank melebihi kas diterima.');
       if (bankDebit > 0) jl.push({ account_id: b.account_id, branch_id: b.branch_id, debit: bankDebit, memo: `Penerimaan ${cust.name}` });
-      if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya bank' });
+      if (chargeBase > 0) jl.push({ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya bank' });
       debitBase += bankDebit + chargeBase;
     }
     if (disc > 0) { const v = toBase(disc, r); jl.push({ account_id: partyAcct('customer', cust, 'discount'), debit: v, memo: 'Potongan pelunasan' }); debitBase += v; }
@@ -465,7 +465,7 @@ function postPayment(ctx, pay) {
     if (!(pay.advance > 0)) throw bad('Isi nilai uang muka yang dibayar.');
     const b = bank(pay.bank_account_id);
     jl.push({ account_id: partyAcct('supplier', sup, 'advance'), debit: pay.advance, memo: `Uang muka ${sup.name}${pay.reference ? ` · ${pay.reference}` : ''}`, partner_type: 'supplier', partner_id: sup.id });
-    if (charge > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer' });
+    if (charge > 0) jl.push({ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer' });
     jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: round2(pay.advance + charge), memo: `Uang muka ${sup.name}` });
   } else {
     const ls = lines('supplier_payment_lines', pay.id);
@@ -501,13 +501,13 @@ function postPayment(ctx, pay) {
     } else if (pay.method === 'giro') {
       // Giro mundur diserahkan: hutang dilunasi ke "giro diberikan belum cair"; kas berkurang saat giro cair.
       if (!isBaseDoc(pay)) throw bad('Giro/cek mundur dicatat dalam IDR.');
-      jl.push({ account_id: acct('giro_payable'), credit: round2(cash), memo: `Giro ${pay.giro_no} jatuh tempo ${pay.giro_due}`, partner_type: 'supplier', partner_id: sup.id });
+      jl.push({ account_id: bankAccount(bank(pay.bank_account_id), 'giro_out'), credit: round2(cash), memo: `Giro ${pay.giro_no} jatuh tempo ${pay.giro_due}`, partner_type: 'supplier', partner_id: sup.id });
       creditBase += round2(cash);
     } else {
       const b = bank(pay.bank_account_id);
       const cashBase = toBase(cash, pay), chargeBase = toBase(charge, pay);
       jl.push({ account_id: b.account_id, branch_id: b.branch_id, credit: round2(cashBase + chargeBase), memo: `Pembayaran ${sup.name}` });
-      if (chargeBase > 0) jl.push({ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya transfer' });
+      if (chargeBase > 0) jl.push({ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: chargeBase, memo: 'Biaya transfer' });
       creditBase += cashBase;
     }
     if (disc > 0) { const v = toBase(disc, pay); jl.push({ account_id: partyAcct('supplier', sup, 'discount'), credit: v, memo: 'Potongan pelunasan diterima' }); creditBase += v; }
@@ -806,7 +806,7 @@ function depositActions(table) {
       if (!ar && charge >= amount) throw bad('Biaya bank melebihi dana yang diterima kembali.');
       depositMove(table, d.id, 'refunded', amount);
       const depLine = { account_id: depositAcct(table, d), [ar ? 'debit' : 'credit']: amount, memo: `Pengembalian deposit ${d.number}${p.reference ? ` · ${p.reference}` : ''}`, ...ref(d) };
-      const chargeLine = charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer pengembalian deposit' }] : [];
+      const chargeLine = charge > 0 ? [{ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya transfer pengembalian deposit' }] : [];
       const bankLine = { account_id: b.account_id, branch_id: b.branch_id, [ar ? 'credit' : 'debit']: ar ? round2(amount + charge) : round2(amount - charge), memo: `Pengembalian deposit ${ar ? 'ke' : 'dari'} ${pt.name}` };
       journal(ctx, d, p.date, `Pengembalian deposit ${d.number} — ${pt.name}`, ar ? [depLine, ...chargeLine, bankLine] : [bankLine, ...chargeLine, depLine]);
       return { message: ar ? `Rp ${amount.toLocaleString('id-ID')} dikembalikan ke ${pt.name}.` : `Rp ${amount.toLocaleString('id-ID')} diterima kembali dari ${pt.name}.` };
@@ -839,15 +839,16 @@ function giroClear(table) {
     if (date < d.giro_due) throw bad(`Giro ${d.giro_no} baru efektif ${d.giro_due}; belum dapat dicairkan.`);
     const b = bank(p.bank_account_id || d.bank_account_id);
     if (b.company_id !== d.company_id) throw bad('Rekening harus milik perusahaan yang sama.');
+    const gb = bank(d.bank_account_id); // akun giro mengikuti rekening saat giro dicatat
     const charge = round2(p.bank_charge || 0);
     const party = ar ? db.get('SELECT id, name FROM customers WHERE id = ?', d.customer_id) : db.get('SELECT id, name FROM suppliers WHERE id = ?', d.supplier_id);
     const amount = round2(d.total);
     const jl = ar
       ? [{ account_id: b.account_id, branch_id: b.branch_id, debit: round2(amount - charge), memo: `Giro ${d.giro_no} cair` },
-        ...(charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
-        { account_id: acct('giro_receivable'), credit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'customer', partner_id: party.id }]
-      : [{ account_id: acct('giro_payable'), debit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'supplier', partner_id: party.id },
-        ...(charge > 0 ? [{ account_id: acct('bank_charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
+        ...(charge > 0 ? [{ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
+        { account_id: bankAccount(gb, 'giro_in'), credit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'customer', partner_id: party.id }]
+      : [{ account_id: bankAccount(gb, 'giro_out'), debit: amount, memo: `Giro ${d.giro_no} cair`, partner_type: 'supplier', partner_id: party.id },
+        ...(charge > 0 ? [{ account_id: bankAccount(b, 'charge'), branch_id: b.branch_id, debit: charge, memo: 'Biaya kliring' }] : []),
         { account_id: b.account_id, branch_id: b.branch_id, credit: round2(amount + charge), memo: `Giro ${d.giro_no} cair` }];
     postJournal(ctx, { companyId: d.company_id, branchId: d.branch_id, date, description: `Giro ${d.giro_no} cair — ${d.number} · ${party.name}`, sourceType: table, sourceId: d.id, sourceNo: d.number, lines: jl });
     db.update(table, d.id, { giro_status: 'cair', giro_cleared: date, bank_account_id: b.id });
@@ -1358,8 +1359,8 @@ function closeShift(ctx, sh, p) {
     postJournal(ctx, {
       companyId: sh.company_id, branchId: sh.branch_id, date: sh.date, description: `Selisih kas shift ${sh.number} (${sh.cashier})`, sourceType: 'pos_shifts', sourceId: sh.id, sourceNo: sh.number,
       lines: diff < 0
-        ? [{ account_id: acct('cash_over_short'), debit: -diff, memo: 'Kekurangan kas' }, { account_id: b.account_id, branch_id: b.branch_id, credit: -diff }]
-        : [{ account_id: b.account_id, branch_id: b.branch_id, debit: diff }, { account_id: acct('cash_over_short'), credit: diff, memo: 'Kelebihan kas' }],
+        ? [{ account_id: bankAccount(b, 'cash_diff'), debit: -diff, memo: 'Kekurangan kas' }, { account_id: b.account_id, branch_id: b.branch_id, credit: -diff }]
+        : [{ account_id: b.account_id, branch_id: b.branch_id, debit: diff }, { account_id: bankAccount(b, 'cash_diff'), credit: diff, memo: 'Kelebihan kas' }],
     });
   }
   setStatus('pos_shifts', sh.id, 'tutup', { sales_total: round2(sales.v), transactions: sales.n, expected_cash: expected, closing_cash: counted, difference: diff });
