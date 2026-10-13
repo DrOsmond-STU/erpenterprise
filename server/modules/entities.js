@@ -1030,6 +1030,9 @@ export const ENTITIES = {
       F.money('budget', 'Anggaran biaya (RAB)', { list: true, help: 'Otomatis = jumlah rincian anggaran per akun bila rincian diisi.' }),
       F.date('start_date', 'Mulai'), F.date('end_date', 'Selesai', { list: true }), F.pct('progress', 'Kemajuan fisik', { list: true }),
       F.status(['perencanaan', 'berjalan', 'ditunda', 'selesai'], 'perencanaan'),
+      acctRef('revenue_account_id', 'Akun pendapatan proyek', 'Pendapatan faktur yang ditandai proyek ini (mis. Pendapatan Kontrak Konstruksi). Kosong = akun pelanggan/barang/jasa.', { type: ['revenue', 'other_income'] }),
+      acctRef('cogs_account_id', 'Akun HPP proyek', 'HPP barang persediaan yang difakturkan untuk proyek ini. Kosong = akun HPP barang.', { type: ['cogs', 'expense'] }),
+      acctRef('cost_account_id', 'Akun biaya proyek', 'Biaya jasa / non-persediaan pada tagihan proyek tanpa akun baris (mis. Biaya Subkontraktor Proyek). Kosong = akun beban jasa. Sertakan akun ini di rincian RAB agar realisasinya terbaca.', { type: ['cogs', 'expense', 'other_expense'] }),
     ],
     lines: {
       table: 'project_budget_lines',

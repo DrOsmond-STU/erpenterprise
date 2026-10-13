@@ -35,6 +35,8 @@ untuk mengulang dari awal.
    * Administrasi → Perusahaan & Cabang: akun modal disetor, saldo laba, dan investasi pada entitas anak
      per perusahaan; akun RAK per cabang bila ingin dipisah (mis. RAK Cabang Surabaya).
    * Keuangan → Mata Uang: akun laba/rugi selisih kurs per mata uang bila dipisah.
+   * Proyek → Proyek: bila pendapatan/biaya proyek dibukukan terpisah (mis. Pendapatan Kontrak, Biaya
+     Subkontraktor Proyek), isi akun proyek dan sertakan akun biaya tersebut di rincian RAB.
    * Data Master → Gudang & BOM: akun penyesuaian stok per gudang dan akun barang dalam proses per BOM.
    * Data Master: gudang, rekening kas/bank, produk & jasa, pelanggan, pemasok — periksa bagian
      **Akun buku besar** pada masing-masing data (mis. piutang ekspor, hutang impor, persediaan per

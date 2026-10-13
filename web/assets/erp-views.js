@@ -462,6 +462,7 @@
     ['pelanggan', 'Pelanggan', 'Piutang, pendapatan, potongan, titipan, uang muka, deposit, jaminan, kompensasi jaminan dicairkan'],
     ['pemasok', 'Pemasok', 'Hutang, potongan, titipan, uang muka, deposit, jaminan, beban jaminan hangus'],
     ['produk', 'Produk & Layanan', 'Persediaan, HPP, barang terkirim, pendapatan, retur penjualan, beban jasa, selisih harga pembelian/retur'],
+    ['proyek', 'Proyek', 'Pendapatan, HPP & biaya proyek (opsional; kosong = ikut akun barang/pelanggan)'],
     ['gudang', 'Gudang', 'Penyesuaian / selisih stok (akun lawan bawaan penyesuaian stok)'],
     ['bom', 'Bill of Materials', 'Barang dalam proses (produksi)'],
     ['aset', 'Aset Tetap', 'Aset, akumulasi & beban penyusutan, laba/rugi pelepasan, pemeliharaan'],

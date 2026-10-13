@@ -201,6 +201,20 @@ export function bankAccountSet(key) {
   return [...ids];
 }
 
+/* Proyek: akun pendapatan, HPP, dan biaya (jasa/non-persediaan) khusus proyek. Opsional — kosong = ikut
+   akun barang/jasa (atau akun pelanggan). Dipakai baris jurnal dokumen yang ditandai proyek. */
+export const PROJECT_ACCOUNTS = {
+  revenue: ['revenue_account_id', 'Akun pendapatan proyek'],
+  cogs: ['cogs_account_id', 'Akun HPP proyek'],
+  cost: ['cost_account_id', 'Akun biaya proyek (jasa / non-persediaan)'],
+};
+/** id akun proyek untuk satu jenis, atau null bila proyek tidak mengaturnya. */
+export function projectAccount(projectOrId, key) {
+  if (!projectOrId) return null;
+  const p = typeof projectOrId === 'object' ? projectOrId : db.get('SELECT * FROM projects WHERE id = ?', projectOrId);
+  return p?.[PROJECT_ACCOUNTS[key][0]] || null;
+}
+
 /** id akun data master lain (gudang, cabang, perusahaan, mata uang, BOM); kolom kosong → akun bawaan. */
 export function masterAcct(table, rowOrId, key) {
   const [field, def] = MASTER_ACCOUNTS[table][key];

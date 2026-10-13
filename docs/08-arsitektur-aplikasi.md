@@ -92,6 +92,7 @@ per data (`server/ledger/accounts.js`).
 | Pemasok | Hutang usaha (`ap_account_id`) · Potongan pembelian · Titipan/uang muka ke pemasok · Uang muka pembelian (faktur UM) · Deposit · Uang jaminan · Beban jaminan hangus | 2-1100 (antar perusahaan 2-1500) · 7-1300 · 1-1510 · 1-1520 · 1-1530 · 1-1540 · 7-2400 |
 | Barang persediaan | Persediaan · HPP · Persediaan terkirim belum difakturkan · Pendapatan · Retur penjualan · Selisih harga pembelian/retur | 1-1340 · 5-1100 · 1-1350 · 4-1100 · 4-1900 · 6-2700 |
 | Jasa | Pendapatan · Retur penjualan · Beban pembelian jasa (`expense_account_id`, dipakai tagihan tanpa akun baris) · Selisih harga retur | 4-1100 · 4-1900 · 5-1100 · 6-2700 |
+| Proyek | Pendapatan proyek · HPP proyek · Biaya proyek (jasa/non-persediaan pada tagihan tanpa akun baris); opsional, mendahului akun barang/pelanggan pada dokumen bertanda proyek (pelanggan antar perusahaan tetap memakai akun penjualan IC); komitmen PO proyek memakai akun yang sama | — (ikut akun barang/jasa) |
 | Gudang | Penyesuaian / selisih stok (akun lawan bawaan penyesuaian stok) | 6-2700 |
 | BOM | Barang dalam proses (bahan → WIP → barang jadi saat perintah kerja selesai) | 1-1320 |
 | Cabang | Rekening antar cabang (RAK, penyeimbang otomatis jurnal lintas cabang) | 1-1700 |

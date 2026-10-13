@@ -361,3 +361,38 @@ test('data master lain: cabang (RAK), gudang (penyesuaian stok), BOM (WIP), prod
   const s = (await admin.get('/api/settings')).body.account_map;
   assert.deepEqual(s, {});
 });
+
+test('proyek: akun pendapatan, HPP & biaya proyek dipakai faktur, tagihan, retur & komitmen PO; laporan proyek terbaca', async () => {
+  for (const [code, name, type, par] of [['4-1610', 'Pendapatan Kontrak Proyek', 'revenue', '4'], ['5-1610', 'HPP Proyek', 'cogs', '5'], ['5-1710', 'Biaya Subkontraktor Proyek', 'cogs', '5']]) {
+    if (!db.get('SELECT id FROM accounts WHERE code = ?', code)) ok(await admin.post('/api/e/accounts', { code, name, type, parent_id: acc(par), is_header: 0, subtype: '', status: 'aktif' }), code);
+  }
+  assert.equal((await admin.post('/api/e/projects', { branch_id: JKT(), code: 'PRJ-X', name: 'Salah akun', revenue_account_id: acc('5-1610') })).status, 400, 'akun pendapatan proyek harus akun pendapatan');
+  const prj = ok(await admin.post('/api/e/projects', { branch_id: JKT(), code: 'PRJ-AKN', name: 'Proyek uji akun', customer_id: id('customers', 'C002'), contract_value: 50_000_000, status: 'berjalan',
+    revenue_account_id: acc('4-1610'), cogs_account_id: acc('5-1610'), cost_account_id: acc('5-1710'),
+    lines: [{ account_id: acc('5-1710'), description: 'Subkon', amount: 20_000_000 }, { account_id: acc('5-1610'), description: 'Material', amount: 10_000_000 }] }));
+  const WJ = id('warehouses', 'WH-JKT');
+  const sp = db.get("SELECT sb.product_id id FROM stock_balances sb JOIN products p ON p.id = sb.product_id WHERE sb.warehouse_id = ? AND sb.qty >= 5 AND p.kind <> 'jasa' ORDER BY sb.product_id LIMIT 1", WJ).id;
+  const r0 = gl('4-1610'), h0 = gl('5-1610'), s0 = gl('4-1100'), b0 = gl('5-1710');
+  // Faktur proyek: pendapatan & HPP ke akun proyek.
+  const inv = ok(await admin.post('/api/e/sales_invoices', { branch_id: JKT(), date: '2026-10-07', customer_id: id('customers', 'C002'), warehouse_id: WJ, project_id: prj.id, tax_rate: 11, lines: [{ product_id: id('products', 'SV-301'), qty: 10, price: 500_000 }, { product_id: sp, qty: 2, price: 1_000_000 }] }));
+  ok(await osmond.post(`/api/e/sales_invoices/${inv.id}/actions/post`));
+  near(gl('4-1610') - r0, -inv.subtotal, 'pendapatan ke akun proyek'); near(gl('4-1100') - s0, 0, 'bukan akun pendapatan barang');
+  const cogs = gl('5-1610') - h0;
+  assert.ok(cogs > 0, 'HPP ke akun proyek');
+  // Retur penjualan proyek: koreksi HPP ke akun HPP proyek.
+  const sr = ok(await admin.post('/api/e/sales_returns', { branch_id: JKT(), date: '2026-10-07', sales_invoice_id: inv.id, warehouse_id: WJ, reason: 'Uji retur proyek', lines: [{ product_id: sp, qty: 1 }] }));
+  ok(await osmond.post(`/api/e/sales_returns/${sr.id}/actions/post`));
+  near(gl('5-1610') - h0, cogs / 2, 'koreksi HPP proyek');
+  // Tagihan jasa proyek tanpa akun baris → akun biaya proyek; PO jasa proyek → komitmen di akun yang sama.
+  const bill = ok(await admin.post('/api/e/purchase_bills', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', 'S001'), supplier_invoice_no: 'UJI-PRJ-AKN', project_id: prj.id, tax_rate: 11, lines: [{ product_id: id('products', 'SV-302'), qty: 2, price: 2_500_000 }] }));
+  ok(await osmond.post(`/api/e/purchase_bills/${bill.id}/actions/post`));
+  near(gl('5-1710') - b0, 5_000_000, 'biaya subkon ke akun proyek');
+  const po = ok(await admin.post('/api/e/purchase_orders', { branch_id: JKT(), date: '2026-10-07', supplier_id: id('suppliers', 'S001'), warehouse_id: WJ, project_id: prj.id, tax_rate: 11, lines: [{ product_id: id('products', 'SV-302'), qty: 1, price: 3_000_000 }] }));
+  ok(await admin.post(`/api/e/purchase_orders/${po.id}/actions/submit`));
+  const d = (await admin.get(`/api/reports/proyek-detail?project=${prj.id}&to=2026-10-31`)).body;
+  const sub = d.costRows.find((x) => x.code === '5-1710');
+  assert.equal(sub.actual, 5_000_000); assert.equal(sub.commitment, 3_000_000, 'komitmen PO di akun biaya proyek');
+  assert.ok(d.revenueRows.some((x) => x.code === '4-1610'), 'pendapatan proyek di laporan');
+  near(d.figures.revenue, inv.subtotal - sr.subtotal, 'pendapatan proyek setelah retur');
+  await reconciled();
+});

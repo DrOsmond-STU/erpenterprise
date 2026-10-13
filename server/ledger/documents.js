@@ -9,7 +9,7 @@ import { acct, postJournal, postExistingJournal, validateJournalLines, reverseJo
 import { stockIn, stockOut, isStockable, warehouse } from './stock.js';
 import { approvalPolicy } from '../lib/settings.js';
 import { budgetCheck, warnMessage } from './budget.js';
-import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount, vatAccount, pphAccount, defaultTax, getTax, masterAcct } from './accounts.js';
+import { partyAcct, productAccount, assetAccount, employeeAccount, bankAccount, vatAccount, pphAccount, defaultTax, getTax, masterAcct, projectAccount } from './accounts.js';
 import { createInstallments, syncInstallments, deleteInstallments, advanceBalance, ADVANCE, proposeAdvance, applyAdvanceDeduction } from './payments.js';
 import * as audit from '../security/audit.js';
 import { bad, conflict, round2, sum, nowIso, today, monthEnd } from '../lib/util.js';
@@ -95,22 +95,26 @@ function postSalesInvoice(ctx, inv) {
   const jl = [];
   const arLine = { account_id: partyAcct('customer', cust, 'control'), debit: 0, memo: `Piutang ${cust.name}`, partner_type: 'customer', partner_id: cust.id };
   jl.push(arLine);
+  // Akun proyek (bila diatur) mendahului akun barang; pelanggan antar perusahaan tetap memakai akun penjualan IC.
+  const prj = inv.project_id ? db.get('SELECT * FROM projects WHERE id = ?', inv.project_id) : null;
+  const revAcct = (p) => (cust.related_company_id && partyAcct('customer', cust, 'sales')) || projectAccount(prj, 'revenue') || partyAcct('customer', cust, 'sales') || productAcct(p, 'revenue_account_id', 'sales');
+  const cogsAcct = (p) => projectAccount(prj, 'cogs') || productAcct(p, 'cogs_account_id', 'cogs');
   for (const l of ls) {
     const p = product(l.product_id);
-    jl.push({ account_id: partyAcct('customer', cust, 'sales') || productAcct(p, 'revenue_account_id', 'sales'), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
+    jl.push({ account_id: revAcct(p), credit: toBase(l.amount, inv), memo: `${p.code} ${p.name}`, project_id: inv.project_id });
     if (l.delivery_line_id) {
       // Barang sudah keluar saat surat jalan dikirim: HPP diakui sekarang dari akun persediaan terkirim belum difakturkan.
       const dl = db.get('SELECT dl.*, w.branch_id wb FROM delivery_order_lines dl JOIN delivery_orders d ON d.id = dl.parent_id JOIN warehouses w ON w.id = d.warehouse_id WHERE dl.id = ?', l.delivery_line_id);
       db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', dl.unit_cost || 0, l.id);
       if (dl.cost > 0) {
-        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: dl.cost, branch_id: dl.wb, memo: `HPP ${p.code} (surat jalan)`, project_id: inv.project_id });
+        jl.push({ account_id: cogsAcct(p), debit: dl.cost, branch_id: dl.wb, memo: `HPP ${p.code} (surat jalan)`, project_id: inv.project_id });
         jl.push({ account_id: productAccount(p, 'delivered', 'goods_delivered'), credit: dl.cost, branch_id: dl.wb, memo: `Barang terkirim ${p.code} difakturkan` });
       }
     } else if (isStockable(p)) {
       const { value, unitCost } = stockOut(ctx, { warehouseId: inv.warehouse_id, productId: p.id, qty: l.qty, date: inv.date, sourceType: 'sales_invoices', sourceId: inv.id, sourceNo: inv.number });
       db.run('UPDATE sales_invoice_lines SET unit_cost = ? WHERE id = ?', unitCost, l.id);
       if (value > 0) {
-        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), debit: value, branch_id: wh.branch_id, memo: `HPP ${p.code}`, project_id: inv.project_id });
+        jl.push({ account_id: cogsAcct(p), debit: value, branch_id: wh.branch_id, memo: `HPP ${p.code}`, project_id: inv.project_id });
         jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), credit: value, branch_id: wh.branch_id, memo: `Persediaan keluar ${p.code}` });
       }
     }
@@ -420,7 +424,8 @@ function postBill(ctx, bill) {
       stockIn(ctx, { warehouseId: bill.warehouse_id, productId: p.id, qty: l.qty, unitCost: unit, date: bill.date, sourceType: 'purchase_bills', sourceId: bill.id, sourceNo: bill.number });
       jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: round2(baseAmt), memo: `${p.code} ${p.name}`, project_id: l.project_id || bill.project_id });
     } else {
-      const account = l.account_id || (p ? productAccount(p, 'expense') || productAcct(p, 'cogs_account_id', 'cogs') : null);
+      // Tanpa akun baris: akun biaya proyek (bila diatur) → akun beban jasa → akun HPP barang.
+      const account = l.account_id || (p ? projectAccount(l.project_id || bill.project_id, 'cost') || productAccount(p, 'expense') || productAcct(p, 'cogs_account_id', 'cogs') : null);
       if (!account) throw bad('Baris jasa/beban harus memilih akun.');
       jl.push({ account_id: account, debit: toBase(l.amount, bill), memo: l.description || p?.name, cost_center_id: l.cost_center_id, project_id: l.project_id || bill.project_id });
     }
@@ -1187,7 +1192,7 @@ function postSalesReturn(ctx, r) {
       db.run('UPDATE sales_return_lines SET unit_cost = ? WHERE id = ?', unit, l.id);
       if (v > 0) {
         jl.push({ account_id: productAcct(p, 'inventory_account_id', 'inventory'), branch_id: wh.branch_id, debit: v, memo: `Barang retur ${p.code}` });
-        jl.push({ account_id: productAcct(p, 'cogs_account_id', 'cogs'), branch_id: wh.branch_id, credit: v, memo: `Koreksi HPP ${p.code}`, project_id: inv.project_id });
+        jl.push({ account_id: projectAccount(inv.project_id, 'cogs') || productAcct(p, 'cogs_account_id', 'cogs'), branch_id: wh.branch_id, credit: v, memo: `Koreksi HPP ${p.code}`, project_id: inv.project_id });
       }
     }
   }

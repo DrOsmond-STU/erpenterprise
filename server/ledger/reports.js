@@ -566,8 +566,11 @@ export function projectDetail(ctx, { companyId, branchId, asOf, projectId }) {
   const budgetLines = db.all('SELECT account_id, description, amount FROM project_budget_lines WHERE parent_id = ? ORDER BY line_no', p.id);
   const actual = db.all(`SELECT jl.account_id a, ROUND(SUM(jl.debit - jl.credit),2) net FROM journal_lines jl JOIN journals j ON j.id = jl.parent_id
     WHERE jl.project_id = ? AND j.status = 'diposting' AND j.source_type IS NOT 'year_closing' AND j.date <= ? GROUP BY jl.account_id`, p.id, asOf);
-  const commit = db.all(`SELECT COALESCE(pr.cogs_account_id, ?) a, ROUND(SUM(l.amount * COALESCE(po.exchange_rate,1)),2) v FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.parent_id JOIN products pr ON pr.id = l.product_id
-    WHERE po.project_id = ? AND po.status IN ('menunggu','disetujui') GROUP BY a`, db.get("SELECT id FROM accounts WHERE code = '5-1100'")?.id || 0, p.id);
+  // Komitmen PO per akun: jasa → akun biaya proyek, barang → akun HPP proyek; tanpa akun proyek → akun HPP barang/jasa.
+  const defCogs = db.get("SELECT id FROM accounts WHERE code = '5-1100'")?.id || 0;
+  const commit = db.all(`SELECT CASE WHEN pr.kind = 'jasa' THEN COALESCE(?, pr.cogs_account_id, ?) ELSE COALESCE(?, pr.cogs_account_id, ?) END a,
+    ROUND(SUM(l.amount * COALESCE(po.exchange_rate,1)),2) v FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.parent_id JOIN products pr ON pr.id = l.product_id
+    WHERE po.project_id = ? AND po.status IN ('menunggu','disetujui') GROUP BY a`, p.cost_account_id || null, defCogs, p.cogs_account_id || null, defCogs, p.id);
   const ids = new Set([...budgetLines.map((l) => l.account_id), ...actual.map((r) => r.a), ...commit.map((r) => r.a)]);
   const costRows = [], revenueRows = [];
   for (const id of ids) {
