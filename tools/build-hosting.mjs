@@ -40,7 +40,8 @@ const work = resolve(out, '../hosting-deps');
 rmSync(work, { recursive: true, force: true }); mkdirSync(work, { recursive: true });
 writeFileSync(resolve(work, 'package.json'), JSON.stringify({ name: 'erp-server-deps', private: true, dependencies: deps }));
 execSync('npm install --omit=dev --no-audit --no-fund --silent', { cwd: work, stdio: 'inherit' });
-cpSync(resolve(work, 'node_modules'), resolve(out, 'server/node_modules'), { recursive: true });
+/* verbatimSymlinks: tautan .bin npm tetap relatif, bukan menunjuk direktori kerja sementara. */
+cpSync(resolve(work, 'node_modules'), resolve(out, 'server/node_modules'), { recursive: true, verbatimSymlinks: true });
 rmSync(work, { recursive: true, force: true });
 
 const dom = resolve(out, 'server/node_modules/@erp/domain');
