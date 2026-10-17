@@ -15,6 +15,8 @@ exports.BudgetsService = exports.spread = void 0;
  * detail dengan 12 nilai bulanan. Draf → diajukan → disetujui (penyusun/pengaju ≠
  * penyetuju); revisi mengembalikan ke draf. Realisasi dari buku besar, komitmen dari
  * pengadaan, prakiraan = realisasi + komitmen + anggaran bulan yang belum berjalan.
+ * Anggaran dapat dibuat per pusat biaya (cabang × tahun × pusat biaya); realisasi &
+ * komitmennya hanya dari baris/dokumen bertanda pusat biaya tersebut.
  */
 const common_1 = require("@nestjs/common");
 const domain_1 = require("@erp/domain");
@@ -24,12 +26,17 @@ const db_service_js_1 = require("../db/db.service.js");
 const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const sales_shared_js_1 = require("../sales/sales.shared.js");
 const budget_shared_js_1 = require("./budget.shared.js");
+const cost_center_shared_js_1 = require("./cost-center.shared.js");
 const STATUS_LABEL = { draf: 'Draf', menunggu: 'Menunggu persetujuan', disetujui: 'Disetujui' };
 const mapBudget = (b) => ({
     id: b.id, branch: (0, sales_shared_js_1.trimBranch)(b.branch_code), fiscalYear: b.fiscal_year, name: b.name, status: b.status, statusLabel: STATUS_LABEL[b.status] ?? b.status, notes: b.notes,
     revision: b.revision, createdBy: b.created_by, createdByName: b.created_by_name, submittedBy: b.submitted_by, submittedAt: b.submitted_at,
     approvedByName: b.approved_by_name, approvedAt: b.approved_at, total: b.total === undefined ? undefined : Number(b.total ?? 0), lineCount: b.line_count, createdAt: b.created_at,
+    costCenterId: b.cost_center_id ?? null, costCenterCode: b.cost_center_code ?? null, costCenterName: b.cost_center_name ?? null,
 });
+const SELECT = `SELECT b.*, cc.code AS cost_center_code, cc.name AS cost_center_name FROM budgets b LEFT JOIN cost_centers cc ON cc.id = b.cost_center_id`;
+/** Kunci jejak audit anggaran: cabang-tahun, ditambah kode pusat biaya bila ada. */
+const entityOf = (b) => `${(0, sales_shared_js_1.trimBranch)(b.branch_code)}-${b.fiscal_year}${b.cost_center_code ? `-${b.cost_center_code}` : ''}`;
 /** Bagi nilai tahunan rata ke 12 bulan; sisa pembulatan masuk Desember. */
 const spread = (annual) => { const m = Math.floor(annual / 12); return [...Array(11).fill(m), annual - m * 11]; };
 exports.spread = spread;
@@ -46,14 +53,15 @@ let BudgetsService = class BudgetsService {
         return this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action, entityType: 'budget', entityId, after, requestId });
     }
     async list(u, s, requestId) {
-        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => (await c.query(`SELECT b.*, (SELECT sum(x)::bigint FROM budget_lines l, unnest(l.amounts) x WHERE l.budget_id = b.id) AS total,
+        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => (await c.query(`SELECT b.*, cc.code AS cost_center_code, cc.name AS cost_center_name, (SELECT sum(x)::bigint FROM budget_lines l, unnest(l.amounts) x WHERE l.budget_id = b.id) AS total,
                              (SELECT count(*)::int FROM budget_lines l WHERE l.budget_id = b.id) AS line_count
-                        FROM budgets b WHERE b.company_id = $1 AND ($2::text IS NULL OR b.branch_code = $2) ORDER BY b.fiscal_year DESC, b.branch_code`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows.map(mapBudget));
+                        FROM budgets b LEFT JOIN cost_centers cc ON cc.id = b.cost_center_id
+                       WHERE b.company_id = $1 AND ($2::text IS NULL OR b.branch_code = $2) ORDER BY b.fiscal_year DESC, b.branch_code, cc.code NULLS FIRST`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows.map(mapBudget));
     }
     async row(c, companyId, id, lock = false) {
         if (!sales_shared_js_1.UUID.test(id))
             throw (0, errors_js_1.notFound)('Anggaran');
-        const b = (await c.query(`SELECT * FROM budgets WHERE company_id = $1 AND id = $2 ${lock ? 'FOR UPDATE' : ''}`, [companyId, id])).rows[0];
+        const b = (await c.query(`${SELECT} WHERE b.company_id = $1 AND b.id = $2 ${lock ? 'FOR UPDATE OF b' : ''}`, [companyId, id])).rows[0];
         if (!b)
             throw (0, errors_js_1.notFound)('Anggaran');
         return b;
@@ -65,8 +73,8 @@ let BudgetsService = class BudgetsService {
         const idx = await this.refs.accounts(c, companyId);
         const rows = (await c.query('SELECT * FROM budget_lines WHERE budget_id = $1 ORDER BY account_code', [id])).rows;
         const codes = rows.map((r) => r.account_code);
-        const act = await (0, budget_shared_js_1.actualByMonth)(c, companyId, branch, b.fiscal_year, codes);
-        const com = await (0, budget_shared_js_1.commitments)(c, companyId, branch, b.fiscal_year, codes);
+        const act = await (0, budget_shared_js_1.actualByMonth)(c, companyId, branch, b.fiscal_year, codes, b.cost_center_id);
+        const com = await (0, budget_shared_js_1.commitments)(c, companyId, branch, b.fiscal_year, codes, b.cost_center_id);
         const elapsed = (0, domain_1.elapsedMonths)(b.fiscal_year, asOf);
         const lines = rows.map((r) => {
             const months = r.amounts.map(Number);
@@ -94,7 +102,7 @@ let BudgetsService = class BudgetsService {
         return {
             ...mapBudget(b), asOf, elapsedMonths: elapsed, lines, groups,
             totals: { ...totals, variance: totals.forecast - totals.budget, absorption: totals.budget > 0 ? Math.round(((totals.actual + totals.commitment) / totals.budget) * 1000) / 10 : 0 },
-            timeline: await (0, sales_shared_js_1.auditTrail)(c, companyId, 'budget', `${branch}-${b.fiscal_year}`),
+            timeline: await (0, sales_shared_js_1.auditTrail)(c, companyId, 'budget', entityOf(b)),
         };
     }
     async get(u, s, id, asOf, requestId) {
@@ -139,16 +147,18 @@ let BudgetsService = class BudgetsService {
             throw (0, sales_shared_js_1.invalid)('BRANCH_REQUIRED', 'Pilih cabang anggaran.');
         (0, sales_shared_js_1.assertBranch)(u, s, branch);
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
-            if ((await c.query('SELECT 1 FROM budgets WHERE company_id = $1 AND branch_code = $2 AND fiscal_year = $3', [u.companyId, branch, b.fiscalYear])).rowCount)
-                throw (0, errors_js_1.conflict)('BUDGET_EXISTS', `Anggaran ${branch} tahun ${b.fiscalYear} sudah ada; ubah atau revisi anggaran itu.`);
+            const cc = await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId);
+            const ccCode = cc ? (await c.query('SELECT code FROM cost_centers WHERE id = $1', [cc])).rows[0].code : null;
+            if ((await c.query('SELECT 1 FROM budgets WHERE company_id = $1 AND branch_code = $2 AND fiscal_year = $3 AND cost_center_id IS NOT DISTINCT FROM $4', [u.companyId, branch, b.fiscalYear, cc])).rowCount)
+                throw (0, errors_js_1.conflict)('BUDGET_EXISTS', `Anggaran ${branch}${ccCode ? ` pusat biaya ${ccCode}` : ''} tahun ${b.fiscalYear} sudah ada; ubah atau revisi anggaran itu.`);
             let input = b.lines ?? [];
             if (!input.length && b.fromActualYear) {
-                /* Isi awal dari realisasi beban & pendapatan tahun acuan × (1 + pertumbuhan%). */
+                /* Isi awal dari realisasi beban & pendapatan tahun acuan × (1 + pertumbuhan%) — bertanda pusat biaya bila anggaran pusat biaya. */
                 const g = 1 + (b.growthPct ?? 0) / 100;
                 const rows = (await c.query(`SELECT l.account_code, extract(month FROM l.journal_date)::int AS m, sum(CASE WHEN a.category = 'Beban' THEN l.debit - l.credit ELSE l.credit - l.debit END)::bigint AS v
              FROM journal_lines l JOIN journals j ON j.id = l.journal_id JOIN chart_of_accounts a ON a.company_id = l.company_id AND a.code = l.account_code
             WHERE l.company_id = $1 AND l.branch_code = $2 AND j.status IN ('posted','reversed') AND a.type = 'detail' AND a.category IN ('Beban','Pendapatan')
-              AND NOT a.is_computed AND NOT a.is_intercompany AND extract(year FROM l.journal_date) = $3 GROUP BY 1, 2`, [u.companyId, branch, b.fromActualYear])).rows;
+              AND NOT a.is_computed AND NOT a.is_intercompany AND extract(year FROM l.journal_date) = $3 AND ($4::uuid IS NULL OR l.cost_center_id = $4) GROUP BY 1, 2`, [u.companyId, branch, b.fromActualYear, cc])).rows;
                 const by = new Map();
                 for (const r of rows) {
                     const arr = by.get(r.account_code) ?? Array(12).fill(0);
@@ -158,9 +168,9 @@ let BudgetsService = class BudgetsService {
                 input = [...by].filter(([, m]) => m.some((v) => v > 0)).map(([account, amounts]) => ({ account, amounts }));
             }
             const lines = await this.resolveLines(c, u.companyId, input);
-            const row = (await c.query(`INSERT INTO budgets (company_id, branch_code, fiscal_year, name, notes, created_by, created_by_name) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [u.companyId, branch, b.fiscalYear, (b.name?.trim() || `Anggaran ${branch} ${b.fiscalYear}`).slice(0, 120), b.notes ?? null, u.id, u.name])).rows[0];
+            const row = (await c.query(`INSERT INTO budgets (company_id, branch_code, fiscal_year, name, notes, created_by, created_by_name, cost_center_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [u.companyId, branch, b.fiscalYear, (b.name?.trim() || `Anggaran ${branch}${ccCode ? ` ${ccCode}` : ''} ${b.fiscalYear}`).slice(0, 120), b.notes ?? null, u.id, u.name, cc])).rows[0];
             await this.writeLines(c, u.companyId, row, lines);
-            await this.rec(c, u, branch, 'budget.created', `${branch}-${b.fiscalYear}`, { lines: lines.length, fromActualYear: b.fromActualYear ?? null, growthPct: b.growthPct ?? null }, requestId);
+            await this.rec(c, u, branch, 'budget.created', entityOf({ ...row, cost_center_code: ccCode }), { lines: lines.length, costCenter: ccCode, fromActualYear: b.fromActualYear ?? null, growthPct: b.growthPct ?? null }, requestId);
             return this.load(c, u.companyId, row.id);
         });
     }
@@ -172,7 +182,7 @@ let BudgetsService = class BudgetsService {
             if (b.lines)
                 await this.writeLines(c, u.companyId, row, await this.resolveLines(c, u.companyId, b.lines));
             await c.query('UPDATE budgets SET name = coalesce($2, name), notes = coalesce($3, notes), updated_at = now() WHERE id = $1', [id, b.name?.trim() || null, b.notes ?? null]);
-            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.updated', `${(0, sales_shared_js_1.trimBranch)(row.branch_code)}-${row.fiscal_year}`, { lines: b.lines?.length }, requestId);
+            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.updated', entityOf(row), { lines: b.lines?.length }, requestId);
             return this.load(c, u.companyId, id);
         });
     }
@@ -185,7 +195,7 @@ let BudgetsService = class BudgetsService {
             if (!n)
                 throw (0, sales_shared_js_1.invalid)('BUDGET_EMPTY', 'Anggaran belum memiliki baris akun.');
             await c.query(`UPDATE budgets SET status = 'menunggu', submitted_by = $2, submitted_at = now(), updated_at = now() WHERE id = $1`, [id, u.id]);
-            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.submitted', `${(0, sales_shared_js_1.trimBranch)(row.branch_code)}-${row.fiscal_year}`, { lines: n }, requestId);
+            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.submitted', entityOf(row), { lines: n }, requestId);
             return this.load(c, u.companyId, id);
         });
     }
@@ -202,7 +212,7 @@ let BudgetsService = class BudgetsService {
                 await c.query(`UPDATE budgets SET status = 'disetujui', approved_by = $2, approved_by_name = $3, approved_at = now(), updated_at = now() WHERE id = $1`, [id, u.id, u.name]);
             else
                 await c.query(`UPDATE budgets SET status = 'draf', updated_at = now() WHERE id = $1`, [id]);
-            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), approve ? 'budget.approved' : 'budget.returned', `${(0, sales_shared_js_1.trimBranch)(row.branch_code)}-${row.fiscal_year}`, { note }, requestId);
+            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), approve ? 'budget.approved' : 'budget.returned', entityOf(row), { note }, requestId);
             return this.load(c, u.companyId, id);
         });
     }
@@ -213,7 +223,7 @@ let BudgetsService = class BudgetsService {
             if (row.status !== 'disetujui')
                 throw (0, errors_js_1.conflict)('BUDGET_NOT_APPROVED', 'Hanya anggaran disetujui yang direvisi; draf dapat langsung diubah.');
             await c.query(`UPDATE budgets SET status = 'draf', revision = revision + 1, created_by = $2, created_by_name = $3, approved_by = NULL, approved_by_name = NULL, approved_at = NULL, submitted_by = NULL, submitted_at = NULL, updated_at = now() WHERE id = $1`, [id, u.id, u.name]);
-            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.revised', `${(0, sales_shared_js_1.trimBranch)(row.branch_code)}-${row.fiscal_year}`, { reason, revision: row.revision + 1 }, requestId);
+            await this.rec(c, u, (0, sales_shared_js_1.trimBranch)(row.branch_code), 'budget.revised', entityOf(row), { reason, revision: row.revision + 1 }, requestId);
             return this.load(c, u.companyId, id);
         });
     }

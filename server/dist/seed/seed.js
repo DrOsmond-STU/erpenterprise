@@ -51,6 +51,7 @@ async function seed(adminUrl, password, protoRoot) {
             const hr = await (0, hr_seed_js_1.seedHr)(c, id, DATA);
             await c.query('SELECT seed_procurement_demo($1)', [id]);
             await c.query('SELECT seed_planning_demo($1)', [id]);
+            await c.query('SELECT seed_cost_center_demo($1)', [id]);
             await c.query('SELECT seed_crm_demo($1)', [id]);
             await c.query('SELECT seed_crm_full_demo($1)', [id]);
             await c.query('COMMIT');
@@ -171,6 +172,7 @@ async function seed(adminUrl, password, protoRoot) {
         await (0, hr_seed_js_1.seedHr)(c, company, DATA); // setelah slip gaji
         await c.query('SELECT seed_procurement_demo($1)', [company]); // setelah pengguna, produk & pemasok
         await c.query('SELECT seed_planning_demo($1)', [company]); // setelah jurnal & pelanggan
+        await c.query('SELECT seed_cost_center_demo($1)', [company]); // setelah jurnal, karyawan & anggaran
         await c.query('SELECT seed_crm_demo($1)', [company]); // setelah pelanggan & produk
         await c.query('SELECT seed_crm_full_demo($1)', [company]); // setelah faktur, PO & pemasok
         await c.query(`INSERT INTO audit_log (company_id, action, entity_type, entity_id, after) VALUES ($1, 'seed.completed', 'company', 'KNM', $2)`, [company, JSON.stringify({ journals: n, users: users.length })]);

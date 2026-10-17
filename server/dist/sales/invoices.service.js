@@ -29,6 +29,7 @@ const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const customers_service_js_1 = require("./customers.service.js");
 const lines_js_1 = require("./lines.js");
 const sales_shared_js_1 = require("./sales.shared.js");
+const cost_center_shared_js_1 = require("../planning/cost-center.shared.js");
 const STATUS_LABEL = { draf: 'Draf', 'belum-dibayar': 'Belum dibayar', sebagian: 'Dibayar sebagian', lunas: 'Lunas', batal: 'Batal' };
 function mapInvoice(i, asOf = (0, sales_shared_js_1.todayWib)()) {
     const open = i.status === 'draf' || i.status === 'batal' ? 0 : i.total_gross - i.paid_amount;
@@ -41,9 +42,10 @@ function mapInvoice(i, asOf = (0, sales_shared_js_1.todayWib)()) {
         salesOrderId: i.sales_order_id, salesOrderNo: i.order_no ?? null, notes: i.notes, cogs: i.cogs_amount,
         createdBy: i.created_by, createdByName: i.created_by_name, issuedByName: i.issued_by_name, issuedAt: i.issued_at,
         cancelDate: i.cancel_date, cancelReason: i.cancel_reason, legacy: i.subtotal === 0 && i.total_gross > 0 && i.status !== 'draf',
+        ...(0, cost_center_shared_js_1.mapCcRef)(i),
     };
 }
-const SELECT = `SELECT i.*, c.code AS customer_code, o.doc_no AS order_no FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id LEFT JOIN sales_orders o ON o.id = i.sales_order_id`;
+const SELECT = `SELECT i.*, c.code AS customer_code, o.doc_no AS order_no, ${(0, cost_center_shared_js_1.ccColumns)('i')} FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id LEFT JOIN sales_orders o ON o.id = i.sales_order_id`;
 let InvoicesService = class InvoicesService {
     db;
     audit;
@@ -104,14 +106,15 @@ let InvoicesService = class InvoicesService {
         (0, sales_shared_js_1.assertBranch)(u, s, branch);
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
             const cust = await this.customer(c, u.companyId, b.customerId);
+            const costCenterId = await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId);
             const { lines, totals } = await (0, lines_js_1.resolveLines)(c, u.companyId, b.lines ?? []);
             const date = b.invoiceDate ?? (0, sales_shared_js_1.todayWib)();
             const due = b.dueDate ?? (0, domain_1.addDays)(date, cust.terms_days);
             if (due < date)
                 throw (0, sales_shared_js_1.invalid)('INVOICE_DUE', 'Jatuh tempo tidak boleh sebelum tanggal faktur.');
             const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'INV', Number(date.slice(0, 4)));
-            const inv = (await c.query(`INSERT INTO invoices (company_id, branch_code, doc_no, customer_name, customer_id, invoice_date, due_date, total_gross, subtotal, discount, net_amount, ppn_amount, status, notes, created_by, created_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15) RETURNING id`, [u.companyId, branch, docNo, cust.name, cust.id, date, due, totals.total, totals.subtotal, totals.discount, totals.net, totals.ppn, b.notes ?? null, u.id, u.name])).rows[0];
+            const inv = (await c.query(`INSERT INTO invoices (company_id, branch_code, doc_no, customer_name, customer_id, invoice_date, due_date, total_gross, subtotal, discount, net_amount, ppn_amount, status, notes, created_by, created_by_name, cost_center_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15,$16) RETURNING id`, [u.companyId, branch, docNo, cust.name, cust.id, date, due, totals.total, totals.subtotal, totals.discount, totals.net, totals.ppn, b.notes ?? null, u.id, u.name, costCenterId])).rows[0];
             await (0, lines_js_1.insertLines)(c, 'invoice_lines', 'invoice_id', inv.id, u.companyId, branch, lines);
             await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'invoice.created', entityType: 'invoice', entityId: docNo, after: { customer: cust.name, total: totals.total }, requestId });
             return this.load(c, u.companyId, inv.id);
@@ -133,6 +136,8 @@ let InvoicesService = class InvoicesService {
           WHERE id = $1`, [id, cust.id, cust.name, date, due, b.notes ?? null, res?.totals.total ?? null, res?.totals.subtotal ?? null, res?.totals.discount ?? null, res?.totals.net ?? null, res?.totals.ppn ?? null]);
             if (res)
                 await (0, lines_js_1.insertLines)(c, 'invoice_lines', 'invoice_id', id, u.companyId, (0, sales_shared_js_1.trimBranch)(i.branch_code), res.lines);
+            if (b.costCenterId !== undefined)
+                await c.query('UPDATE invoices SET cost_center_id = $2 WHERE id = $1', [id, await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId, i.cost_center_id)]);
             await this.audit.record(c, { companyId: u.companyId, branchCode: (0, sales_shared_js_1.trimBranch)(i.branch_code), userId: u.id, sessionId: u.sessionId, action: 'invoice.updated', entityType: 'invoice', entityId: i.doc_no, after: { total: res?.totals.total ?? i.total_gross }, requestId });
             return this.load(c, u.companyId, id);
         });
@@ -174,11 +179,13 @@ let InvoicesService = class InvoicesService {
             const goods = lines.filter((l) => l.kind === 'barang').reduce((t, l) => t + Number(l.net), 0);
             const service = lines.filter((l) => l.kind === 'jasa').reduce((t, l) => t + Number(l.net), 0);
             const party = cust.name;
+            /* Pendapatan & HPP ditandai pusat biaya/laba faktur (bila ada). */
+            const cc = i.cost_center_id ?? null;
             const j1 = await (0, sales_shared_js_1.postAutoJournal)(c, u, {
                 branch, date: i.invoice_date, source: 'invoice', sourceId: id, rule: 'SALES_INVOICE', ref: i.doc_no, description: `Faktur ${i.doc_no} — ${cust.name}`,
                 lines: [
                     { account: links.ar, debit: i.total_gross, credit: 0, party },
-                    { account: links.salesGoods, debit: 0, credit: goods }, { account: links.salesService, debit: 0, credit: service },
+                    { account: links.salesGoods, debit: 0, credit: goods, costCenter: cc }, { account: links.salesService, debit: 0, credit: service, costCenter: cc },
                     { account: links.ppnOut, debit: 0, credit: i.ppn_amount },
                 ],
             });
@@ -187,7 +194,7 @@ let InvoicesService = class InvoicesService {
             if (cogs > 0) {
                 j2 = await (0, sales_shared_js_1.postAutoJournal)(c, u, {
                     branch, date: i.invoice_date, source: 'invoice', sourceId: id, rule: 'SALES_COGS', ref: i.doc_no, description: `HPP faktur ${i.doc_no}`,
-                    lines: [{ account: links.cogs, debit: cogs, credit: 0 }, ...[...cogsByAccount].map(([account, v]) => ({ account, debit: 0, credit: v }))],
+                    lines: [{ account: links.cogs, debit: cogs, credit: 0, costCenter: cc }, ...[...cogsByAccount].map(([account, v]) => ({ account, debit: 0, credit: v }))],
                 });
             }
             await c.query(`UPDATE invoices SET status = 'belum-dibayar', cogs_amount = $2, issued_by = $3, issued_by_name = $4, issued_at = now(), updated_at = now() WHERE id = $1`, [id, cogs, u.id, u.name]);

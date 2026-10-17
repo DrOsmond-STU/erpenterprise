@@ -84,8 +84,8 @@ let PayrollService = class PayrollService {
                 const p = (0, domain_1.computePayslip)({ basic: Number(e.basic_salary), allowance: Number(e.fixed_allowance), overtime: ot, ptkp: e.ptkp });
                 const slipNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'PAY', Number(b.period.slice(0, 4)));
                 await c.query(`INSERT INTO payslips (company_id, branch_code, doc_no, employee_code, employee_name, dept, period_code, basic, allowance, overtime, deduction, net_pay, status,
-                         run_id, employee_id, gross, bpjs_employee, bpjs_employer, pph21, other_deduction, overtime_hours)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15,$16,$17,$18,$19,$20)`, [u.companyId, b.branch, slipNo, e.code, e.name, e.dept, b.period, e.basic_salary, e.fixed_allowance, ot, p.deduction, p.net, run.id, e.id, p.gross, p.bpjsEmployee, p.bpjsEmployer, p.pph21, p.otherDeduction, hours.reduce((t, h) => t + h, 0)]);
+                         run_id, employee_id, gross, bpjs_employee, bpjs_employer, pph21, other_deduction, overtime_hours, cost_center_id)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15,$16,$17,$18,$19,$20,$21)`, [u.companyId, b.branch, slipNo, e.code, e.name, e.dept, b.period, e.basic_salary, e.fixed_allowance, ot, p.deduction, p.net, run.id, e.id, p.gross, p.bpjsEmployee, p.bpjsEmployer, p.pph21, p.otherDeduction, hours.reduce((t, h) => t + h, 0), e.cost_center_id ?? null]);
             }
             const slips = (await c.query('SELECT * FROM payslips WHERE run_id = $1', [run.id])).rows;
             await c.query('UPDATE payroll_runs SET totals = $2 WHERE id = $1', [run.id, JSON.stringify(this.totals(slips))]);
@@ -104,7 +104,8 @@ let PayrollService = class PayrollService {
                 throw new errors_js_1.DomainError('SOD_PAYROLL', 'Penyusun daftar gaji tidak boleh memposting daftar gajinya sendiri (kontrol empat mata).', common_1.HttpStatus.FORBIDDEN);
             const links = await this.refs.links(c, u.companyId);
             const slips = (await c.query('SELECT * FROM payslips WHERE run_id = $1', [id])).rows;
-            const lines = (0, domain_1.payrollJournalLines)(slips.map((p) => ({ dept: p.dept, gross: Number(p.gross), bpjsEmployee: Number(p.bpjs_employee), bpjsEmployer: Number(p.bpjs_employer), pph21: Number(p.pph21), otherDeduction: Number(p.other_deduction ?? 0), net: Number(p.net_pay) })), { directLabor: links.directLabor, salaryExpense: links.salaryExpense, salaryPayable: links.salaryPayable, taxPayable: links.taxPayable, bpjsPayable: links.bpjsPayable });
+            /* Beban gaji dipecah per pusat biaya karyawan (snapshot di slip); utang gaji/pajak/BPJS tanpa dimensi. */
+            const lines = (0, domain_1.payrollLinesByCostCenter)(slips.map((p) => ({ dept: p.dept, gross: Number(p.gross), bpjsEmployee: Number(p.bpjs_employee), bpjsEmployer: Number(p.bpjs_employer), pph21: Number(p.pph21), otherDeduction: Number(p.other_deduction ?? 0), net: Number(p.net_pay), costCenterId: p.cost_center_id ?? null })), { directLabor: links.directLabor, salaryExpense: links.salaryExpense, salaryPayable: links.salaryPayable, taxPayable: links.taxPayable, bpjsPayable: links.bpjsPayable });
             await (0, sales_shared_js_1.postAutoJournal)(c, u, { branch, date: (0, domain_1.monthEndOf)(r.period_code), source: 'payroll_run', sourceId: id, rule: 'PAYROLL', ref: r.doc_no, description: `Beban gaji ${r.period_code} — ${branch} (${slips.length} karyawan)`, lines });
             await c.query(`UPDATE payslips SET status = 'diproses' WHERE run_id = $1`, [id]);
             await c.query(`UPDATE payroll_runs SET status = 'diposting', posted_by = $2, posted_by_name = $3, posted_at = now() WHERE id = $1`, [id, u.id, u.name]);

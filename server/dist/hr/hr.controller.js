@@ -33,6 +33,7 @@ const employeeInput = zod_1.z.object({
     employment: zod_1.z.enum(['tetap', 'kontrak', 'magang']).default('tetap'), ptkp: zod_1.z.enum(Object.keys(domain_1.PTKP)).default('TK/0'),
     basicSalary: money, fixedAllowance: money.default(0), email: zod_1.z.string().trim().email('Email tidak sah').max(120).optional(),
     nik: digits(16, 16, 'NIK 16 digit').optional(), npwp: digits(15, 16, 'NPWP 15–16 digit').optional(), bankName: text(60).optional(), bankAccount: digits(6, 20, 'Nomor rekening 6–20 digit').optional(),
+    costCenterId: zod_1.z.string().uuid('Pusat biaya tidak sah').nullable().optional(),
 });
 const employeePatch = employeeInput.partial().extend({ status: zod_1.z.enum(['aktif', 'keluar']).optional() });
 const attendanceInput = zod_1.z.object({

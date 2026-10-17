@@ -852,6 +852,107 @@ async function main() {
         const recP = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
         ok(recP.body.checks.every((k) => k.ok), 'rekonsiliasi tetap cocok setelah alur anggaran & proyek', recP.body.checks.filter((k) => !k.ok));
     }
+    console.log('Pusat biaya: master, dimensi jurnal & dokumen, laba rugi & anggaran per pusat biaya');
+    {
+        const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
+        const D = '2026-09-24';
+        const kasCkr = banks0.find((b) => b.branchCode === 'CKR' && b.bankName === 'Kas' && b.status === 'aktif');
+        ok((await call('/cost-centers', { token: fitri, branch: 'SBY' })).status === 403, 'staf gudang tanpa izin pusat biaya → 403');
+        const list = await call('/cost-centers', { token: andi, branch: 'ALL' });
+        const byCode = (code) => list.body.data.find((x) => x.code === code);
+        ok(list.status === 200 && byCode('PB-PRD')?.parentCode === 'PB-OPS' && byCode('PB-PJL')?.kind === 'laba' && byCode('PB-PJL').ytdRevenue > 0, 'data contoh: hierarki pusat biaya/laba & realisasi tahun berjalan', list.body?.data?.slice?.(0, 3));
+        ok((await call('/cost-centers/options', { token: sari, branch: 'CKR' })).status === 200, 'pembuat jurnal dapat memilih pusat biaya');
+        ok((await call('/cost-centers', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ code: 'PB-X', name: 'Tanpa izin' }) })).status === 403, 'staf keuangan tanpa costcenter.manage tidak dapat membuat pusat biaya');
+        ok([400, 422].includes((await call('/cost-centers', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: 'pb uji!', name: 'Kode salah' }) })).status), 'kode pusat biaya tidak sah ditolak');
+        const cc = await call('/cost-centers', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: 'pb-uji', name: 'Pusat biaya uji', kind: 'biaya', parentId: byCode('PB-OPS').id, managerName: 'Uji E2E' }) });
+        ok(cc.status === 201 && cc.body.code === 'PB-UJI' && cc.body.parentCode === 'PB-OPS' && cc.body.deletable, 'pusat biaya dibuat (kode huruf besar, induk PB-OPS)', cc.body);
+        ok((await call('/cost-centers', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: 'PB-UJI', name: 'Ganda' }) })).status === 409, 'kode pusat biaya ganda → 409');
+        const cyc = await call(`/cost-centers/${byCode('PB-OPS').id}`, { method: 'PATCH', token: andi, branch: 'ALL', body: JSON.stringify({ parentId: cc.body.id }) });
+        ok(cyc.status === 422 && cyc.body.error.code === 'COST_CENTER_CYCLE', 'hierarki melingkar ditolak', cyc.body);
+        /* Jurnal memorial bertanda pusat biaya */
+        const jvBody = (amount, ccId = cc.body.id) => ({ date: D, branch: 'CKR', description: 'Uji e2e pusat biaya', lines: [{ account: '5-3701', debit: amount, credit: 0, costCenterId: ccId }, { account: kasCkr.glAccountCode, debit: 0, credit: amount }] });
+        const bsCc = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ ...jvBody(1000), lines: [{ account: '5-3701', debit: 1000, credit: 0 }, { account: kasCkr.glAccountCode, debit: 0, credit: 1000, costCenterId: cc.body.id }] }) });
+        ok(bsCc.status === 422 && /hanya untuk akun pendapatan & beban/.test(JSON.stringify(bsCc.body)), 'pusat biaya pada akun neraca ditolak', bsCc.body);
+        const j1 = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(jvBody(3_000_000)) });
+        await call(`/ledger/journals/${j1.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const j1b = await call(`/ledger/journals/${j1.body.id}`, { token: andi, branch: 'CKR' });
+        ok(j1b.body.status === 'posted' && j1b.body.lines[0].costCenterCode === 'PB-UJI' && !j1b.body.lines[1].costCenterId, 'baris beban membawa kode pusat biaya', j1b.body?.lines);
+        /* Laba rugi per pusat biaya */
+        const plCc = async (q = '', branch = 'CKR') => (await call(`/reports/cost-centers/income-statement${q}`, { token: andi, branch, period: '2026-09' })).body;
+        const r1 = await plCc();
+        const pl = (await call('/reports/income-statement', { token: andi, branch: 'CKR', period: '2026-09' })).body;
+        const colUji = r1.columns.findIndex((x) => x.code === 'PB-UJI');
+        const sumCols = (k) => r1.reports.reduce((t, r) => t + r[k], 0) + (r1.unassigned?.[k] ?? 0);
+        ok(colUji >= 0 && r1.reports[colUji].net === -3_000_000 && r1.reports[colUji].ga + r1.reports[colUji].opex === 3_000_000, 'kolom PB-UJI: beban 3 jt, laba −3 jt', r1.reports?.[colUji]);
+        ok(r1.total.net === pl.net && r1.total.revenue === pl.revenue && sumCols('net') === pl.net && sumCols('revenue') === pl.revenue, 'Σ kolom pusat biaya + tanpa pusat biaya = laba rugi cabang', [r1.total.net, pl.net, sumCols('net')]);
+        ok(r1.summary.some((x) => x.code === null && x.name === 'Tanpa pusat biaya') === Boolean(r1.unassigned) && r1.coverage.expensePct > 0, 'ringkasan memuat baris tanpa pusat biaya & cakupan penandaan', r1.coverage);
+        const rAll = await plCc('', 'ALL');
+        const plAll = (await call('/reports/income-statement', { token: andi, branch: 'ALL', period: '2026-09' })).body;
+        ok(rAll.total.net === plAll.net, 'konsolidasi semua cabang: total = laba rugi gabungan', [rAll.total.net, plAll.net]);
+        const r2 = await plCc('?rollup=true');
+        const ops = r2.columns.findIndex((x) => x.code === 'PB-OPS');
+        const prd = r1.columns.findIndex((x) => x.code === 'PB-PRD'), gdg = r1.columns.findIndex((x) => x.code === 'PB-GDG');
+        ok(r2.rollup && ops >= 0 && !r2.columns.some((x) => x.code === 'PB-UJI') && r2.reports[ops].net === [prd, gdg, colUji].filter((i) => i >= 0).reduce((t, i) => t + r1.reports[i].net, 0), 'digabung ke induk: PB-OPS = PB-PRD + PB-GDG + PB-UJI', r2.columns?.map((x) => x.code));
+        const r3 = await plCc(`?costCenter=${byCode('PB-OPS').id}`);
+        ok(r3.columns.length === 1 && r3.columns[0].code === 'PB-OPS' && !r3.unassigned && r3.total.net === r2.reports[ops].net, 'filter satu pusat biaya (beserta turunannya)', r3.columns);
+        ok((await call(`/reports/cost-centers/income-statement?costCenter=${'0'.repeat(8)}-0000-4000-8000-${'0'.repeat(12)}`, { token: andi, branch: 'CKR', period: '2026-09' })).status === 404, 'pusat biaya tidak dikenal → 404');
+        /* Anggaran pusat biaya */
+        const nb = await call('/budgets', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ branch: 'CKR', fiscalYear: 2026, costCenterId: cc.body.id, lines: [{ account: '5-3701', annual: 12_000_000 }, { account: '5-2401', annual: 6_000_000 }] }) });
+        ok(nb.status === 201 && nb.body.costCenterCode === 'PB-UJI' && nb.body.name.includes('PB-UJI'), 'anggaran CKR 2026 untuk pusat biaya PB-UJI dibuat (berdampingan dengan anggaran cabang)', nb.body?.error ?? nb.body?.name);
+        ok((await call('/budgets', { method: 'POST', token: sari, branch: 'ALL', body: JSON.stringify({ branch: 'CKR', fiscalYear: 2026, costCenterId: cc.body.id }) })).status === 409, 'anggaran cabang-tahun-pusat biaya ganda → 409');
+        const nbl = nb.body.lines.find((l) => l.account === '5-3701');
+        ok(nbl.actual === 3_000_000, 'realisasi anggaran pusat biaya = hanya baris bertanda pusat biaya itu', nbl);
+        await call(`/budgets/${nb.body.id}/submit`, { method: 'POST', token: sari, branch: 'ALL' });
+        const ib = await call('/inbox', { token: andi, branch: 'ALL' });
+        ok(ib.body.items.some((i) => i.kind === 'budget' && i.docNo === 'CKR-2026-PB-UJI'), 'anggaran pusat biaya masuk kotak persetujuan', ib.body?.items?.filter?.((i) => i.kind === 'budget'));
+        const rep0 = await call('/reports/cost-centers/budget?year=2026&asOf=2026-09-30', { token: andi, branch: 'CKR' });
+        ok(rep0.status === 200 && !rep0.body.rows.some((r) => r.code === 'PB-UJI') && rep0.body.pending.some((p) => p.costCenterCode === 'PB-UJI'), 'laporan anggaran hanya memakai anggaran disetujui; yang menunggu dicatat terpisah', rep0.body?.pending);
+        await call(`/budgets/${nb.body.id}/approve`, { method: 'POST', token: andi, branch: 'ALL', body: '{}' });
+        const pr = await call('/purchasing/requisitions', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', requestDate: D, department: 'Gudang', description: 'Jasa uji pusat biaya', costCenterId: cc.body.id,
+                lines: [{ description: 'Jasa angkut uji', qty: 1, price: 1_500_000, expenseAccount: '5-2401' }], submit: true }) });
+        ok(pr.status === 201 && pr.body.costCenterCode === 'PB-UJI', 'PR membawa pusat biaya', pr.body?.error ?? pr.body?.costCenterCode);
+        await call(`/purchasing/requisitions/${pr.body.id}/approve`, { method: 'POST', token: osmond, branch: 'ALL', body: '{}' });
+        const rep = await call('/reports/cost-centers/budget?year=2026&asOf=2026-09-30', { token: andi, branch: 'CKR' });
+        const row = rep.body.rows.find((r) => r.code === 'PB-UJI');
+        ok(row && row.expense.budget === 18_000_000 && row.expense.actual === 3_000_000 && row.expense.commitment === 1_500_000 && row.expense.ytdBudget === 13_500_000 && row.expense.absorption === 25, 'laporan anggaran per pusat biaya: anggaran, s.d. bulan berjalan, realisasi, komitmen PR, serapan', row?.expense);
+        ok(row.lines.length === 2 && row.monthly.expenseActual[8] === 3_000_000 && rep.body.totals.expense.budget >= 18_000_000 && rep.body.elapsedMonths === 9, 'rincian akun & tren bulanan pusat biaya', row?.monthly);
+        ok((await call('/reports/cost-centers/budget', { token: fitri, branch: 'SBY' })).status === 403, 'laporan anggaran memerlukan budget.read');
+        const po = await call(`/purchasing/requisitions/${pr.body.id}/order`, { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ supplierId: (await call('/purchasing/suppliers', { token: sari, branch: 'ALL' })).body.find((s) => s.status === 'aktif').id, orderDate: D }) });
+        ok(po.status === 200 && po.body.costCenterCode === 'PB-UJI', 'PO dari PR membawa pusat biaya', po.body?.costCenterCode);
+        const apInv = await call('/purchasing/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ orderId: po.body.id, invoiceDate: D }) });
+        ok(apInv.status === 201 && apInv.body.costCenterCode === 'PB-UJI', 'tagihan dari PO membawa pusat biaya', apInv.body?.error ?? apInv.body?.costCenterCode);
+        const apPosted = await call(`/purchasing/invoices/${apInv.body.id}/post`, { method: 'POST', token: andi, branch: 'CKR' });
+        const apJ = (await call(`/ledger/journals/by-ref/${apPosted.body.docNo}`, { token: andi, branch: 'CKR' })).body[0];
+        const apLines = (await call(`/ledger/journals/${apJ.id}`, { token: andi, branch: 'CKR' })).body.lines;
+        ok(apLines.find((l) => l.account === '5-2401')?.costCenterCode === 'PB-UJI' && apLines.filter((l) => l.costCenterId).length === 1, 'jurnal tagihan: hanya baris beban jasa bertanda pusat biaya', apLines);
+        const rep2 = (await call('/reports/cost-centers/budget?year=2026&asOf=2026-09-30', { token: andi, branch: 'CKR' })).body.rows.find((r) => r.code === 'PB-UJI');
+        ok(rep2.expense.actual === 4_500_000 && rep2.expense.commitment === 0, 'tagihan diposting: komitmen menjadi realisasi pusat biaya', rep2.expense);
+        /* Faktur penjualan bertanda pusat laba */
+        const cust = (await call('/sales/customers', { token: sari, branch: 'ALL' })).body.find((x) => x.status === 'aktif');
+        const svc = (await call('/sales/products', { token: sari, branch: 'ALL' })).body.find((x) => x.kind === 'jasa' && x.status !== 'nonaktif');
+        const si = await call('/sales/invoices', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ branch: 'CKR', customerId: cust.id, invoiceDate: D, costCenterId: byCode('PB-JSA').id, lines: [{ productId: svc.id, qty: 1 }] }) });
+        ok(si.status === 201 && si.body.costCenterCode === 'PB-JSA', 'faktur membawa pusat laba', si.body?.error ?? si.body?.costCenterCode);
+        const iss = await call(`/sales/invoices/${si.body.id}/issue`, { method: 'POST', token: andi, branch: 'CKR' });
+        const siLines = (await call(`/ledger/journals/${iss.body.journals.find((j) => j.rule === 'SALES_INVOICE').id}`, { token: andi, branch: 'CKR' })).body.lines;
+        ok(siLines.filter((l) => l.account.startsWith('4-')).every((l) => l.costCenterCode === 'PB-JSA') && siLines.filter((l) => !l.account.startsWith('4-')).every((l) => !l.costCenterId), 'jurnal faktur: pendapatan bertanda pusat laba, piutang & PPN tidak', siLines);
+        const r4 = await plCc();
+        const jsa = r4.columns.findIndex((x) => x.code === 'PB-JSA');
+        ok(r4.reports[jsa].revenue === (r1.reports[r1.columns.findIndex((x) => x.code === 'PB-JSA')]?.revenue ?? 0) + si.body.net && r4.total.net === (await call('/reports/income-statement', { token: andi, branch: 'CKR', period: '2026-09' })).body.net, 'pendapatan faktur tampil di kolom PB-JSA; total tetap = laba rugi', r4.reports?.[jsa]?.revenue);
+        /* Jurnal balik ikut bertanda; nonaktif & hapus */
+        await call(`/ledger/journals/${j1.body.id}/reverse`, { method: 'POST', token: andi, branch: 'CKR', body: JSON.stringify({ reason: 'uji balik pusat biaya', date: D }) });
+        const r5 = await plCc(`?costCenter=${cc.body.id}`);
+        ok(r5.reports[0].net === -1_500_000, 'jurnal balik ikut bertanda pusat biaya → beban PB-UJI tinggal tagihan jasa', r5.reports?.[0]?.net);
+        const del = await call(`/cost-centers/${cc.body.id}`, { method: 'DELETE', token: andi, branch: 'ALL', body: JSON.stringify({ reason: 'uji hapus' }) });
+        ok(del.status === 409 && del.body.error.code === 'COST_CENTER_IN_USE', 'pusat biaya yang sudah dipakai tidak dapat dihapus', del.body);
+        const off = await call(`/cost-centers/${cc.body.id}`, { method: 'PATCH', token: andi, branch: 'ALL', body: JSON.stringify({ status: 'nonaktif', reason: 'uji nonaktif' }) });
+        ok(off.status === 200 && off.body.status === 'nonaktif', 'pusat biaya dinonaktifkan');
+        const jOff = await call('/ledger/journals', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify(jvBody(1000)) });
+        ok(jOff.status === 422 && /nonaktif/.test(JSON.stringify(jOff.body)), 'pusat biaya nonaktif tidak menerima jurnal baru', jOff.body);
+        const tmp = await call('/cost-centers', { method: 'POST', token: andi, branch: 'ALL', body: JSON.stringify({ code: 'PB-HAPUS', name: 'Pusat biaya sementara' }) });
+        ok((await call(`/cost-centers/${tmp.body.id}`, { method: 'DELETE', token: andi, branch: 'ALL', body: JSON.stringify({ reason: 'tidak dipakai' }) })).status === 200, 'pusat biaya yang belum dipakai dapat dihapus');
+        const recC = await call('/reports/reconciliation', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(recC.body.checks.every((k) => k.ok), 'rekonsiliasi tetap cocok setelah alur pusat biaya', recC.body.checks.filter((k) => !k.ok));
+    }
     console.log('CRM: peluang, penawaran → pesanan penjualan → faktur → buku besar');
     {
         const osmond = (await authCall('osmond@knm.co.id', PW)).body.access_token;
@@ -1477,7 +1578,10 @@ async function main() {
         const pj = (await call(`/ledger/journals/${posted.body.journals[0].id}`, { token: andi, branch: 'ALL' })).body.lines;
         const T = posted.body.totals;
         ok(pj.some((l) => l.account === '2-1201' && l.credit === T.net) && pj.some((l) => l.account === '2-1301' && l.credit === T.pph21) && pj.some((l) => l.account === '2-1601' && l.credit === T.bpjsEmployee + T.bpjsEmployer)
-            && pj.some((l) => l.account === '5-2201' && l.debit === T.gross + T.bpjsEmployer), 'jurnal gaji: beban gaji + BPJS pemberi kerja / utang gaji, PPh 21, BPJS', pj);
+            && pj.filter((l) => l.account === '5-2201').reduce((t, l) => t + l.debit, 0) === T.gross + T.bpjsEmployer, 'jurnal gaji: beban gaji + BPJS pemberi kerja / utang gaji, PPh 21, BPJS', pj);
+        const ccOf = new Map(emps.body.map((e) => [e.id, e.costCenterCode ?? null]));
+        const expectCc = new Set(posted.body.slips.map((p) => ccOf.get(p.employeeId) ?? null));
+        ok(pj.filter((l) => l.debit > 0).every((l) => expectCc.has(l.costCenterCode ?? null)) && pj.filter((l) => l.credit > 0).every((l) => !l.costCenterId), 'beban gaji dipecah per pusat biaya karyawan; utang tanpa dimensi', pj.map((l) => [l.account, l.debit, l.costCenterCode]));
         const c1 = await recAll();
         ok(c1.every((c) => c.ok), 'rekonsiliasi utang gaji cocok setelah posting', c1.filter((c) => !c.ok));
         ok((await call('/hr/attendance', { method: 'POST', token: admin, branch: 'SBY', body: JSON.stringify({ employeeId: ne.body.id, date: '2026-09-15', status: 'hadir', overtimeHours: 1 }) })).body.error?.code === 'ATT_LOCKED', 'kehadiran periode yang sudah digaji terkunci');

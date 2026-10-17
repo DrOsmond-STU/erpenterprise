@@ -18,11 +18,13 @@ const errors_js_1 = require("../common/errors.js");
 const crypto_js_1 = require("../common/crypto.js");
 const db_service_js_1 = require("../db/db.service.js");
 const sales_shared_js_1 = require("../sales/sales.shared.js");
+const cost_center_shared_js_1 = require("../planning/cost-center.shared.js");
 const map = (e, canSeePay) => ({
     id: e.id, code: e.code, name: e.name, branch: (0, sales_shared_js_1.trimBranch)(e.branch_code), dept: e.dept, title: e.title, joinDate: e.join_date, employment: e.employment, status: e.status, ptkp: e.ptkp,
     basicSalary: canSeePay ? Number(e.basic_salary) : null, fixedAllowance: canSeePay ? Number(e.fixed_allowance) : null, email: e.email,
-    nik: e.nik_masked, npwp: e.npwp_masked, bankName: e.bank_name, bankAccount: e.bank_account_masked,
+    nik: e.nik_masked, npwp: e.npwp_masked, bankName: e.bank_name, bankAccount: e.bank_account_masked, ...(0, cost_center_shared_js_1.mapCcRef)(e),
 });
+const SELECT = `SELECT e.*, ${(0, cost_center_shared_js_1.ccColumns)('e')} FROM employees e`;
 let EmployeesService = class EmployeesService {
     db;
     audit;
@@ -32,13 +34,13 @@ let EmployeesService = class EmployeesService {
     }
     seesPay = (u) => u.permissions.has('hr.manage') || u.permissions.has('payroll.process') || u.permissions.has('payroll.approve');
     async list(u, s, requestId) {
-        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => (await c.query(`SELECT * FROM employees WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2) ORDER BY (status = 'aktif') DESC, branch_code, name`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows
+        return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => (await c.query(`${SELECT} WHERE e.company_id = $1 AND ($2::text IS NULL OR e.branch_code = $2) ORDER BY (e.status = 'aktif') DESC, e.branch_code, e.name`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows
             .map((e) => map(e, this.seesPay(u))));
     }
     async row(c, companyId, id) {
         if (!sales_shared_js_1.UUID.test(id))
             throw (0, errors_js_1.notFound)('Karyawan');
-        const e = (await c.query('SELECT * FROM employees WHERE company_id = $1 AND id = $2', [companyId, id])).rows[0];
+        const e = (await c.query(`${SELECT} WHERE e.company_id = $1 AND e.id = $2`, [companyId, id])).rows[0];
         if (!e)
             throw (0, errors_js_1.notFound)('Karyawan');
         return e;
@@ -68,10 +70,12 @@ let EmployeesService = class EmployeesService {
             const max = Number((await (0, sales_shared_js_1.acrossBranches)(c, async () => c.query(`SELECT coalesce(max(nullif(regexp_replace(code, '\\D', '', 'g'), '')::int), 0) AS n FROM employees WHERE company_id = $1`, [u.companyId]))).rows[0].n);
             const code = `EMP-${String(max + 1).padStart(4, '0')}`;
             const nik = this.secret(b.nik), npwp = this.secret(b.npwp), acct = this.secret(b.bankAccount);
-            const e = (await c.query(`INSERT INTO employees (company_id, branch_code, code, name, dept, title, join_date, employment, ptkp, basic_salary, fixed_allowance, email,
-                                  nik_enc, nik_masked, npwp_enc, npwp_masked, bank_name, bank_account_enc, bank_account_masked, created_by_name)
-                                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`, [u.companyId, b.branch, code, b.name, b.dept, b.title ?? null, b.joinDate ?? null, b.employment, b.ptkp, b.basicSalary, b.fixedAllowance, b.email ?? null,
-                nik?.enc ?? null, nik?.masked ?? null, npwp?.enc ?? null, npwp?.masked ?? null, b.bankName ?? null, acct?.enc ?? null, acct?.masked ?? null, u.name])).rows[0];
+            const costCenterId = await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId);
+            const ins = (await c.query(`INSERT INTO employees (company_id, branch_code, code, name, dept, title, join_date, employment, ptkp, basic_salary, fixed_allowance, email,
+                                  nik_enc, nik_masked, npwp_enc, npwp_masked, bank_name, bank_account_enc, bank_account_masked, created_by_name, cost_center_id)
+                                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`, [u.companyId, b.branch, code, b.name, b.dept, b.title ?? null, b.joinDate ?? null, b.employment, b.ptkp, b.basicSalary, b.fixedAllowance, b.email ?? null,
+                nik?.enc ?? null, nik?.masked ?? null, npwp?.enc ?? null, npwp?.masked ?? null, b.bankName ?? null, acct?.enc ?? null, acct?.masked ?? null, u.name, costCenterId])).rows[0];
+            const e = await this.row(c, u.companyId, ins.id);
             await this.audit.record(c, { companyId: u.companyId, branchCode: b.branch, userId: u.id, sessionId: u.sessionId, action: 'employee.created', entityType: 'employee', entityId: code, after: { name: b.name, dept: b.dept, branch: b.branch }, requestId });
             return map(e, true);
         });
@@ -93,6 +97,8 @@ let EmployeesService = class EmployeesService {
                        bank_account_enc = CASE WHEN $21::boolean THEN $22 ELSE bank_account_enc END, bank_account_masked = CASE WHEN $21::boolean THEN $23 ELSE bank_account_masked END,
                        updated_at = now() WHERE company_id = $1 AND id = $2`, [u.companyId, id, b.name ?? null, b.branch ?? null, b.dept ?? null, b.title ?? null, b.joinDate ?? null, b.employment ?? null, b.ptkp ?? null, b.basicSalary ?? null, b.fixedAllowance ?? null, b.email ?? null,
                 b.status ?? null, b.bankName ?? null, !!nik, nik?.enc ?? null, nik?.masked ?? null, !!npwp, npwp?.enc ?? null, npwp?.masked ?? null, !!acct, acct?.enc ?? null, acct?.masked ?? null]);
+            if (b.costCenterId !== undefined)
+                await c.query('UPDATE employees SET cost_center_id = $3 WHERE company_id = $1 AND id = $2', [u.companyId, id, await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId, e.cost_center_id)]);
             const changed = Object.keys(b).map((k) => (['nik', 'npwp', 'bankAccount'].includes(k) ? `${k} (rahasia)` : k));
             await this.audit.record(c, { companyId: u.companyId, branchCode: (0, sales_shared_js_1.trimBranch)(e.branch_code), userId: u.id, sessionId: u.sessionId, action: 'employee.updated', entityType: 'employee', entityId: e.code, after: { fields: changed }, requestId });
             return map(await (0, sales_shared_js_1.acrossBranches)(c, () => this.row(c, u.companyId, id)), true);

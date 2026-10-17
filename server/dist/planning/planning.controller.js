@@ -18,6 +18,8 @@ const zod_1 = require("zod");
 const context_js_1 = require("../common/context.js");
 const zod_pipe_js_1 = require("../common/zod.pipe.js");
 const budgets_service_js_1 = require("./budgets.service.js");
+const cost_center_reports_service_js_1 = require("./cost-center-reports.service.js");
+const cost_centers_service_js_1 = require("./cost-centers.service.js");
 const projects_service_js_1 = require("./projects.service.js");
 const date = zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal berformat YYYY-MM-DD');
 const opt = (t) => t.optional();
@@ -28,7 +30,7 @@ const reason = zod_1.z.string().trim().min(3, 'Alasan minimal 3 karakter').max(3
 const accountCode = zod_1.z.string().trim().regex(/^\d-\d{4}(\.\d{2})?$/, 'Kode akun tidak sah');
 const budgetLine = zod_1.z.object({ account: accountCode, amounts: opt(zod_1.z.array(money).length(12, '12 nilai bulanan')), annual: opt(money), note: opt(text(200).nullable()) });
 const budgetCreate = zod_1.z.object({
-    branch: opt(branch), fiscalYear: zod_1.z.number().int().min(2000).max(2100), name: opt(text(120)), notes: opt(text(500)),
+    branch: opt(branch), costCenterId: opt(zod_1.z.string().uuid('Pusat biaya tidak sah').nullable()), fiscalYear: zod_1.z.number().int().min(2000).max(2100), name: opt(text(120)), notes: opt(text(500)),
     lines: opt(zod_1.z.array(budgetLine).max(500)), fromActualYear: opt(zod_1.z.number().int().min(2000).max(2100)), growthPct: opt(zod_1.z.number().min(-90).max(500)),
 });
 const budgetPatch = zod_1.z.object({ name: opt(text(120)), notes: opt(text(500)), lines: opt(zod_1.z.array(budgetLine).max(500)) });
@@ -49,14 +51,50 @@ const projectBase = {
 const projectCreate = zod_1.z.object({ ...projectBase, name: projectBase.name.unwrap(), pmName: projectBase.pmName.unwrap(), startDate: date, endDate: date });
 const projectPatch = zod_1.z.object(projectBase);
 const optionsQuery = zod_1.z.object({ branch: opt(branch) });
+const ccBase = {
+    name: opt(zod_1.z.string().trim().min(3, 'Nama pusat biaya minimal 3 karakter').max(120)), kind: opt(zod_1.z.enum(['biaya', 'laba'])), parentId: opt(zod_1.z.string().uuid('Induk tidak sah').nullable()),
+    managerName: opt(text(120).nullable()), description: opt(text(500).nullable()),
+};
+const ccCreate = zod_1.z.object({
+    ...ccBase, name: ccBase.name.unwrap(),
+    code: zod_1.z.string().trim().toUpperCase().pipe(zod_1.z.string().regex(/^[A-Z0-9][A-Z0-9-]{1,19}$/, 'Kode 2–20 karakter huruf besar, angka, atau tanda hubung')),
+});
+const ccPatch = zod_1.z.object({ ...ccBase, code: opt(zod_1.z.string().trim()), status: opt(zod_1.z.enum(['aktif', 'nonaktif'])), reason: opt(text(300)) });
+const ccPlQuery = zod_1.z.object({ costCenter: opt(zod_1.z.string().uuid('Pusat biaya tidak sah')), rollup: opt(zod_1.z.enum(['true', 'false'])) });
+const ccBudgetQuery = zod_1.z.object({ year: opt(zod_1.z.coerce.number().int().min(2000).max(2100)), asOf: opt(date) });
 /* Pilihan proyek untuk dimensi biaya dibutuhkan pembuat jurnal, PR, PO, dan tagihan. */
 const PROJECT_PICK = 'project.read|ledger.journal.create|purchasing.requisition.create|purchasing.order.create|purchasing.invoice.create';
+/* Pilihan pusat biaya: pembuat jurnal & dokumen, pengelola karyawan & anggaran, dan pembaca laporan. */
+const COST_CENTER_PICK = 'costcenter.read|ledger.journal.create|purchasing.requisition.create|purchasing.order.create|purchasing.invoice.create|sales.invoice.create|hr.manage|budget.read|ledger.report.read';
 let PlanningController = class PlanningController {
     budgets;
     projects;
-    constructor(budgets, projects) {
+    costCenters;
+    ccReports;
+    constructor(budgets, projects, costCenters, ccReports) {
         this.budgets = budgets;
         this.projects = projects;
+        this.costCenters = costCenters;
+        this.ccReports = ccReports;
+    }
+    /* --- Pusat biaya --- */
+    listCostCenters(u, s, r) { return this.costCenters.list(u, s, r.requestId); }
+    costCenterOptions(u, s, r) { return this.costCenters.options(u, s, r.requestId); }
+    getCostCenter(id, u, s, r) { return this.costCenters.get(u, s, id, r.requestId); }
+    createCostCenter(b, u, s, r) {
+        return this.costCenters.create(u, s, b, r.requestId);
+    }
+    patchCostCenter(id, b, u, s, r) {
+        return this.costCenters.update(u, s, id, b, r.requestId);
+    }
+    deleteCostCenter(id, b, u, s, r) {
+        return this.costCenters.remove(u, s, id, b.reason, r.requestId);
+    }
+    costCenterPl(q, u, s, r) {
+        return this.ccReports.incomeStatement(u, s, { costCenter: q.costCenter, rollup: q.rollup === 'true' }, r.requestId);
+    }
+    costCenterBudget(q, u, s, r) {
+        return this.ccReports.budgetReport(u, s, q, r.requestId);
     }
     /* --- Anggaran --- */
     listBudgets(u, s, r) { return this.budgets.list(u, s, r.requestId); }
@@ -93,6 +131,94 @@ let PlanningController = class PlanningController {
     }
 };
 exports.PlanningController = PlanningController;
+__decorate([
+    (0, common_1.Get)('cost-centers'),
+    (0, context_js_1.RequirePermission)('costcenter.read'),
+    __param(0, (0, context_js_1.CurrentUser)()),
+    __param(1, (0, context_js_1.Scope)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "listCostCenters", null);
+__decorate([
+    (0, common_1.Get)('cost-centers/options'),
+    (0, context_js_1.RequirePermission)(COST_CENTER_PICK),
+    __param(0, (0, context_js_1.CurrentUser)()),
+    __param(1, (0, context_js_1.Scope)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "costCenterOptions", null);
+__decorate([
+    (0, common_1.Get)('cost-centers/:id'),
+    (0, context_js_1.RequirePermission)('costcenter.read'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "getCostCenter", null);
+__decorate([
+    (0, common_1.Post)('cost-centers'),
+    (0, context_js_1.RequirePermission)('costcenter.manage'),
+    __param(0, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(ccCreate))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "createCostCenter", null);
+__decorate([
+    (0, common_1.Patch)('cost-centers/:id'),
+    (0, context_js_1.RequirePermission)('costcenter.manage'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(ccPatch))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "patchCostCenter", null);
+__decorate([
+    (0, common_1.Delete)('cost-centers/:id'),
+    (0, context_js_1.RequirePermission)('costcenter.manage'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)(new zod_pipe_js_1.ZodValidationPipe(reasonOnly))),
+    __param(2, (0, context_js_1.CurrentUser)()),
+    __param(3, (0, context_js_1.Scope)()),
+    __param(4, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "deleteCostCenter", null);
+__decorate([
+    (0, common_1.Get)('reports/cost-centers/income-statement'),
+    (0, context_js_1.RequirePermission)('ledger.report.read'),
+    __param(0, (0, common_1.Query)(new zod_pipe_js_1.ZodValidationPipe(ccPlQuery))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "costCenterPl", null);
+__decorate([
+    (0, common_1.Get)('reports/cost-centers/budget'),
+    (0, context_js_1.RequirePermission)('budget.read'),
+    __param(0, (0, common_1.Query)(new zod_pipe_js_1.ZodValidationPipe(ccBudgetQuery))),
+    __param(1, (0, context_js_1.CurrentUser)()),
+    __param(2, (0, context_js_1.Scope)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PlanningController.prototype, "costCenterBudget", null);
 __decorate([
     (0, common_1.Get)('budgets'),
     (0, context_js_1.RequirePermission)('budget.read'),
@@ -246,6 +372,6 @@ __decorate([
 ], PlanningController.prototype, "patchProject", null);
 exports.PlanningController = PlanningController = __decorate([
     (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [budgets_service_js_1.BudgetsService, projects_service_js_1.ProjectsService])
+    __metadata("design:paramtypes", [budgets_service_js_1.BudgetsService, projects_service_js_1.ProjectsService, cost_centers_service_js_1.CostCentersService, cost_center_reports_service_js_1.CostCenterReportsService])
 ], PlanningController);
 //# sourceMappingURL=planning.controller.js.map

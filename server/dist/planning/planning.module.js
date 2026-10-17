@@ -10,12 +10,14 @@ exports.PlanningModule = void 0;
 const common_1 = require("@nestjs/common");
 const ledger_module_js_1 = require("../ledger/ledger.module.js");
 const budgets_service_js_1 = require("./budgets.service.js");
+const cost_center_reports_service_js_1 = require("./cost-center-reports.service.js");
+const cost_centers_service_js_1 = require("./cost-centers.service.js");
 const planning_controller_js_1 = require("./planning.controller.js");
 const projects_service_js_1 = require("./projects.service.js");
 let PlanningModule = class PlanningModule {
 };
 exports.PlanningModule = PlanningModule;
 exports.PlanningModule = PlanningModule = __decorate([
-    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [planning_controller_js_1.PlanningController], providers: [budgets_service_js_1.BudgetsService, projects_service_js_1.ProjectsService] })
+    (0, common_1.Module)({ imports: [ledger_module_js_1.LedgerModule], controllers: [planning_controller_js_1.PlanningController], providers: [budgets_service_js_1.BudgetsService, projects_service_js_1.ProjectsService, cost_centers_service_js_1.CostCentersService, cost_center_reports_service_js_1.CostCenterReportsService] })
 ], PlanningModule);
 //# sourceMappingURL=planning.module.js.map

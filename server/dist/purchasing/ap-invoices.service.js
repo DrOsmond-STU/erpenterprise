@@ -31,6 +31,7 @@ const ledger_shared_js_1 = require("../ledger/ledger.shared.js");
 const sales_shared_js_1 = require("../sales/sales.shared.js");
 const lines_js_1 = require("./lines.js");
 const project_shared_js_1 = require("../planning/project.shared.js");
+const cost_center_shared_js_1 = require("../planning/cost-center.shared.js");
 const orders_service_js_1 = require("./orders.service.js");
 const suppliers_service_js_1 = require("./suppliers.service.js");
 const STATUS_LABEL = { draf: 'Draf', 'belum-dibayar': 'Belum dibayar', sebagian: 'Dibayar sebagian', lunas: 'Lunas', batal: 'Batal' };
@@ -43,12 +44,12 @@ function mapApInvoice(i, asOf = (0, sales_shared_js_1.todayWib)()) {
         date: i.invoice_date, dueDate: i.due_date, subtotal: i.subtotal, discount: i.discount, net: i.net_amount, ppn: i.ppn_amount, total: i.total_gross,
         paid: i.paid_amount, paidDate: i.paid_date, open, overdueDays: overdue, isOverdue: overdue > 0, pendingPayments: i.pending_payments === undefined ? undefined : Number(i.pending_payments),
         status: i.status, statusLabel: overdue > 0 ? `Jatuh tempo ${overdue} hari` : STATUS_LABEL[i.status] ?? i.status,
-        threeWayMatched: i.three_way_matched, kind: i.kind, notes: i.notes, projectId: i.project_id ?? null, projectCode: i.project_code ?? null, campaignId: i.campaign_id ?? null, campaignName: i.campaign_name ?? null,
+        threeWayMatched: i.three_way_matched, kind: i.kind, notes: i.notes, projectId: i.project_id ?? null, projectCode: i.project_code ?? null, campaignId: i.campaign_id ?? null, campaignName: i.campaign_name ?? null, ...(0, cost_center_shared_js_1.mapCcRef)(i),
         createdBy: i.created_by, createdByName: i.created_by_name, postedByName: i.posted_by_name, postedAt: i.posted_at,
         cancelDate: i.cancel_date, cancelReason: i.cancel_reason, legacy: i.subtotal === 0 && i.total_gross > 0 && i.status !== 'draf',
     };
 }
-const SELECT = `SELECT i.*, s.code AS supplier_code, o.doc_no AS order_no, (SELECT pr.code FROM projects pr WHERE pr.id = i.project_id) AS project_code, (SELECT k.name FROM campaigns k WHERE k.id = i.campaign_id) AS campaign_name,
+const SELECT = `SELECT i.*, s.code AS supplier_code, o.doc_no AS order_no, (SELECT pr.code FROM projects pr WHERE pr.id = i.project_id) AS project_code, (SELECT k.name FROM campaigns k WHERE k.id = i.campaign_id) AS campaign_name, ${(0, cost_center_shared_js_1.ccColumns)('i')},
   (SELECT coalesce(sum(p.amount),0) FROM supplier_payments p WHERE p.invoice_id = i.id AND p.status IN ('menunggu','disetujui')) AS pending_payments
   FROM ap_invoices i LEFT JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN purchase_orders o ON o.id = i.purchase_order_id`;
 let ApInvoicesService = class ApInvoicesService {
@@ -144,9 +145,9 @@ let ApInvoicesService = class ApInvoicesService {
         const t = (0, domain_1.salesTotals)(h.lines.map((l) => ({ qty: 1, price: l.net, discPct: 0, kind: l.kind })));
         const docNo = await (0, sales_shared_js_1.nextDocNo)(c, u.companyId, 'APV', Number(h.date.slice(0, 4)));
         const inv = (await c.query(`INSERT INTO ap_invoices (company_id, branch_code, doc_no, supplier_name, supplier_id, purchase_order_id, po_ref, supplier_invoice_no, kind, invoice_date, due_date,
-                                total_gross, subtotal, discount, net_amount, ppn_amount, three_way_matched, status, notes, created_by, created_by_name, project_id, campaign_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,$13,$14,$15,'draf',$16,$17,$18,$19,$20) RETURNING id`, [u.companyId, h.branch, docNo, h.supplier.name, h.supplier.id, h.orderId, h.orderNo, h.supplierInvoiceNo ?? null, h.kind, h.date, h.due,
-            t.total, t.net, t.ppn, h.matched, h.notes ?? null, u.id, u.name, h.projectId ?? null, h.campaignId ?? null])).rows[0];
+                                total_gross, subtotal, discount, net_amount, ppn_amount, three_way_matched, status, notes, created_by, created_by_name, project_id, campaign_id, cost_center_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,$13,$14,$15,'draf',$16,$17,$18,$19,$20,$21) RETURNING id`, [u.companyId, h.branch, docNo, h.supplier.name, h.supplier.id, h.orderId, h.orderNo, h.supplierInvoiceNo ?? null, h.kind, h.date, h.due,
+            t.total, t.net, t.ppn, h.matched, h.notes ?? null, u.id, u.name, h.projectId ?? null, h.campaignId ?? null, h.costCenterId ?? null])).rows[0];
         let n = 0;
         for (const l of h.lines) {
             n += 1;
@@ -184,7 +185,7 @@ let ApInvoicesService = class ApInvoicesService {
             const preview = (0, domain_1.salesTotals)(lines.map((l) => ({ qty: 1, price: l.net, discPct: 0, kind: l.kind })));
             if (b.supplierTotal !== undefined && b.supplierTotal !== preview.total)
                 throw (0, sales_shared_js_1.invalid)('THREE_WAY_MISMATCH', `Nilai tagihan pemasok Rp ${b.supplierTotal.toLocaleString('id-ID')} tidak sama dengan PO × barang diterima Rp ${preview.total.toLocaleString('id-ID')}. Minta nota koreksi pemasok atau revisi PO.`, { expected: preview.total, supplierTotal: b.supplierTotal });
-            const inv = await this.insert(c, u, { branch, supplier: sup, orderId, orderNo: o.doc_no, date, due, supplierInvoiceNo: b.supplierInvoiceNo, notes: b.notes, kind, lines, matched: true, projectId: o.project_id });
+            const inv = await this.insert(c, u, { branch, supplier: sup, orderId, orderNo: o.doc_no, date, due, supplierInvoiceNo: b.supplierInvoiceNo, notes: b.notes, kind, lines, matched: true, projectId: o.project_id, costCenterId: b.costCenterId !== undefined ? await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId) : o.cost_center_id });
             if (receiptLineIds.length)
                 await c.query('UPDATE goods_receipt_lines SET invoice_id = $2 WHERE id = ANY($1::bigint[])', [receiptLineIds, inv.id]);
             for (const l of lines)
@@ -206,6 +207,7 @@ let ApInvoicesService = class ApInvoicesService {
         return this.db.run((0, db_service_js_1.contextOf)(u, s, requestId), async (c) => {
             const sup = await this.supplier(c, u.companyId, b.supplierId);
             const projectId = await (0, project_shared_js_1.assertProject)(c, u.companyId, b.projectId, branch);
+            const costCenterId = await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId);
             if (b.campaignId && !(await c.query(`SELECT 1 FROM campaigns WHERE company_id = $1 AND id = $2 AND status <> 'batal'`, [u.companyId, b.campaignId])).rowCount)
                 throw (0, sales_shared_js_1.invalid)('CAMPAIGN_UNKNOWN', 'Kampanye tidak dikenal atau batal.');
             const { lines } = await (0, lines_js_1.resolvePoLines)(c, u.companyId, branch, (b.lines ?? []).map((l) => ({ ...l, kind: 'jasa', productId: null })));
@@ -214,7 +216,7 @@ let ApInvoicesService = class ApInvoicesService {
             if (due < date)
                 throw (0, sales_shared_js_1.invalid)('INVOICE_DUE', 'Jatuh tempo tidak boleh sebelum tanggal tagihan.');
             const draft = lines.map((l) => ({ orderLineId: null, sku: null, description: l.description, kind: 'jasa', account: l.expenseAccount, qty: l.qty, unit: l.unit, price: l.price, net: l.net }));
-            const inv = await this.insert(c, u, { branch, supplier: sup, orderId: null, orderNo: null, date, due, supplierInvoiceNo: b.supplierInvoiceNo, notes: b.notes, kind: 'service', lines: draft, matched: false, projectId, campaignId: b.campaignId ?? null });
+            const inv = await this.insert(c, u, { branch, supplier: sup, orderId: null, orderNo: null, date, due, supplierInvoiceNo: b.supplierInvoiceNo, notes: b.notes, kind: 'service', lines: draft, matched: false, projectId, campaignId: b.campaignId ?? null, costCenterId });
             if (b.supplierTotal !== undefined && b.supplierTotal !== inv.totals.total)
                 throw (0, sales_shared_js_1.invalid)('INVOICE_TOTAL_MISMATCH', `Total baris Rp ${inv.totals.total.toLocaleString('id-ID')} tidak sama dengan nilai tagihan pemasok Rp ${b.supplierTotal.toLocaleString('id-ID')}.`);
             await this.audit.record(c, { companyId: u.companyId, branchCode: branch, userId: u.id, sessionId: u.sessionId, action: 'ap_invoice.created', entityType: 'ap_invoice', entityId: inv.docNo,
@@ -235,6 +237,8 @@ let ApInvoicesService = class ApInvoicesService {
             const due = b.dueDate ?? i.due_date;
             if (due < date)
                 throw (0, sales_shared_js_1.invalid)('INVOICE_DUE', 'Jatuh tempo tidak boleh sebelum tanggal tagihan.');
+            if (b.costCenterId !== undefined)
+                await c.query('UPDATE ap_invoices SET cost_center_id = $2 WHERE id = $1', [id, await (0, cost_center_shared_js_1.assertCostCenter)(c, u.companyId, b.costCenterId, i.cost_center_id)]);
             let totals = null;
             if (b.lines) {
                 if (b.lines.some((l) => l.productId || (l.kind && l.kind !== 'jasa')))
@@ -267,17 +271,18 @@ let ApInvoicesService = class ApInvoicesService {
             if (!lines.length)
                 throw (0, sales_shared_js_1.invalid)('PURCHASE_NO_LINES', 'Tagihan tanpa baris tidak dapat diposting.');
             const links = await this.refs.links(c, u.companyId);
-            /* Baris jasa/biaya ditandai proyek tagihan (dimensi biaya proyek); barang (GRNI) tidak. */
+            /* Baris jasa/biaya ditandai proyek tagihan (dimensi biaya proyek) dan pusat biaya tagihan (akun laba rugi); barang (GRNI) tidak. */
             const byAccount = new Map();
             for (const l of lines) {
-                const k = `${l.account_code}|${l.kind === 'jasa' && i.project_id ? i.project_id : ''}`;
+                const cc = l.kind === 'jasa' && i.cost_center_id && (0, domain_1.costCenterAllowed)(l.account_code) ? i.cost_center_id : '';
+                const k = `${l.account_code}|${l.kind === 'jasa' && i.project_id ? i.project_id : ''}|${cc}`;
                 byAccount.set(k, (byAccount.get(k) ?? 0) + Number(l.net));
             }
             const j = await (0, sales_shared_js_1.postAutoJournal)(c, u, {
                 branch, date: i.invoice_date, source: 'ap_invoice', sourceId: id, rule: 'PURCHASE_INVOICE', ref: i.doc_no,
                 description: `Tagihan pemasok ${i.doc_no}${i.supplier_invoice_no ? ` (${i.supplier_invoice_no})` : ''} — ${i.supplier_name}`,
                 lines: [
-                    ...[...byAccount].map(([k, v]) => { const [account, project] = k.split('|'); return { account, debit: v, credit: 0, project: project || null }; }),
+                    ...[...byAccount].map(([k, v]) => { const [account, project, costCenter] = k.split('|'); return { account, debit: v, credit: 0, project: project || null, costCenter: costCenter || null }; }),
                     { account: links.ppnIn, debit: i.ppn_amount, credit: 0 },
                     { account: links.ap, debit: 0, credit: i.total_gross, party: i.supplier_name },
                 ],
