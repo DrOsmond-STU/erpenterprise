@@ -113,6 +113,7 @@ async function saveRfq() {
           <dt>Tanggal</dt><dd class="num">{{ F.date(r.date) }}<template v-if="r.neededDate"> · dibutuhkan {{ F.date(r.neededDate) }}</template></dd>
           <dt v-if="r.decidedByName">Diputus</dt><dd v-if="r.decidedByName">{{ r.decidedByName }} · {{ F.datetime(r.decidedAt) }}<template v-if="r.decisionNote && r.status !== 'ditolak'"> — “{{ r.decisionNote }}”</template></dd>
           <dt v-if="r.orderNo">Pesanan pembelian</dt><dd v-if="r.orderNo"><a href="#" class="code" data-link="po" @click.prevent="emit('openOrder', r.orderId)">{{ r.orderNo }}</a> <Pill :status="r.orderStatus" /></dd>
+          <dt v-if="r.costCenterCode">Pusat biaya</dt><dd v-if="r.costCenterCode"><span class="code">{{ r.costCenterCode }}</span> {{ r.costCenterName }}</dd>
           <dt v-if="r.projectCode">Proyek</dt><dd v-if="r.projectCode"><RouterLink class="code" :to="{ path: '/proyek', query: { id: r.projectId } }">{{ r.projectCode }}</RouterLink></dd>
           <dt v-if="r.notes">Catatan</dt><dd v-if="r.notes">{{ r.notes }}</dd>
         </dl>

@@ -10,6 +10,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import CostCenterSelect from '@/components/CostCenterSelect.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -57,14 +58,14 @@ async function confirm(reason: string) {
 
 /* Anggaran baru */
 const showNew = ref(false);
-const nf = ref({ branch: '', fiscalYear: new Date().getFullYear(), name: '', source: 'actual', fromActualYear: new Date().getFullYear(), growthPct: 5 });
+const nf = ref({ branch: '', costCenterId: '', fiscalYear: new Date().getFullYear(), name: '', source: 'actual', fromActualYear: new Date().getFullYear(), growthPct: 5 });
 const newErrors = ref<string[]>([]);
 const branches = computed(() => session.branches.filter((x) => x.status === 'aktif' && (ctx.branch === 'ALL' || x.code === ctx.branch)));
-function openNew() { newErrors.value = []; nf.value = { branch: ctx.branch !== 'ALL' ? ctx.branch : branches.value[0]?.code ?? '', fiscalYear: Number(todayWib().slice(0, 4)) + 1, name: '', source: 'actual', fromActualYear: Number(todayWib().slice(0, 4)), growthPct: 5 }; showNew.value = true; }
+function openNew() { newErrors.value = []; nf.value = { branch: ctx.branch !== 'ALL' ? ctx.branch : branches.value[0]?.code ?? '', costCenterId: '', fiscalYear: Number(todayWib().slice(0, 4)) + 1, name: '', source: 'actual', fromActualYear: Number(todayWib().slice(0, 4)), growthPct: 5 }; showNew.value = true; }
 async function saveNew() {
   newErrors.value = []; busy.value = true;
   try {
-    const body: any = { branch: nf.value.branch, fiscalYear: Number(nf.value.fiscalYear), name: nf.value.name || undefined };
+    const body: any = { branch: nf.value.branch, costCenterId: nf.value.costCenterId || null, fiscalYear: Number(nf.value.fiscalYear), name: nf.value.name || undefined };
     if (nf.value.source === 'actual') Object.assign(body, { fromActualYear: Number(nf.value.fromActualYear), growthPct: Number(nf.value.growthPct) || 0 });
     const r = await post('/budgets', body);
     toast.push('Draf anggaran dibuat', `${r.name} · ${r.lines.length} akun`, 'ok');
@@ -101,15 +102,16 @@ const tone = (v: number) => (v > 0 ? 'neg' : v < 0 ? 'pos' : '');
 <template>
   <ReportHead title="Anggaran" sub="Anggaran per cabang & tahun per akun detail, dibandingkan realisasi buku besar dan komitmen pengadaan (PO jasa belum ditagih, draf tagihan, PR disetujui). Serapan = (realisasi + komitmen) ÷ anggaran; prakiraan = realisasi + komitmen + anggaran bulan yang belum berjalan.">
     <select v-model="selected" class="select" style="max-width:280px" aria-label="Pilih anggaran" data-field="budget">
-      <option v-for="x in list ?? []" :key="x.id" :value="x.id">{{ x.branch }} · {{ x.fiscalYear }} — {{ x.name }} ({{ x.statusLabel }})</option>
+      <option v-for="x in list ?? []" :key="x.id" :value="x.id">{{ x.branch }} · {{ x.fiscalYear }}{{ x.costCenterCode ? ` · ${x.costCenterCode}` : '' }} — {{ x.name }} ({{ x.statusLabel }})</option>
     </select>
     <input v-model="asOf" class="input" type="date" style="max-width:170px" aria-label="Per tanggal" data-field="as-of">
+    <RouterLink v-if="list?.some((x) => x.costCenterId)" class="btn" to="/anggaran-pusat-biaya"><Icon name="layers" /> Laporan per pusat biaya</RouterLink>
     <button v-if="canManage" class="btn btn-primary" data-action="new-budget" @click="openNew"><Icon name="plus" /> Anggaran baru</button>
   </ReportHead>
   <div v-if="list && !list.length" class="card"><div class="empty"><div class="empty-card"><span class="empty-title">Belum ada anggaran</span><span class="empty-note">Susun anggaran cabang — dapat diisi awal dari realisasi tahun sebelumnya.</span></div></div></div>
   <template v-if="b">
     <div class="kpi-row" style="margin-bottom:var(--sp-4)">
-      <KpiTile label="Anggaran setahun" :value="F.rpCompact(b.totals.budget)" :foot="`${b.lines.length} akun · ${b.branch} ${b.fiscalYear}`" />
+      <KpiTile label="Anggaran setahun" :value="F.rpCompact(b.totals.budget)" :foot="`${b.lines.length} akun · ${b.branch} ${b.fiscalYear}${b.costCenterCode ? ` · ${b.costCenterCode}` : ''}`" />
       <KpiTile label="Realisasi" :value="F.rpCompact(b.totals.actual)" :foot="`anggaran s.d. ${MONTHS[Math.max(b.elapsedMonths - 1, 0)]}: ${F.rpCompact(b.totals.ytdBudget)}`" />
       <KpiTile label="Serapan" :value="F.pct(b.totals.absorption)" :foot="`komitmen ${F.rpCompact(b.totals.commitment)}`" :tone="b.totals.absorption > 100 ? 'neg' : ''" />
       <KpiTile label="Prakiraan" :value="F.rpCompact(b.totals.forecast)" :foot="`${b.totals.variance > 0 ? 'melampaui' : 'di bawah'} ${F.rpCompact(Math.abs(b.totals.variance))}`" :tone="b.totals.variance > 0 ? 'neg' : 'pos'" />
@@ -124,7 +126,7 @@ const tone = (v: number) => (v > 0 ? 'neg' : v < 0 ? 'pos' : '');
           <button class="chip" :aria-pressed="tab === 'kelompok'" data-tab="kelompok" @click="tab = 'kelompok'">Per kelompok akun</button>
         </div>
         <div class="toolbar-spacer"></div>
-        <BranchTag :code="b.branch" /><Pill :status="b.status" /><span v-if="b.revision" class="muted">revisi {{ b.revision }}</span>
+        <BranchTag :code="b.branch" /><span v-if="b.costCenterCode" class="ctx-chip" data-budget-cost-center><Icon name="layers" /> {{ b.costCenterCode }} · {{ b.costCenterName }}</span><Pill :status="b.status" /><span v-if="b.revision" class="muted">revisi {{ b.revision }}</span>
         <template v-if="b.status === 'draf' && canManage">
           <button class="btn btn-sm" data-action="edit-budget" :disabled="busy" @click="openEdit"><Icon name="edit" /> Ubah baris</button>
           <button class="btn btn-sm btn-primary" data-action="submit-budget" :disabled="busy" @click="submit"><Icon name="send" /> Ajukan</button>
@@ -178,9 +180,10 @@ const tone = (v: number) => (v > 0 ? 'neg' : v < 0 ? 'pos' : '');
     <template #foot><div class="toolbar-spacer"></div><button class="btn btn-ghost" @click="detail = null">Tutup</button></template>
   </Modal>
 
-  <Modal v-if="showNew" title="Anggaran baru" subtitle="Satu anggaran per cabang & tahun. Isi awal dari realisasi beban & pendapatan tahun acuan (dengan pertumbuhan), atau kosong lalu isi per akun." width="560px" @close="showNew = false">
+  <Modal v-if="showNew" title="Anggaran baru" subtitle="Satu anggaran per cabang & tahun, dan satu per pusat biaya bila dipilih (realisasi = transaksi bertanda pusat biaya itu). Isi awal dari realisasi beban & pendapatan tahun acuan (dengan pertumbuhan), atau kosong lalu isi per akun." width="560px" @close="showNew = false">
     <div class="form-grid">
       <div class="field"><label for="bg-branch">Cabang</label><select id="bg-branch" v-model="nf.branch" class="select"><option v-for="x in branches" :key="x.code" :value="x.code">{{ x.code }} · {{ x.short_name || x.name }}</option></select></div>
+      <CostCenterSelect id="bg-cost-center" v-model="nf.costCenterId" label="Pusat biaya (opsional)" empty="— anggaran cabang (tanpa pusat biaya) —" />
       <div class="field"><label for="bg-year">Tahun anggaran</label><input id="bg-year" v-model.number="nf.fiscalYear" class="input num" type="number" min="2000" max="2100" data-field="fiscal-year"></div>
       <div class="field form-grid-full"><label for="bg-name">Nama</label><input id="bg-name" v-model="nf.name" class="input" maxlength="120" :placeholder="`Anggaran ${nf.branch} ${nf.fiscalYear}`"></div>
       <div class="field"><label for="bg-src">Isi awal</label><select id="bg-src" v-model="nf.source" class="select" data-field="source"><option value="actual">Dari realisasi tahun acuan</option><option value="empty">Kosong</option></select></div>

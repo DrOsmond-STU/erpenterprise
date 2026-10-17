@@ -8,18 +8,20 @@ import { conflict, forbidden, notFound } from '../common/errors.js';
 import { decryptField, encryptField } from '../common/crypto.js';
 import { contextOf, DbService } from '../db/db.service.js';
 import { acrossBranches, assertBranch, trimBranch, UUID } from '../sales/sales.shared.js';
+import { assertCostCenter, ccColumns, mapCcRef } from '../planning/cost-center.shared.js';
 
 export interface EmployeeInput {
   name: string; branch: string; dept: string; title?: string; joinDate?: string; employment: 'tetap' | 'kontrak' | 'magang'; ptkp: string;
-  basicSalary: number; fixedAllowance: number; email?: string; nik?: string; npwp?: string; bankName?: string; bankAccount?: string;
+  basicSalary: number; fixedAllowance: number; email?: string; nik?: string; npwp?: string; bankName?: string; bankAccount?: string; costCenterId?: string | null;
 }
 export type EmployeePatch = Partial<EmployeeInput> & { status?: 'aktif' | 'keluar' };
 
 const map = (e: any, canSeePay: boolean) => ({
   id: e.id, code: e.code, name: e.name, branch: trimBranch(e.branch_code), dept: e.dept, title: e.title, joinDate: e.join_date, employment: e.employment, status: e.status, ptkp: e.ptkp,
   basicSalary: canSeePay ? Number(e.basic_salary) : null, fixedAllowance: canSeePay ? Number(e.fixed_allowance) : null, email: e.email,
-  nik: e.nik_masked, npwp: e.npwp_masked, bankName: e.bank_name, bankAccount: e.bank_account_masked,
+  nik: e.nik_masked, npwp: e.npwp_masked, bankName: e.bank_name, bankAccount: e.bank_account_masked, ...mapCcRef(e),
 });
+const SELECT = `SELECT e.*, ${ccColumns('e')} FROM employees e`;
 
 @Injectable()
 export class EmployeesService {
@@ -29,13 +31,13 @@ export class EmployeesService {
 
   async list(u: RequestUser, s: ScopeContext, requestId: string) {
     return this.db.run(contextOf(u, s, requestId), async (c) =>
-      (await c.query(`SELECT * FROM employees WHERE company_id = $1 AND ($2::text IS NULL OR branch_code = $2) ORDER BY (status = 'aktif') DESC, branch_code, name`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows
+      (await c.query(`${SELECT} WHERE e.company_id = $1 AND ($2::text IS NULL OR e.branch_code = $2) ORDER BY (e.status = 'aktif') DESC, e.branch_code, e.name`, [u.companyId, s.branch === 'ALL' ? null : s.branch])).rows
         .map((e: any) => map(e, this.seesPay(u))));
   }
 
   private async row(c: PoolClient, companyId: string, id: string) {
     if (!UUID.test(id)) throw notFound('Karyawan');
-    const e = (await c.query('SELECT * FROM employees WHERE company_id = $1 AND id = $2', [companyId, id])).rows[0];
+    const e = (await c.query(`${SELECT} WHERE e.company_id = $1 AND e.id = $2`, [companyId, id])).rows[0];
     if (!e) throw notFound('Karyawan');
     return e;
   }
@@ -67,11 +69,13 @@ export class EmployeesService {
       const max = Number((await acrossBranches(c, async () => c.query(`SELECT coalesce(max(nullif(regexp_replace(code, '\\D', '', 'g'), '')::int), 0) AS n FROM employees WHERE company_id = $1`, [u.companyId]))).rows[0].n);
       const code = `EMP-${String(max + 1).padStart(4, '0')}`;
       const nik = this.secret(b.nik), npwp = this.secret(b.npwp), acct = this.secret(b.bankAccount);
-      const e = (await c.query(`INSERT INTO employees (company_id, branch_code, code, name, dept, title, join_date, employment, ptkp, basic_salary, fixed_allowance, email,
-                                  nik_enc, nik_masked, npwp_enc, npwp_masked, bank_name, bank_account_enc, bank_account_masked, created_by_name)
-                                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+      const costCenterId = await assertCostCenter(c, u.companyId, b.costCenterId);
+      const ins = (await c.query(`INSERT INTO employees (company_id, branch_code, code, name, dept, title, join_date, employment, ptkp, basic_salary, fixed_allowance, email,
+                                  nik_enc, nik_masked, npwp_enc, npwp_masked, bank_name, bank_account_enc, bank_account_masked, created_by_name, cost_center_id)
+                                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
         [u.companyId, b.branch, code, b.name, b.dept, b.title ?? null, b.joinDate ?? null, b.employment, b.ptkp, b.basicSalary, b.fixedAllowance, b.email ?? null,
-          nik?.enc ?? null, nik?.masked ?? null, npwp?.enc ?? null, npwp?.masked ?? null, b.bankName ?? null, acct?.enc ?? null, acct?.masked ?? null, u.name])).rows[0];
+          nik?.enc ?? null, nik?.masked ?? null, npwp?.enc ?? null, npwp?.masked ?? null, b.bankName ?? null, acct?.enc ?? null, acct?.masked ?? null, u.name, costCenterId])).rows[0];
+      const e = await this.row(c, u.companyId, ins.id);
       await this.audit.record(c, { companyId: u.companyId, branchCode: b.branch, userId: u.id, sessionId: u.sessionId, action: 'employee.created', entityType: 'employee', entityId: code, after: { name: b.name, dept: b.dept, branch: b.branch }, requestId });
       return map(e, true);
     });
@@ -94,6 +98,7 @@ export class EmployeesService {
                        updated_at = now() WHERE company_id = $1 AND id = $2`,
         [u.companyId, id, b.name ?? null, b.branch ?? null, b.dept ?? null, b.title ?? null, b.joinDate ?? null, b.employment ?? null, b.ptkp ?? null, b.basicSalary ?? null, b.fixedAllowance ?? null, b.email ?? null,
           b.status ?? null, b.bankName ?? null, !!nik, nik?.enc ?? null, nik?.masked ?? null, !!npwp, npwp?.enc ?? null, npwp?.masked ?? null, !!acct, acct?.enc ?? null, acct?.masked ?? null]);
+      if (b.costCenterId !== undefined) await c.query('UPDATE employees SET cost_center_id = $3 WHERE company_id = $1 AND id = $2', [u.companyId, id, await assertCostCenter(c, u.companyId, b.costCenterId, e.cost_center_id)]);
       const changed = Object.keys(b).map((k) => (['nik', 'npwp', 'bankAccount'].includes(k) ? `${k} (rahasia)` : k));
       await this.audit.record(c, { companyId: u.companyId, branchCode: trimBranch(e.branch_code), userId: u.id, sessionId: u.sessionId, action: 'employee.updated', entityType: 'employee', entityId: e.code, after: { fields: changed }, requestId });
       return map(await acrossBranches(c, () => this.row(c, u.companyId, id)), true);

@@ -32,6 +32,7 @@ rugi, dan neraca** — per cabang maupun konsolidasi — dan diperiksa oleh hala
 | SDM & penggajian | posting gaji (beban, PPh 21, BPJS), pembayaran lintas cabang | utang gaji, RK |
 | Anggaran | realisasi dari buku besar (tanda alami akun) + komitmen PO/PR/draf tagihan jasa | — (laporan) |
 | Proyek | dimensi `project_id` pada baris jurnal (memorial, tagihan jasa atas PO/PR proyek) | — (laporan) |
+| Pusat biaya | dimensi `cost_center_id` pada baris akun laba rugi (memorial, faktur, PR/PO/tagihan jasa, gaji per karyawan) | — (laba rugi & anggaran per pusat biaya; Σ kolom = laba rugi) |
 | Jurnal memorial | dibuat & diposting orang berbeda (baris dapat bertanda proyek) | keseimbangan jurnal |
 
 Kontrol: RLS per perusahaan/cabang di PostgreSQL, izin granular per aksi, empat mata per
@@ -398,6 +399,34 @@ pembelian, dan buku besar:
 - Izin: `budget.read|manage|approve`, `project.read|manage`. Migrasi `0018_budget_projects.sql`
   (dimensi `journal_lines.project_id`, RLS per cabang) mengisi anggaran CKR tahun berjalan
   dan dua proyek contoh.
+
+## Pusat biaya (`/pusat-biaya`, `/laba-rugi-pusat-biaya`, `/anggaran-pusat-biaya`)
+
+- **Master pusat biaya** tingkat perusahaan (berlaku lintas cabang): kode, nama, jenis *pusat
+  biaya* / *pusat laba*, induk opsional (hierarki tanpa siklus), penanggung jawab. Pusat biaya
+  yang sudah dipakai jurnal, dokumen, karyawan, atau anggaran tidak dapat dihapus — nonaktifkan.
+- **Dimensi `journal_lines.cost_center_id`** hanya untuk akun pendapatan & beban (4-/5-):
+  jurnal memorial (pilih per baris), faktur penjualan (pendapatan & HPP), PR → PO → tagihan
+  pemasok (baris jasa saat tagihan diposting), dan penggajian (beban gaji dipecah per pusat
+  biaya karyawan, disalin ke slip saat daftar gaji disusun; utang gaji/pajak/BPJS tanpa
+  dimensi). Jurnal balik ikut bertanda.
+- **Laba rugi per pusat biaya**: kolom per pusat biaya + *Tanpa pusat biaya* + Total — Total
+  selalu sama dengan Laporan Laba Rugi cakupan yang sama; opsi gabung ke induk, filter satu
+  pusat biaya (beserta turunannya), dan ringkasan kontribusi (porsi pendapatan & beban,
+  cakupan penandaan beban).
+- **Anggaran per pusat biaya**: anggaran cabang × tahun × pusat biaya memakai alur anggaran
+  biasa (draf → ajukan → setujui, SoD, revisi); realisasi & komitmen hanya dari baris/dokumen
+  bertanda pusat biaya itu. Anggaran cabang tanpa pusat biaya tetap seperti sebelumnya (dan
+  tetap satu-satunya acuan cek anggaran PR). **Laporan anggaran per pusat biaya**: anggaran,
+  anggaran s.d. bulan berjalan, realisasi, selisih, komitmen, sisa, prakiraan & serapan per
+  pusat biaya (gabungan cabang dalam cakupan), capaian pendapatan & laba pusat laba, beban
+  bertanda yang tidak dianggarkan, serta rincian akun & 12 bulan.
+- Izin: `costcenter.read` (akuntan senior, staf keuangan, manajer), `costcenter.manage`
+  (akuntan senior; admin memegang semua). Laba rugi per pusat biaya memakai
+  `ledger.report.read`; laporan anggaran memakai `budget.read`. Migrasi `0021_cost_centers.sql`
+  mengisi hierarki contoh (PB-OPS › PB-PRD, PB-GDG; PB-KOM › PB-PJL, PB-JSA; PB-ADM), menandai
+  jurnal contoh menurut akun, pusat biaya karyawan menurut departemen, dan anggaran pusat biaya
+  CKR tahun berjalan.
 
 ## Kas & bank, rekonsiliasi, setoran pajak
 

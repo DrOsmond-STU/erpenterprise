@@ -8,6 +8,7 @@ import * as F from '@/lib/format';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import Icon from './Icon.vue';
+import CostCenterSelect from './CostCenterSelect.vue';
 import Modal from './Modal.vue';
 import PurchaseLinesEditor, { type PurchaseLine } from './PurchaseLinesEditor.vue';
 
@@ -43,6 +44,7 @@ const form = ref({
   supplierTotal: '' as string | number,
   notes: d?.notes ?? '',
   projectId: d?.projectId ?? '',
+  costCenterId: d?.costCenterId ?? '',
   campaignId: '',
 });
 const projects = ref<any[]>([]);
@@ -63,6 +65,7 @@ async function save(submit: boolean) {
   errors.value = []; busy.value = true;
   const body: any = {
     branch: form.value.branch, supplierId: form.value.supplierId || undefined, notes: form.value.notes || undefined, ...(projects.value.length && !(d && props.kind === 'invoice') ? { projectId: form.value.projectId || null } : {}),
+    costCenterId: form.value.costCenterId || null,
     lines: lines.value.map((l) => ({ productId: l.productId, description: l.description || undefined, kind: l.kind, unit: l.unit, qty: Number(l.qty), price: Math.round(Number(l.price) || 0), discPct: Number(l.discPct) || 0, expenseAccount: l.productId ? null : l.expenseAccount })),
   };
   if (props.kind === 'order') { body.orderDate = form.value.date; if (form.value.second) body.expectedDate = form.value.second; body.submit = submit; }
@@ -106,6 +109,7 @@ const title = computed(() => (d ? `Ubah ${props.kind === 'order' ? 'PO' : 'tagih
       <div v-if="projects.length && !(d && kind === 'invoice')" class="field span-2"><label for="pd-project">Proyek (opsional)</label>
         <select id="pd-project" v-model="form.projectId" class="select" data-field="project"><option value="">— tanpa proyek —</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select>
         <span class="field-hint">Baris jasa/biaya ditandai proyek saat tagihan diposting.</span></div>
+      <CostCenterSelect id="pd-cost-center" v-model="form.costCenterId" class="span-2" />
       <div v-if="campaigns.length" class="field span-2"><label for="pd-campaign">Kampanye pemasaran (opsional)</label>
         <select id="pd-campaign" v-model="form.campaignId" class="select" data-field="campaign"><option value="">— bukan biaya kampanye —</option><option v-for="k in campaigns" :key="k.id" :value="k.id">{{ k.code }} · {{ k.name }}</option></select></div>
       <div class="field form-grid-full"><label>Baris</label><PurchaseLinesEditor v-model="lines" :products="products" :accounts="accounts" :branch="form.branch" :services-only="kind === 'invoice'" /></div>

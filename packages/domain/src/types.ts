@@ -70,6 +70,8 @@ export interface JournalLineInput {
   counterBranch?: string | null;
   memo?: string | null;
   projectId?: string | null;
+  /** Dimensi pusat biaya (hanya akun pendapatan & beban). */
+  costCenterId?: string | null;
 }
 
 export interface JournalInput {

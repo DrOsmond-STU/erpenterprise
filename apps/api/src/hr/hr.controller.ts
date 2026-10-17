@@ -20,6 +20,7 @@ const employeeInput = z.object({
   employment: z.enum(['tetap', 'kontrak', 'magang']).default('tetap'), ptkp: z.enum(Object.keys(PTKP) as [string, ...string[]]).default('TK/0'),
   basicSalary: money, fixedAllowance: money.default(0), email: z.string().trim().email('Email tidak sah').max(120).optional(),
   nik: digits(16, 16, 'NIK 16 digit').optional(), npwp: digits(15, 16, 'NPWP 15–16 digit').optional(), bankName: text(60).optional(), bankAccount: digits(6, 20, 'Nomor rekening 6–20 digit').optional(),
+  costCenterId: z.string().uuid('Pusat biaya tidak sah').nullable().optional(),
 });
 const employeePatch = employeeInput.partial().extend({ status: z.enum(['aktif', 'keluar']).optional() });
 const attendanceInput = z.object({

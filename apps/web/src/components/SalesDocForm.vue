@@ -8,6 +8,7 @@ import * as F from '@/lib/format';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import Icon from './Icon.vue';
+import CostCenterSelect from './CostCenterSelect.vue';
 import Modal from './Modal.vue';
 import SalesLinesEditor, { type EditLine } from './SalesLinesEditor.vue';
 
@@ -29,6 +30,7 @@ const form = ref({
   date: d?.date ?? today,
   second: (props.kind === 'order' ? d?.deliveryDate : d?.dueDate) ?? '',
   notes: d?.notes ?? '',
+  costCenterId: d?.costCenterId ?? '',
 });
 const lines = ref<EditLine[]>(d?.lines?.length
   ? d.lines.map((l: any) => ({ productId: l.productId, description: l.description, kind: l.kind, unit: l.unit, qty: l.qty, price: l.price, discPct: l.discPct }))
@@ -48,7 +50,7 @@ async function save(submit: boolean) {
     lines: lines.value.map((l) => ({ productId: l.productId, description: l.description || undefined, kind: l.kind, unit: l.unit, qty: Number(l.qty), price: Math.round(Number(l.price) || 0), discPct: Number(l.discPct) || 0 })),
   };
   if (props.kind === 'order') { body.orderDate = form.value.date; if (form.value.second) body.deliveryDate = form.value.second; body.submit = submit; }
-  else { body.invoiceDate = form.value.date; if (form.value.second) body.dueDate = form.value.second; }
+  else { body.invoiceDate = form.value.date; if (form.value.second) body.dueDate = form.value.second; body.costCenterId = form.value.costCenterId || null; }
   try {
     const base = props.kind === 'order' ? '/sales/orders' : '/sales/invoices';
     const r = d ? await patch(`${base}/${d.id}`, body) : await post(base, body);
@@ -77,6 +79,7 @@ const title = computed(() => (d ? `Ubah ${props.kind === 'order' ? 'pesanan' : '
       <div class="field"><label for="doc-second">{{ kind === 'order' ? 'Tanggal kirim' : 'Jatuh tempo' }}</label><input id="doc-second" v-model="form.second" class="input" type="date">
         <span class="field-hint">{{ kind === 'order' ? 'Kosong = 14 hari' : 'Kosong = sesuai termin pelanggan' }}</span></div>
       <div class="field span-2"><label for="doc-notes">Catatan</label><input id="doc-notes" v-model="form.notes" class="input" maxlength="500" placeholder="Opsional"></div>
+      <CostCenterSelect v-if="kind === 'invoice'" id="doc-cost-center" v-model="form.costCenterId" label="Pusat laba/biaya (opsional)" class="span-2" />
       <div class="field form-grid-full"><label>Baris</label><SalesLinesEditor v-model="lines" :products="products" :branch="form.branch" /></div>
       <div v-if="errors.length" class="field form-grid-full"><div class="field-hint neg" role="alert"><div v-for="e in errors" :key="e">• {{ e }}</div></div></div>
     </div>

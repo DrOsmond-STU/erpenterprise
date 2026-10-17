@@ -82,6 +82,7 @@ const journalId = ref<string | null>(null);
         <dl class="deflist">
           <dt>Pelanggan</dt><dd>{{ inv.customerCode ?? '' }} {{ inv.customerName }}</dd>
           <dt>Cabang</dt><dd>{{ ctx.nameOf(inv.branch) }}</dd>
+          <dt v-if="inv.costCenterCode">Pusat laba/biaya</dt><dd v-if="inv.costCenterCode" data-invoice-cost-center><span class="code">{{ inv.costCenterCode }}</span> {{ inv.costCenterName }}</dd>
           <dt>Tanggal</dt><dd class="num">{{ F.date(inv.date) }}</dd>
           <dt>Jatuh tempo</dt><dd class="num">{{ F.date(inv.dueDate) }}</dd>
           <dt v-if="inv.salesOrderNo">Pesanan</dt><dd v-if="inv.salesOrderNo"><a href="#" class="code" @click.prevent="emit('openOrder', inv.salesOrderId)">{{ inv.salesOrderNo }}</a></dd>

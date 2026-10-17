@@ -5,7 +5,7 @@
  */
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import { computePayslip, monthEndOf, overtimePay, payrollJournalLines, payrollPaymentLegs } from '@erp/domain';
+import { computePayslip, monthEndOf, overtimePay, payrollLinesByCostCenter, payrollPaymentLegs } from '@erp/domain';
 import { AuditService } from '../audit/audit.service.js';
 import type { RequestUser, ScopeContext } from '../common/context.js';
 import { conflict, DomainError, forbidden, notFound } from '../common/errors.js';
@@ -73,9 +73,9 @@ export class PayrollService {
         const p = computePayslip({ basic: Number(e.basic_salary), allowance: Number(e.fixed_allowance), overtime: ot, ptkp: e.ptkp });
         const slipNo = await nextDocNo(c, u.companyId, 'PAY', Number(b.period.slice(0, 4)));
         await c.query(`INSERT INTO payslips (company_id, branch_code, doc_no, employee_code, employee_name, dept, period_code, basic, allowance, overtime, deduction, net_pay, status,
-                         run_id, employee_id, gross, bpjs_employee, bpjs_employer, pph21, other_deduction, overtime_hours)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15,$16,$17,$18,$19,$20)`,
-          [u.companyId, b.branch, slipNo, e.code, e.name, e.dept, b.period, e.basic_salary, e.fixed_allowance, ot, p.deduction, p.net, run.id, e.id, p.gross, p.bpjsEmployee, p.bpjsEmployer, p.pph21, p.otherDeduction, hours.reduce((t, h) => t + h, 0)]);
+                         run_id, employee_id, gross, bpjs_employee, bpjs_employer, pph21, other_deduction, overtime_hours, cost_center_id)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draf',$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+          [u.companyId, b.branch, slipNo, e.code, e.name, e.dept, b.period, e.basic_salary, e.fixed_allowance, ot, p.deduction, p.net, run.id, e.id, p.gross, p.bpjsEmployee, p.bpjsEmployer, p.pph21, p.otherDeduction, hours.reduce((t, h) => t + h, 0), e.cost_center_id ?? null]);
       }
       const slips = (await c.query('SELECT * FROM payslips WHERE run_id = $1', [run.id])).rows;
       await c.query('UPDATE payroll_runs SET totals = $2 WHERE id = $1', [run.id, JSON.stringify(this.totals(slips))]);
@@ -93,7 +93,8 @@ export class PayrollService {
       if (r.created_by === u.id) throw new DomainError('SOD_PAYROLL', 'Penyusun daftar gaji tidak boleh memposting daftar gajinya sendiri (kontrol empat mata).', HttpStatus.FORBIDDEN);
       const links = await this.refs.links(c, u.companyId);
       const slips = (await c.query('SELECT * FROM payslips WHERE run_id = $1', [id])).rows;
-      const lines = payrollJournalLines(slips.map((p: any) => ({ dept: p.dept, gross: Number(p.gross), bpjsEmployee: Number(p.bpjs_employee), bpjsEmployer: Number(p.bpjs_employer), pph21: Number(p.pph21), otherDeduction: Number(p.other_deduction ?? 0), net: Number(p.net_pay) })),
+      /* Beban gaji dipecah per pusat biaya karyawan (snapshot di slip); utang gaji/pajak/BPJS tanpa dimensi. */
+      const lines = payrollLinesByCostCenter(slips.map((p: any) => ({ dept: p.dept, gross: Number(p.gross), bpjsEmployee: Number(p.bpjs_employee), bpjsEmployer: Number(p.bpjs_employer), pph21: Number(p.pph21), otherDeduction: Number(p.other_deduction ?? 0), net: Number(p.net_pay), costCenterId: p.cost_center_id ?? null })),
         { directLabor: links.directLabor, salaryExpense: links.salaryExpense, salaryPayable: links.salaryPayable, taxPayable: links.taxPayable, bpjsPayable: links.bpjsPayable });
       await postAutoJournal(c, u, { branch, date: monthEndOf(r.period_code), source: 'payroll_run', sourceId: id, rule: 'PAYROLL', ref: r.doc_no, description: `Beban gaji ${r.period_code} — ${branch} (${slips.length} karyawan)`, lines });
       await c.query(`UPDATE payslips SET status = 'diproses' WHERE run_id = $1`, [id]);

@@ -39,7 +39,7 @@ const orderInput = z.object({
 });
 const invoiceInput = z.object({
   branch: opt(branch), customerId: opt(z.string().uuid('Pilih pelanggan')), invoiceDate: opt(date), dueDate: opt(date),
-  notes: opt(text(500)), lines: opt(z.array(line).min(1, 'Minimal satu baris').max(100)),
+  notes: opt(text(500)), lines: opt(z.array(line).min(1, 'Minimal satu baris').max(100)), costCenterId: opt(z.string().uuid('Pusat biaya tidak sah').nullable()),
 });
 const receiptInput = z.object({
   date: opt(date), amount: z.number().int('Nilai rupiah bulat').positive('Nilai penerimaan harus lebih dari nol').max(1e13),

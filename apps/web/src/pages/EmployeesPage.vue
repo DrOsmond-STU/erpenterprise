@@ -10,6 +10,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import CostCenterSelect from '@/components/CostCenterSelect.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -49,14 +50,14 @@ async function reveal() { try { secret.value = await post(`/hr/employees/${openI
 /* Form */
 const show = ref(false);
 const editing = ref<any>(null);
-const blank = () => ({ name: '', branch: ctx.branch === 'ALL' ? session.branches[0]?.code ?? '' : ctx.branch, dept: 'Produksi', title: '', joinDate: '', employment: 'tetap', ptkp: 'TK/0', basicSalary: 0, fixedAllowance: 0, email: '', nik: '', npwp: '', bankName: '', bankAccount: '', status: 'aktif' });
+const blank = () => ({ name: '', branch: ctx.branch === 'ALL' ? session.branches[0]?.code ?? '' : ctx.branch, dept: 'Produksi', title: '', joinDate: '', employment: 'tetap', ptkp: 'TK/0', basicSalary: 0, fixedAllowance: 0, email: '', nik: '', npwp: '', bankName: '', bankAccount: '', status: 'aktif', costCenterId: '' });
 const form = ref<any>(blank());
 const errors = ref<string[]>([]);
 const busy = ref(false);
 const branchOptions = computed(() => session.branches.filter((b) => session.user?.branches === '*' || (session.user?.branches ?? []).includes(b.code)));
 function openForm(x?: any) {
   errors.value = []; editing.value = x ?? null;
-  form.value = x ? { ...blank(), ...x, title: x.title ?? '', joinDate: x.joinDate ?? '', email: x.email ?? '', nik: '', npwp: '', bankName: x.bankName ?? '', bankAccount: '' } : blank();
+  form.value = x ? { ...blank(), ...x, title: x.title ?? '', joinDate: x.joinDate ?? '', email: x.email ?? '', nik: '', npwp: '', bankName: x.bankName ?? '', bankAccount: '', costCenterId: x.costCenterId ?? '' } : blank();
   show.value = true;
 }
 async function save() {
@@ -64,7 +65,7 @@ async function save() {
   try {
     const f = form.value;
     const body: any = { name: f.name, branch: f.branch, dept: f.dept, title: f.title || undefined, joinDate: f.joinDate || undefined, employment: f.employment, ptkp: f.ptkp,
-      basicSalary: Math.round(Number(f.basicSalary)), fixedAllowance: Math.round(Number(f.fixedAllowance || 0)), email: f.email || undefined, bankName: f.bankName || undefined };
+      basicSalary: Math.round(Number(f.basicSalary)), fixedAllowance: Math.round(Number(f.fixedAllowance || 0)), email: f.email || undefined, bankName: f.bankName || undefined, costCenterId: f.costCenterId || null };
     for (const k of ['nik', 'npwp', 'bankAccount']) if (f[k]) body[k] = f[k];
     if (editing.value) body.status = f.status;
     const r = editing.value ? await patch(`/hr/employees/${editing.value.id}`, body) : await post('/hr/employees', body);
@@ -95,7 +96,7 @@ async function save() {
         <tr v-if="loading && !data"><td colspan="7"><div class="loading">Memuat…</div></td></tr>
         <tr v-for="x in pg.pageRows.value" :key="x.id" data-row :data-employee="x.code" @click="openId = x.id">
           <td><span class="cell-strong">{{ x.name }}</span><span class="cell-sub"><span class="code">{{ x.code }}</span> · <BranchTag :code="x.branch" /></span></td>
-          <td>{{ x.dept }}<span class="cell-sub">{{ x.title }}</span></td><td>{{ x.employment }} · {{ x.ptkp }}</td>
+          <td>{{ x.dept }}<span class="cell-sub">{{ x.title }}<template v-if="x.costCenterCode"> · {{ x.costCenterCode }}</template></span></td><td>{{ x.employment }} · {{ x.ptkp }}</td>
           <td class="code">{{ x.nik ?? '—' }}</td><td class="code">{{ x.bankAccount ? `${x.bankName ?? ''} ${x.bankAccount}` : '—' }}</td>
           <td class="ta-r num">{{ x.basicSalary === null ? '•••' : F.rp(x.basicSalary) }}</td><td><Pill :status="x.status" /></td>
         </tr>
@@ -110,6 +111,7 @@ async function save() {
       <div class="section"><dl class="deflist">
         <dt>Mulai bekerja</dt><dd>{{ e.joinDate ? F.date(e.joinDate) : '—' }} · {{ e.employment }}</dd>
         <dt>PTKP</dt><dd>{{ e.ptkp }}</dd>
+        <dt>Pusat biaya</dt><dd data-employee-cost-center>{{ e.costCenterCode ? `${e.costCenterCode} · ${e.costCenterName}` : '—' }}</dd>
         <dt v-if="e.basicSalary !== null">Gaji pokok</dt><dd v-if="e.basicSalary !== null" class="num">{{ F.rp(e.basicSalary) }}</dd>
         <dt v-if="e.fixedAllowance !== null">Tunjangan tetap</dt><dd v-if="e.fixedAllowance !== null" class="num">{{ F.rp(e.fixedAllowance) }}</dd>
         <dt>NIK</dt><dd class="code" data-nik>{{ secret ? secret.nik ?? '—' : e.nik ?? '—' }}</dd>
@@ -130,6 +132,7 @@ async function save() {
       <div class="field form-grid-full"><label for="em-name">Nama</label><input id="em-name" v-model="form.name" class="input" maxlength="120"></div>
       <div class="field"><label for="em-branch">Cabang</label><select id="em-branch" v-model="form.branch" class="select"><option v-for="b in branchOptions" :key="b.code" :value="b.code">{{ b.code }} · {{ b.short_name }}</option></select></div>
       <div class="field"><label for="em-dept">Departemen</label><input id="em-dept" v-model="form.dept" class="input" list="em-depts" maxlength="60"><datalist id="em-depts"><option v-for="d in DEPTS" :key="d" :value="d" /></datalist></div>
+      <CostCenterSelect id="em-cost-center" v-model="form.costCenterId" label="Pusat biaya (beban gaji)" />
       <div class="field"><label for="em-title">Jabatan</label><input id="em-title" v-model="form.title" class="input" maxlength="80"></div>
       <div class="field"><label for="em-join">Mulai bekerja</label><input id="em-join" v-model="form.joinDate" class="input" type="date"></div>
       <div class="field"><label for="em-emp">Status kerja</label><select id="em-emp" v-model="form.employment" class="select"><option value="tetap">Tetap</option><option value="kontrak">Kontrak</option><option value="magang">Magang</option></select></div>

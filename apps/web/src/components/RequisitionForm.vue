@@ -8,6 +8,7 @@ import { SLA_HOURS } from '@/lib/procurement';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import Icon from './Icon.vue';
+import CostCenterSelect from './CostCenterSelect.vue';
 import Modal from './Modal.vue';
 import PurchaseLinesEditor, { type PurchaseLine } from './PurchaseLinesEditor.vue';
 
@@ -26,7 +27,7 @@ const d = props.doc;
 const form = ref({
   branch: d?.branch ?? (ctx.branch !== 'ALL' ? ctx.branch : branches.value[0]?.code ?? ''),
   requestDate: d?.date ?? todayWib(), neededDate: d?.neededDate ?? '', department: d?.department ?? '', requesterName: d?.requesterName ?? session.user?.name ?? '',
-  description: d?.description ?? '', priority: d?.priority ?? 'sedang', notes: d?.notes ?? '', projectId: d?.projectId ?? '',
+  description: d?.description ?? '', priority: d?.priority ?? 'sedang', notes: d?.notes ?? '', projectId: d?.projectId ?? '', costCenterId: d?.costCenterId ?? '',
 });
 const projects = ref<any[]>([]);
 const loadProjects = async () => { try { projects.value = await get(`/projects/options?branch=${form.value.branch}`); } catch { projects.value = []; } };
@@ -40,7 +41,7 @@ async function save(submit: boolean) {
   errors.value = []; busy.value = true;
   const body: any = {
     branch: form.value.branch, requestDate: form.value.requestDate, neededDate: form.value.neededDate || null, department: form.value.department, requesterName: form.value.requesterName || undefined,
-    description: form.value.description, priority: form.value.priority, notes: form.value.notes || undefined, submit, projectId: form.value.projectId || null,
+    description: form.value.description, priority: form.value.priority, notes: form.value.notes || undefined, submit, projectId: form.value.projectId || null, costCenterId: form.value.costCenterId || null,
     lines: lines.value.map((l) => ({ productId: l.productId, description: l.description || undefined, kind: l.kind, unit: l.unit, qty: Number(l.qty), price: Math.round(Number(l.price) || 0), expenseAccount: l.productId ? null : l.expenseAccount })),
   };
   try {
@@ -63,6 +64,7 @@ async function save(submit: boolean) {
       <div class="field span-2"><label for="pr-desc">Keperluan</label><input id="pr-desc" v-model="form.description" class="input" maxlength="300" placeholder="mis. Pelat baja SPHC 3mm — stok kritis" data-field="description"></div>
       <div class="field"><label for="pr-date">Tanggal permintaan</label><input id="pr-date" v-model="form.requestDate" class="input" type="date"></div>
       <div class="field"><label for="pr-need">Dibutuhkan tanggal</label><input id="pr-need" v-model="form.neededDate" class="input" type="date" :min="form.requestDate"></div>
+      <CostCenterSelect id="pr-cost-center" v-model="form.costCenterId" class="span-2" />
       <div v-if="projects.length" class="field span-2"><label for="pr-project">Proyek (opsional)</label>
         <select id="pr-project" v-model="form.projectId" class="select" data-field="project"><option value="">— tanpa proyek —</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select>
         <span class="field-hint">Biaya jasa dari PO/tagihan permintaan ini tercatat sebagai biaya proyek.</span></div>
