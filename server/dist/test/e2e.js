@@ -1639,6 +1639,25 @@ async function main() {
         const exp = await call(`/documents/${up.body.id}`, { method: 'PATCH', token: sari, branch: 'ALL', body: JSON.stringify({ expiryDate: '2026-01-01' }) });
         ok(exp.body.status === 'kedaluwarsa', 'dokumen lewat masa berlaku ditandai kedaluwarsa');
     }
+    console.log('Ekspor tabel (PDF/XLSX): izin report.export & jejak audit');
+    {
+        const body = (rows) => JSON.stringify({ resource: '/faktur', title: 'Faktur Penjualan', format: 'xlsx', rows, filters: 'Cabang: CKR' });
+        const denied = await call('/exports', { method: 'POST', token: fitri, branch: 'SBY', body: body(5) });
+        ok(denied.status === 403, 'staf gudang tanpa report.export tidak dapat mengekspor', denied.status);
+        const me2 = await call('/me', { token: sari });
+        ok(me2.body.user.permissions.includes('report.export'), 'staf keuangan memegang izin ekspor (migrasi 0022)');
+        const ex = await call('/exports', { method: 'POST', token: sari, branch: 'CKR', period: '2026-09', body: body(27) });
+        ok(ex.status === 201 && /^[0-9A-F]{8}$/.test(ex.body.id), 'ekspor dicatat & diberi nomor referensi', ex.body);
+        ok([400, 422].includes((await call('/exports', { method: 'POST', token: sari, branch: 'CKR', body: JSON.stringify({ resource: '/faktur', title: 'x', format: 'csv', rows: 1 }) })).status), 'format ekspor selain xlsx/pdf ditolak');
+        const log = await call(`/admin/audit-log?entity=export&q=${ex.body.id}`, { token: admin });
+        const row = log.body.data?.[0];
+        ok(log.status === 200 && log.body.meta.total === 1 && row.action === 'data.exported' && row.after.rows === 27 && row.after.branch === 'CKR' && row.after.filters === 'Cabang: CKR' && row.user_name, 'jejak audit: siapa, halaman, cabang, saringan, jumlah baris', row);
+        const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+        const ranged = await call(`/admin/audit-log?entity=export&from=${today}&to=${today}&size=200`, { token: admin });
+        ok(ranged.body.data.some((x) => x.after?.ref === ex.body.id) && (await call('/admin/audit-log?entity=export&from=2000-01-01&to=2000-01-02', { token: admin })).body.meta.total === 0, 'jejak audit dapat disaring rentang tanggal');
+        const jSrc = await call('/ledger/journals?source=invoice&size=200', { token: andi, branch: 'ALL', period: '2026-09' });
+        ok(jSrc.status === 200 && jSrc.body.data.every((j) => j.source === 'invoice'), 'jurnal dapat disaring sumber di peladen (berlaku untuk semua halaman)');
+    }
     console.log('Asisten AI');
     const assistant = app.get(assistant_service_js_1.AssistantService);
     assistant.useClientForTest(null);
