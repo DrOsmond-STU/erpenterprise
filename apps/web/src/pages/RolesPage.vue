@@ -6,6 +6,7 @@ import { errorList } from '@/lib/errors';
 import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Modal from '@/components/Modal.vue';
 import Pager from '@/components/Pager.vue';
@@ -104,6 +105,7 @@ const pg = usePaged<any>(() => roles.value ?? [], 10);
           <button v-if="changeCount" class="btn btn-sm btn-ghost" data-action="discard-matrix" @click="draft = {}">Batalkan perubahan</button>
         </div>
       </div>
+      <div class="toolbar"><DataTools placeholder="Cari izin atau kode izin…" /></div>
       <div class="table-scroll" style="max-height:70vh"><table class="matrix" data-table="matrix">
         <thead><tr><th>Izin</th><th v-for="r in roles" :key="r.code" :data-role="r.code" :title="r.code">{{ r.name }}<br><span style="font-weight:400;text-transform:none">{{ r.users }} pengguna</span></th></tr></thead>
         <tbody>
@@ -129,8 +131,9 @@ const pg = usePaged<any>(() => roles.value ?? [], 10);
 
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Daftar peran</h2><span class="card-note">Peran yang masih dipegang pengguna tidak dapat dihapus. Peran Admin Sistem dilindungi.</span></div></div>
+      <div class="toolbar"><DataTools :paged="pg" /></div>
       <div class="table-scroll"><table class="table" data-table="roles">
-        <thead><tr><th>Kode</th><th>Nama</th><th class="ta-r">Izin</th><th class="ta-r">Pengguna</th><th class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>Kode</th><th>Nama</th><th class="ta-r">Izin</th><th class="ta-r">Pengguna</th><th class="ta-r" data-no-export>Aksi</th></tr></thead>
         <tbody>
           <tr v-for="r in pg.pageRows.value" :key="r.code" class="is-static" :data-role-row="r.code">
             <td class="code">{{ r.code }}</td><td class="cell-strong">{{ r.name }}</td><td class="ta-r num">{{ r.permissions.length }}</td><td class="ta-r num">{{ r.users }}</td>

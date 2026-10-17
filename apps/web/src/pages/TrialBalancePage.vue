@@ -6,6 +6,7 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -45,6 +46,7 @@ const elimK = computed(() => (tb.value?.rows ?? []).filter((r: any) => r.interco
       <div class="toolbar-spacer"></div>
       <Pill v-if="tb" :label="tb.balanced ? 'Seimbang — Σ debit = Σ kredit' : `Tidak seimbang — selisih ${F.rp(Math.abs(tb.totals.endD - tb.totals.endK))}`" :tone="tb.balanced ? 'ok' : 'danger'" />
       <span class="pager-info">{{ tb?.rows?.length ?? 0 }} akun · {{ ctx.branchName }} · {{ ctx.periodLabel }}</span>
+      <DataTools :paged="pg" placeholder="Cari akun…" />
     </div>
     <div v-if="loading && !tb" class="loading">Memuat…</div>
     <div v-else-if="tb && !perBranch" class="table-scroll"><table class="table report" data-table="tb">

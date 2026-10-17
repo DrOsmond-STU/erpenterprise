@@ -6,6 +6,7 @@ import { plRows } from '@/lib/statements';
 import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import ReportHead from '@/components/ReportHead.vue';
@@ -36,6 +37,7 @@ const summary = computed(() => (multi.value ? pl.value.incomeStatement.combined 
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">{{ session.company?.name }} — {{ ctx.branchName }}</h2><span class="card-note">Periode {{ pl.period.label }} ({{ F.date(pl.period.from) }} s.d. {{ F.date(pl.period.to) }}) · dalam rupiah</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari akun…" /></div>
       <div class="table-scroll"><StatementTable :columns="columns" :rows="plRows(reports, !multi)" :pct-header="multi ? undefined : '% pendapatan'" /></div>
       <p v-if="multi" class="card-note" style="padding:var(--sp-3)">Transfer barang antar cabang dicatat pada harga pokok melalui rekening koran antar kantor sehingga tidak menimbulkan pendapatan antar cabang; laba rugi konsolidasi adalah penjumlahan seluruh cabang.</p>
     </article>

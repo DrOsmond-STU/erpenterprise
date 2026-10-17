@@ -1,4 +1,5 @@
 /** Pemformat id-ID — port dari prototype/assets/charts.js (FMT). */
+import { ref } from 'vue';
 const nf = (min: number, max: number) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: min, maximumFractionDigits: max });
 const n0 = nf(0, 0), n1 = nf(1, 1), n2 = nf(2, 2);
 const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -6,7 +7,10 @@ const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'O
 export const int = (v: number) => n0.format(Math.round(v || 0));
 export const dec = (v: number, d = 1) => (d === 2 ? n2 : n1).format(v || 0);
 export const rp = (v: number) => 'Rp ' + n0.format(Math.round(v || 0));
+/** Selama ekspor tabel, nilai ringkas (jt/M) ditampilkan penuh agar berkas memuat angka utuh. */
+export const exportMode = ref(false);
 export const rpCompact = (v: number) => {
+  if (exportMode.value) return rp(v);
   const s = v < 0 ? '-' : '';
   const a = Math.abs(v || 0);
   if (a >= 1e12) return `${s}Rp ${n2.format(a / 1e12)} T`;

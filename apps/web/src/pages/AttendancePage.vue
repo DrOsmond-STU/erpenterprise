@@ -8,6 +8,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -48,6 +49,7 @@ async function fill() {
     <KpiTile label="Jam lembur" :value="F.dec(data?.summary.overtime ?? 0, 1)" :foot="ctx.branchShort" />
   </div>
   <article class="card">
+    <div class="toolbar"><DataTools placeholder="Cari karyawan…" /></div>
     <div class="table-scroll"><table class="table" data-table="attendance">
       <thead><tr><th>Karyawan</th><th>Status</th><th>Masuk</th><th>Pulang</th><th class="ta-r">Lembur (jam)</th><th></th></tr></thead>
       <tbody>

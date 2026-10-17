@@ -6,6 +6,7 @@ import { bsRows } from '@/lib/statements';
 import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -37,6 +38,7 @@ const elim = computed(() => (multi.value ? data.value.balanceSheet.eliminations.
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">{{ session.company?.name }} — {{ ctx.branchName }}</h2><span class="card-note">Per {{ F.date(bs.asOf) }} · dalam rupiah · laba periode berjalan dihitung sejak awal tahun buku</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari akun…" /></div>
       <div class="table-scroll"><StatementTable :columns="columns" :rows="rows" /></div>
       <p v-if="multi" class="card-note" style="padding:var(--sp-3)">Eliminasi: RK Cabang pada buku kantor pusat dihapus terhadap RK Kantor Pusat pada buku tiap cabang. Setelah eliminasi, total aset konsolidasi sama dengan total liabilitas &amp; ekuitas konsolidasi.</p>
     </article>

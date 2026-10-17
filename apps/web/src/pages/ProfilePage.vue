@@ -10,6 +10,7 @@ import { usePaged } from '@/lib/usePaged';
 import { landingFor } from '@/router';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -93,8 +94,9 @@ const branchesLabel = computed(() => (session.user?.branches === '*' ? 'Semua ca
   </section>
   <article class="card">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Sesi aktif</h2><span class="card-note">Perangkat yang sedang masuk dengan akun Anda. Cabut sesi yang tidak Anda kenali.</span></div></div>
+    <div class="toolbar"><DataTools :paged="pg" /></div>
     <div class="table-scroll"><table class="table" data-table="sessions">
-      <thead><tr><th>Perangkat</th><th>Alamat IP</th><th>Masuk</th><th>Terakhir aktif</th><th class="ta-r">Aksi</th></tr></thead>
+      <thead><tr><th>Perangkat</th><th>Alamat IP</th><th>Masuk</th><th>Terakhir aktif</th><th class="ta-r" data-no-export>Aksi</th></tr></thead>
       <tbody>
         <tr v-for="s in pg.pageRows.value" :key="s.id" class="is-static">
           <td><span class="cell-strong">{{ device(s.user_agent) }}</span> <Pill v-if="s.current" label="Sesi ini" tone="accent" /></td>

@@ -9,6 +9,7 @@ import { useToast } from '@/stores/toast';
 import ActivityPanel from '@/components/ActivityPanel.vue';
 import BranchTag from '@/components/BranchTag.vue';
 import ContactsPanel from '@/components/ContactsPanel.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -89,6 +90,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
       </section>
       <article v-if="p.projects.length" class="card" style="margin-top:var(--sp-4)">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Proyek</h2></div></div>
+        <div class="toolbar"><DataTools /></div>
         <div class="table-scroll"><table class="table"><tbody>
           <tr v-for="x in p.projects" :key="x.id" data-row @click="router.push({ path: '/proyek', query: { id: x.id } })"><td class="code">{{ x.code }}</td><td>{{ x.name }}</td><td><Pill :status="x.status" /></td></tr>
         </tbody></table></div>
@@ -98,6 +100,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
     <template v-else-if="tab === 'penjualan'">
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Peluang ({{ p.opportunities.length }})</h2><span class="card-note">Pipeline {{ F.rp(p.kpi.pipeline) }} · menang {{ F.rp(p.kpi.wonValue) }}</span></div></div>
+        <div class="toolbar"><DataTools /></div>
         <div class="table-scroll"><table class="table" data-table="profile-opps"><tbody>
           <tr v-for="o in p.opportunities" :key="o.id" data-row @click="router.push({ path: '/lead', query: { id: o.id } })"><td class="code cell-strong">{{ o.code }}</td><td>{{ o.name }}<span class="cell-sub">{{ o.ownerName }}</span></td><td class="ta-r num">{{ F.rpCompact(o.value) }}</td><td>{{ STAGE_LABEL[o.stage] }} · {{ o.probability }}%</td></tr>
           <tr v-if="!p.opportunities.length" class="is-static"><td class="muted">Belum ada peluang.</td></tr>
@@ -106,6 +109,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
       <section class="grid grid-1-1" style="margin-top:var(--sp-4)">
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Penawaran</h2></div></div>
+          <div class="toolbar"><DataTools /></div>
           <div class="table-scroll"><table class="table"><tbody>
             <tr v-for="q in p.quotations" :key="q.id" data-row @click="router.push({ path: '/penawaran', query: { id: q.id } })"><td class="code">{{ q.docNo }}</td><td class="num">{{ F.date(q.date) }}</td><td class="ta-r num">{{ F.rpCompact(q.total) }}</td><td><Pill :status="q.status" /><span v-if="q.expired" class="cell-sub neg">kedaluwarsa</span></td></tr>
             <tr v-if="!p.quotations.length" class="is-static"><td class="muted">Belum ada penawaran.</td></tr>
@@ -113,6 +117,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
         </article>
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pesanan penjualan</h2></div></div>
+          <div class="toolbar"><DataTools /></div>
           <div class="table-scroll"><table class="table" data-table="profile-orders"><tbody>
             <tr v-for="o in p.orders" :key="o.id" data-row @click="router.push({ path: '/pesanan-penjualan', query: { id: o.id } })"><td class="code">{{ o.docNo }}</td><td><BranchTag :code="o.branch" /></td><td class="num">{{ F.date(o.date) }}</td><td class="ta-r num">{{ F.rpCompact(o.total) }}</td><td><Pill :status="o.status" /></td></tr>
             <tr v-if="!p.orders.length" class="is-static"><td class="muted">Belum ada pesanan.</td></tr>
@@ -124,6 +129,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
     <template v-else-if="tab === 'piutang'">
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Faktur terbuka ({{ openInvoices.length }})</h2><span class="card-note">Klik untuk penagihan: catat kontak, janji bayar, tahan kredit.</span></div></div>
+        <div class="toolbar"><DataTools /></div>
         <div class="table-scroll"><table class="table" data-table="profile-invoices">
           <thead><tr><th>Faktur</th><th>Cabang</th><th>Jatuh tempo</th><th class="ta-r">Total</th><th class="ta-r">Sisa</th><th>Tingkat</th></tr></thead>
           <tbody>
@@ -136,6 +142,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
       <section class="grid grid-1-1" style="margin-top:var(--sp-4)">
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Janji bayar</h2></div></div>
+          <div class="toolbar"><DataTools /></div>
           <div class="table-scroll"><table class="table" data-table="profile-promises"><tbody>
             <tr v-for="x in p.promises" :key="x.id" class="is-static"><td class="code">{{ x.invoiceNo }}</td><td class="num">{{ F.date(x.promiseDate) }}</td><td class="ta-r num">{{ F.rpCompact(x.amount) }}</td><td><Pill :label="PROMISE[x.status]?.label" :tone="PROMISE[x.status]?.tone" /></td></tr>
             <tr v-if="!p.promises.length" class="is-static"><td class="muted">Belum ada janji bayar.</td></tr>
@@ -143,6 +150,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
         </article>
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Penerimaan</h2><span class="card-note">Setiap penerimaan dijurnal ke kas/bank & piutang usaha.</span></div></div>
+          <div class="toolbar"><DataTools /></div>
           <div class="table-scroll"><table class="table"><tbody>
             <tr v-for="x in p.receipts" :key="x.id" :class="x.journalId ? '' : 'is-static'" data-row @click="x.journalId && router.push({ path: '/jurnal', query: { id: x.journalId } })"><td class="code">{{ x.docNo }}</td><td class="num">{{ F.date(x.date) }}</td><td class="code muted">{{ x.invoiceNo }}</td><td class="ta-r num">{{ F.rpCompact(x.amount) }}</td></tr>
             <tr v-if="!p.receipts.length" class="is-static"><td class="muted">Belum ada penerimaan.</td></tr>
@@ -151,6 +159,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
       </section>
       <article class="card" style="margin-top:var(--sp-4)">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Riwayat faktur</h2></div></div>
+        <div class="toolbar"><DataTools /></div>
         <div class="table-scroll"><table class="table"><tbody>
           <tr v-for="i in p.invoices" :key="i.id" data-row @click="router.push({ path: '/faktur', query: { id: i.id } })"><td class="code">{{ i.docNo }}</td><td class="num">{{ F.date(i.date) }}</td><td class="ta-r num">{{ F.rpCompact(i.total) }}</td><td><Pill :status="i.status" /></td></tr>
         </tbody></table></div>
@@ -159,6 +168,7 @@ const AGING_TONE = ['var(--cat-1)', 'var(--cat-2)', 'var(--warn)', 'var(--danger
 
     <article v-else-if="tab === 'layanan'" class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Tiket layanan ({{ p.tickets.length }})</h2></div></div>
+      <div class="toolbar"><DataTools /></div>
       <div class="table-scroll"><table class="table" data-table="profile-tickets"><tbody>
         <tr v-for="x in p.tickets" :key="x.id" data-row @click="router.push({ path: '/tiket', query: { id: x.id } })"><td class="code cell-strong">{{ x.code }}</td><td>{{ x.subject }}</td><td><Pill :label="PRIORITY[x.priority].label" :tone="PRIORITY[x.priority].tone" /></td><td><Pill :label="TICKET_STATUS[x.status].label" :tone="TICKET_STATUS[x.status].tone" /><span v-if="x.breached" class="cell-sub neg">lewat SLA</span></td></tr>
         <tr v-if="!p.tickets.length" class="is-static"><td class="muted">Belum ada tiket.</td></tr>

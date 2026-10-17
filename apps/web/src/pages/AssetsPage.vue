@@ -12,6 +12,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import AssetDrawer from '@/components/AssetDrawer.vue';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -97,6 +98,7 @@ async function save() {
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Penyusutan bulanan</h2><span class="card-note">Satu jurnal per cabang per bulan; bulan tidak boleh dilompati.</span></div>
       <input v-model="period" class="input" type="month" style="max-width:170px" aria-label="Periode penyusutan" data-field="depr-period">
       <button v-if="session.can('asset.depreciate')" class="btn btn-primary" data-action="run-depreciation" :disabled="busy || !runnable" @click="runDepreciation"><Icon name="check" /> Posting penyusutan</button></div>
+    <div v-if="preview" class="toolbar"><DataTools table="[data-table=depr-preview]" placeholder="Cari cabang…" /></div>
     <div v-if="preview" class="table-scroll"><table class="table" data-table="depr-preview">
       <thead><tr><th>Cabang</th><th class="ta-r">Aset</th><th class="ta-r">Penyusutan</th><th>Status</th></tr></thead>
       <tbody>
@@ -108,15 +110,18 @@ async function save() {
       </tbody>
     </table></div>
     <details v-if="runs.data.value?.length" style="padding:var(--sp-3) var(--sp-4)"><summary>Riwayat penyusutan ({{ runs.data.value.length }})</summary>
+      <div data-tools-scope><div class="toolbar"><DataTools placeholder="Cari riwayat…" /></div>
       <div class="table-scroll"><table class="table"><tbody>
         <tr v-for="r in runs.data.value" :key="r.id" class="is-static"><td class="code">{{ r.docNo }}</td><td>{{ r.period }}</td><td><BranchTag :code="r.branch" /></td><td class="ta-r num">{{ F.rp(r.total) }}</td><td>{{ r.byName }}</td></tr>
-      </tbody></table></div></details>
+      </tbody></table></div></div></details>
   </article>
 
   <article class="card">
     <div class="toolbar">
       <div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari kode, nama, kategori, lokasi…" aria-label="Cari aset"></div>
       <label class="chip" :aria-pressed="showDisposed" style="cursor:pointer"><input v-model="showDisposed" type="checkbox" style="margin-right:6px">Tampilkan aset dilepas</label>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="assets">
       <thead><tr><th>Aset</th><th>Lokasi</th><th>Diperoleh</th><th class="ta-r">Harga perolehan</th><th class="ta-r">Akumulasi</th><th class="ta-r">Nilai buku</th><th>Disusutkan s.d.</th><th>Status</th></tr></thead>

@@ -7,6 +7,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -46,9 +47,11 @@ async function confirm(reason: string) {
   <article v-else class="card">
     <div class="table-filter">
       <button v-for="[k, l] in [['', 'Semua'], ['Bulan', 'Bulanan'], ['Kuartal', 'Kuartalan'], ['Tahun', 'Tahunan']]" :key="k" class="chip" :aria-pressed="group === k" @click="group = k as any">{{ l }}</button>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" />
     </div>
     <div class="table-scroll"><table class="table" data-table="periods">
-      <thead><tr><th>Kode</th><th>Periode</th><th>Jenis</th><th>Rentang</th><th>Status</th><th>Ditutup</th><th class="ta-r">Aksi</th></tr></thead>
+      <thead><tr><th>Kode</th><th>Periode</th><th>Jenis</th><th>Rentang</th><th>Status</th><th>Ditutup</th><th class="ta-r" data-no-export>Aksi</th></tr></thead>
       <tbody>
         <tr v-for="p in pg.pageRows.value" :key="p.id" class="is-static" :data-period="p.id">
           <td class="code">{{ p.id }}</td><td class="cell-strong">{{ p.label }}</td><td>{{ p.group }}</td>

@@ -7,6 +7,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Modal from '@/components/Modal.vue';
 import Pager from '@/components/Pager.vue';
@@ -65,9 +66,11 @@ async function confirm(reason: string) {
     <div class="table-filter">
       <input v-model="q" class="input" type="search" placeholder="Cari SKU atau nama…" aria-label="Cari produk" data-filter="product">
       <select v-model="kind" class="select" style="width:auto" aria-label="Saring jenis"><option value="">Semua jenis</option><option value="barang">Barang</option><option value="jasa">Jasa</option></select>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="products">
-      <thead><tr><th>SKU</th><th>Nama</th><th>Jenis</th><th>Satuan</th><th class="ta-r">Harga jual</th><th class="ta-r">HPP rata-rata</th><th class="ta-r">Margin</th><th>Stok per cabang</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
+      <thead><tr><th>SKU</th><th>Nama</th><th>Jenis</th><th>Satuan</th><th class="ta-r">Harga jual</th><th class="ta-r">HPP rata-rata</th><th class="ta-r">Margin</th><th>Stok per cabang</th><th>Status</th><th v-if="canManage" class="ta-r" data-no-export>Aksi</th></tr></thead>
       <tbody>
         <tr v-if="loading && !data"><td colspan="10"><div class="loading">Memuat…</div></td></tr>
         <tr v-for="p in pg.pageRows.value" :key="p.id" class="is-static" :data-product="p.sku">

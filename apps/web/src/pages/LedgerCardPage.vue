@@ -7,6 +7,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Pager from '@/components/Pager.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import ReportHead from '@/components/ReportHead.vue';
@@ -56,6 +57,7 @@ const bankOf = computed(() => banks.value?.accounts?.find((b: any) => b.glAccoun
         <span v-if="bankOf" class="field-hint">Rekening {{ bankOf.code }} · cabang {{ bankOf.branchCode }} · {{ bankOf.accountNoMasked ?? '' }}</span></div>
       <div class="toolbar-spacer"></div>
       <span class="pager-info">{{ F.int(card?.lines?.length ?? 0) }} mutasi · {{ ctx.branchName }} · {{ ctx.periodLabel }}</span>
+      <DataTools v-if="card" :paged="pg" />
     </div>
     <template v-if="card">
       <div class="kpi-row" style="margin-bottom:var(--sp-4)">

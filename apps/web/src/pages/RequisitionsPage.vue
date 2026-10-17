@@ -10,6 +10,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
@@ -77,6 +78,8 @@ const openOrder = (id: string) => router.push({ path: '/pesanan-pembelian', quer
       <div class="chips" role="group" aria-label="Saring prioritas">
         <button v-for="[k, label] in PRIORITY_CHIPS" :key="k" class="chip" :aria-pressed="priority === k" :data-priority="k || 'all'" @click="priority = k">{{ label }}<span v-if="k" class="chip-count">{{ pcounts[k] ?? 0 }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="requisitions">
       <thead><tr><th>Nomor</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Tanggal</th><th>Pemohon</th><th>Keperluan</th><th class="ta-r">Perkiraan nilai</th><th>Prioritas</th><th>Status</th><th>SLA / tindak lanjut</th></tr></thead>

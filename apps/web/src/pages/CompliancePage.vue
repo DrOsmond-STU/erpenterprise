@@ -5,6 +5,7 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -44,12 +45,14 @@ verify();
   <template v-if="sod.data.value">
     <article class="card" style="margin-bottom:var(--sp-4)">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Kontrol empat mata per dokumen</h2><span class="card-note">Jumlah dokumen yang diputus oleh pembuatnya sendiri — seharusnya nol.</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari dokumen…" /></div>
       <div class="table-scroll"><table class="table" data-table="doc-checks"><tbody>
         <tr v-for="d in sod.data.value.documents" :key="d.label" class="is-static"><td>{{ d.label }}<span v-if="d.refs.length" class="cell-sub code">{{ d.refs.join(', ') }}</span></td><td class="ta-r num">{{ d.count }}</td><td><Pill :tone="d.count ? 'danger' : 'ok'" :label="d.count ? 'Temuan' : 'Patuh'" /></td></tr>
       </tbody></table></div>
     </article>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pemisahan tugas per pengguna</h2><span class="card-note">Konflik izin tingkat pengguna (pasangan per dokumen ditegakkan saat transaksi dan hanya dicatat).</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari pengguna…" /></div>
       <div class="table-scroll"><table class="table" data-table="sod-users">
         <thead><tr><th>Pengguna</th><th>Peran</th><th>Konflik</th><th>Dikendalikan per dokumen</th></tr></thead>
         <tbody><tr v-for="u in sod.data.value.users" :key="u.id" class="is-static">

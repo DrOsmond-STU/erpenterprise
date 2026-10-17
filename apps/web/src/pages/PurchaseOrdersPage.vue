@@ -10,6 +10,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
@@ -69,6 +70,8 @@ const openInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', quer
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in PO_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="purchase-orders">
       <thead><tr><th>Nomor</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Tanggal</th><th>Pemasok</th><th class="ta-r">Total</th><th>Tiba</th><th>Diterima</th><th>Dibuat</th><th>Status</th></tr></thead>

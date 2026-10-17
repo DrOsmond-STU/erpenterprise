@@ -8,6 +8,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -56,6 +57,7 @@ const openInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', quer
   </div>
   <article class="card">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">PO menunggu barang</h2><span class="card-note">{{ session.can('purchasing.receipt.create') ? 'Klik PO untuk mencatat barang yang tiba.' : 'Penerimaan dicatat oleh bagian gudang.' }}</span></div></div>
+    <div class="toolbar"><DataTools :paged="pgIn" /></div>
     <div class="table-scroll"><table class="table" data-table="incoming">
       <thead><tr><th>PO</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Pemasok</th><th>Perkiraan tiba</th><th>Diterima</th><th class="ta-r">Total</th><th></th></tr></thead>
       <tbody>
@@ -75,6 +77,7 @@ const openInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', quer
   <article class="card">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Riwayat penerimaan</h2><span class="card-note">Klik untuk melihat jurnal persediaan.</span></div>
       <div class="search-wrap" style="max-width:280px"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari nomor, PO, pemasok…" aria-label="Cari penerimaan" data-filter="receipt"></div></div>
+    <div class="toolbar"><DataTools :paged="pg" :search="false" /></div>
     <div class="table-scroll"><table class="table" data-table="receipts">
       <thead><tr><th>Nomor</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Tanggal</th><th>PO / pemasok</th><th>Gudang</th><th class="ta-r">Nilai</th><th>Jurnal</th><th>Tagihan</th></tr></thead>
       <tbody>

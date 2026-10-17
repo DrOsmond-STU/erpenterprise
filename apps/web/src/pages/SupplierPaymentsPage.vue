@@ -9,6 +9,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
@@ -56,6 +57,8 @@ const openInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', quer
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in PAYMENT_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="payments">
       <thead><tr><th>Nomor</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Tanggal</th><th>Pemasok / tagihan</th><th class="ta-r">Nilai</th><th>Rekening</th><th>Persetujuan</th><th>Status</th></tr></thead>

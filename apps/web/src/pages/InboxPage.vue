@@ -4,6 +4,7 @@ import { get } from '@/lib/api';
 import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import ReportHead from '@/components/ReportHead.vue';
@@ -31,6 +32,7 @@ const oldest = computed(() => (data.value?.items ?? []).map((i: any) => i.at).fi
   <article v-for="g in groups" :key="g.label" class="card" style="margin-bottom:var(--sp-4)" :data-inbox-group="g.items[0].kind">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">{{ g.label }} <span class="chip-count">{{ g.items.length }}</span></h2><span class="card-note">Tindakan: {{ g.action }}</span></div>
       <RouterLink class="btn btn-sm" :to="g.link" style="text-decoration:none">Buka halaman <Icon name="external" /></RouterLink></div>
+    <div class="toolbar"><DataTools /></div>
     <div class="table-scroll"><table class="table"><tbody>
       <tr v-for="i in g.items" :key="i.id" class="is-static" :data-inbox-item="i.docNo">
         <td class="code cell-strong">{{ i.docNo }}</td><td>{{ i.title }}<span class="cell-sub">oleh {{ i.by }}<template v-if="i.at"> · {{ F.datetime(i.at) }}</template></span></td>

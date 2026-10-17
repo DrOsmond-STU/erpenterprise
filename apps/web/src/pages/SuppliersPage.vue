@@ -9,6 +9,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -113,9 +114,11 @@ const goOrder = (id: string) => router.push({ path: '/pesanan-pembelian', query:
     <div class="table-filter">
       <input v-model="q" class="input" type="search" placeholder="Cari nama, kode, kota, kategori…" aria-label="Cari pemasok" data-filter="supplier">
       <select v-model="status" class="select" style="width:auto" aria-label="Saring status"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="pantau">Dipantau</option><option value="diblokir">Diblokir</option><option value="nonaktif">Nonaktif</option><option value="rekening">Usulan rekening</option></select>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="suppliers">
-      <thead><tr><th>Pemasok</th><th>Kategori</th><th>Cabang</th><th>Termin</th><th>Rekening</th><th class="ta-r">Hutang</th><th class="ta-r">PO terbuka</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
+      <thead><tr><th>Pemasok</th><th>Kategori</th><th>Cabang</th><th>Termin</th><th>Rekening</th><th class="ta-r">Hutang</th><th class="ta-r">PO terbuka</th><th>Status</th><th v-if="canManage" class="ta-r" data-no-export>Aksi</th></tr></thead>
       <tbody>
         <tr v-if="loading && !data"><td colspan="9"><div class="loading">Memuat…</div></td></tr>
         <tr v-for="c in pg.pageRows.value" :key="c.id" data-row :data-supplier="c.code" @click="openDetail(c)">

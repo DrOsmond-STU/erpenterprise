@@ -11,6 +11,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -168,6 +169,7 @@ async function saveClose() {
 
   <article class="card">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Shift kasir</h2><span class="card-note">Klik shift untuk rincian transaksi, pembatalan, dan posting.</span></div></div>
+    <div class="toolbar"><DataTools :paged="pg" /></div>
     <div class="table-scroll"><table class="table" data-table="pos-shifts">
       <thead><tr><th>Shift</th><th>Tanggal</th><th>Kasir</th><th>Toko</th><th class="ta-r">Transaksi</th><th class="ta-r">Penjualan</th><th class="ta-r">Selisih kas</th><th>Status</th></tr></thead>
       <tbody>

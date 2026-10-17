@@ -8,6 +8,7 @@ import { todayWib } from '@/lib/sales';
 import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -50,6 +51,7 @@ const maxMonth = (d: any) => Math.max(1, ...d.monthly.expenseBudget, ...d.monthl
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Beban per pusat biaya</h2><span class="card-note">Tahun {{ r.year }} · per {{ F.date(r.asOf) }} ({{ r.elapsedMonths }} bulan berjalan) · {{ ctx.branchName }} · klik baris untuk rincian akun &amp; bulanan</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari pusat biaya…" /></div>
       <div class="table-scroll"><table class="table" data-table="cc-budget">
         <thead><tr><th style="min-width:260px">Pusat biaya</th><th class="ta-r">Anggaran</th><th class="ta-r">s.d. {{ upTo }}</th><th class="ta-r">Realisasi</th><th class="ta-r">Selisih s.d. {{ upTo }}</th><th class="ta-r">Komitmen</th><th class="ta-r">Sisa</th><th class="ta-r">Prakiraan</th><th>Serapan</th></tr></thead>
         <tbody>
@@ -69,6 +71,7 @@ const maxMonth = (d: any) => Math.max(1, ...d.monthly.expenseBudget, ...d.monthl
     </article>
     <article v-if="hasRevenue" class="card" style="margin-top:var(--sp-4)">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pendapatan &amp; laba pusat laba</h2><span class="card-note">Capaian = realisasi ÷ anggaran s.d. {{ upTo }}</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari pusat laba…" /></div>
       <div class="table-scroll"><table class="table" data-table="cc-budget-revenue">
         <thead><tr><th style="min-width:260px">Pusat biaya</th><th class="ta-r">Anggaran pendapatan</th><th class="ta-r">s.d. {{ upTo }}</th><th class="ta-r">Realisasi</th><th>Capaian</th><th class="ta-r">Laba anggaran s.d. {{ upTo }}</th><th class="ta-r">Laba realisasi</th></tr></thead>
         <tbody><tr v-for="x in r.rows.filter((y: any) => y.revenue.budget > 0 || y.revenue.actual !== 0)" :key="x.costCenterId" class="is-static">

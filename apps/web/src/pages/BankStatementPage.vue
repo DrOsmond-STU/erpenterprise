@@ -9,6 +9,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -132,6 +133,7 @@ const accountsFor = computed(() => (journaling.value?.amount ?? 0) < 0 ? account
       </article>
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Mutasi buku belum ada di bank ({{ st.bookOnly.length }})</h2><span class="card-note">Setoran dalam perjalanan & pembayaran yang belum dicairkan.</span></div></div>
+        <div class="toolbar"><DataTools :paged="pgBook" placeholder="Cari mutasi buku…" /></div>
         <div class="table-scroll"><table class="table" data-table="book-only"><tbody>
           <tr v-for="b in pgBook.pageRows.value" :key="b.id" :data-row="session.can('ledger.journal.read') ? '' : undefined" :class="{ 'is-static': !session.can('ledger.journal.read') }" @click="session.can('ledger.journal.read') && (journalId = b.journalId)">
             <td class="num">{{ F.date(b.date) }}</td><td><span class="code">{{ b.journalNo }}</span><span class="cell-sub">{{ b.description }}</span></td><td class="ta-r num" :class="{ neg: b.amount < 0 }">{{ F.rp(b.amount) }}</td></tr>
@@ -146,9 +148,11 @@ const accountsFor = computed(() => (journaling.value?.amount ?? 0) < 0 ? account
           <button v-for="[k, label] in ([['', 'Semua'], ['belum', 'Belum cocok'], ['cocok', 'Cocok'], ['diabaikan', 'Diabaikan']] as const)" :key="k" class="chip" :aria-pressed="filter === k" :data-chip="k || 'all'" @click="filter = k; pg.reset()">{{ label }}
             <span class="chip-count">{{ k ? st.lines.filter((l: any) => l.status === k).length : st.lines.length }}</span></button>
         </div>
+        <div class="toolbar-spacer"></div>
+        <DataTools :paged="pg" />
       </div>
       <div class="table-scroll"><table class="table" data-table="statement-lines">
-        <thead><tr><th>#</th><th>Tanggal</th><th>Keterangan bank</th><th class="ta-r">Jumlah</th><th>Buku / tindakan</th><th>Status</th><th v-if="editable" class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>#</th><th>Tanggal</th><th>Keterangan bank</th><th class="ta-r">Jumlah</th><th>Buku / tindakan</th><th>Status</th><th v-if="editable" class="ta-r" data-no-export>Aksi</th></tr></thead>
         <tbody>
           <tr v-for="l in pg.pageRows.value" :key="l.id" class="is-static" :data-line="l.lineNo" :data-line-status="l.status">
             <td class="num">{{ l.lineNo }}</td><td class="num">{{ F.date(l.date) }}</td>

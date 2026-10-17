@@ -10,6 +10,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -105,8 +106,9 @@ async function confirm(reason: string) {
         <input v-model="q" class="input" type="search" placeholder="Cari kode, nama, atau bank…" aria-label="Cari rekening" data-filter="bank">
         <select v-model="status" class="select" style="width:auto" aria-label="Saring status"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select>
       </div>
+      <div class="toolbar"><DataTools :paged="pg" :search="false" /></div>
       <div class="table-scroll"><table class="table" data-table="banks">
-        <thead><tr><th>Kode · akun</th><th>Nama rekening</th><th>Cabang</th><th>Mata uang</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>Kode · akun</th><th>Nama rekening</th><th>Cabang</th><th>Mata uang</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r" data-no-export>Aksi</th></tr></thead>
         <tbody>
           <tr v-for="a in pg.pageRows.value" :key="a.code" :data-bank="a.code" @click="router.push({ path: '/buku-besar', query: { akun: a.glAccountCode } })">
             <td><span class="code cell-strong">{{ a.code }}</span><span class="cell-sub">akun <span class="code">{{ a.glAccountCode }}</span></span></td><td><span class="cell-strong">{{ a.name }}</span><span class="cell-sub">{{ a.bankName }} · {{ a.accountNoMasked ?? '—' }}</span></td><td><BranchTag :code="a.branchCode" /></td><td>{{ a.currency }}</td>

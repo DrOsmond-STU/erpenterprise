@@ -13,6 +13,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
 import CashTransferDrawer from '@/components/CashTransferDrawer.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -86,6 +87,8 @@ async function save() {
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in TRANSFER_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="transfers">
       <thead><tr><th>Nomor</th><th>Tanggal</th><th>Dari</th><th>Ke</th><th class="ta-r">Nilai</th><th>Diajukan</th><th>Status</th></tr></thead>

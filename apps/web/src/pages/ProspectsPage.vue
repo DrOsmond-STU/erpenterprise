@@ -12,6 +12,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import ActivityPanel from '@/components/ActivityPanel.vue';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -116,6 +117,7 @@ const scoreTone = (s: number) => (s >= 70 ? 'ok' : s >= 45 ? 'warn' : '');
       <div class="toolbar-spacer"></div>
       <select v-model="campaign" class="select" style="max-width:220px" aria-label="Saring kampanye"><option value="">Semua kampanye</option><option v-for="k in campaigns" :key="k.id" :value="k.id">{{ k.name }}</option></select>
       <div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari nama, perusahaan, email…" aria-label="Cari lead"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div v-if="loading && !data" class="loading">Memuat…</div>
     <div v-else class="table-scroll"><table class="table" data-table="leads">

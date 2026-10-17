@@ -6,6 +6,7 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
+import DataTools from '@/components/DataTools.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -35,6 +36,7 @@ const fmt = (c: any, v: number) => (c.count ? F.int(v) : F.rp(v));
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Rekonsiliasi sub-buku terhadap buku besar</h2><span class="card-note">{{ ctx.branchName }} · {{ data.period.label }} · per {{ F.date(data.period.to) }} · hasil tersimpan di reconciliation_runs</span></div></div>
+      <div class="toolbar"><DataTools :paged="pgChecks" /></div>
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Pemeriksaan</th><th>Sumber sub-buku</th><th class="ta-r">Nilai sub-buku</th><th class="ta-r">Nilai buku besar</th><th class="ta-r">Selisih</th><th>Status</th><th></th></tr></thead>
         <tbody>
@@ -49,6 +51,7 @@ const fmt = (c: any, v: number) => (c.count ? F.int(v) : F.rp(v));
     </article>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Ringkasan posting per modul</h2><span class="card-note">Jurnal yang terbentuk pada {{ data.period.label }}</span></div></div>
+      <div class="toolbar"><DataTools :paged="pgPost" /></div>
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Modul sumber</th><th class="ta-r">Jurnal</th><th class="ta-r">Diposting</th><th class="ta-r">Menunggu</th><th class="ta-r">Nilai</th></tr></thead>
         <tbody><tr v-for="s in pgPost.pageRows.value" :key="s.source" class="is-static"><td class="cell-strong">{{ SOURCE_LABEL[s.source] ?? s.source }}</td><td class="ta-r num">{{ F.int(s.count) }}</td><td class="ta-r num">{{ F.int(s.posted) }}</td><td class="ta-r"><span class="num" :class="s.pending ? 'neg' : 'muted'">{{ s.pending ? F.int(s.pending) : '—' }}</span></td><td class="ta-r num">{{ F.rpCompact(s.amount) }}</td></tr></tbody>

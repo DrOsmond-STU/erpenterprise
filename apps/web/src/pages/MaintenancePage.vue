@@ -11,6 +11,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
@@ -114,7 +115,10 @@ async function save() {
   <article class="card">
     <div class="toolbar"><div class="chips" role="group" aria-label="Saring status">
       <button v-for="[k, label] in MAINT_CHIPS" :key="k" class="chip" :aria-pressed="status === k" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
-    </div></div>
+    </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" />
+    </div>
     <div class="table-scroll"><table class="table" data-table="maintenance">
       <thead><tr><th>Nomor</th><th>Aset</th><th>Jenis</th><th>Jadwal</th><th>Petugas</th><th class="ta-r">Biaya</th><th>Status</th></tr></thead>
       <tbody>

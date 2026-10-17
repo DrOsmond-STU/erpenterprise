@@ -7,6 +7,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -56,6 +57,7 @@ const goInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', query:
       </article>
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Per pemasok</h2><span class="card-note">Diurutkan dari sisa hutang terbesar.</span></div></div>
+        <div class="toolbar"><DataTools :paged="pgSup" /></div>
         <div class="table-scroll"><table class="table" data-table="ap-suppliers">
           <thead><tr><th>Pemasok</th><th class="ta-r">Tagihan</th><th class="ta-r">Sisa</th><th class="ta-r">Jatuh tempo</th><th class="ta-r">Diproses</th><th class="ta-r">Tertua</th></tr></thead>
           <tbody>
@@ -70,6 +72,7 @@ const goInvoice = (id: string) => router.push({ path: '/tagihan-pemasok', query:
     </section>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Tagihan terbuka{{ bucket ? ` — ${data.aging.find((b: any) => b.key === bucket)?.label}` : '' }}</h2><span class="card-note">Klik tagihan untuk mengajukan pembayaran.</span></div></div>
+      <div class="toolbar"><DataTools :paged="pgInv" /></div>
       <div class="table-scroll"><table class="table" data-table="ap-open">
         <thead><tr><th>Tagihan</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Pemasok</th><th>Tanggal</th><th>Jatuh tempo</th><th class="ta-r">Total</th><th class="ta-r">Sisa</th><th>Umur</th></tr></thead>
         <tbody>

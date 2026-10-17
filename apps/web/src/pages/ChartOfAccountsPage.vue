@@ -9,6 +9,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Modal from '@/components/Modal.vue';
 import Pager from '@/components/Pager.vue';
@@ -134,8 +135,9 @@ const openCard = (a: any) => { if (a.type === 'detail' && !a.isComputed) router.
         <select v-model="lvl" class="select" style="width:auto" aria-label="Saring tipe" data-filter="type"><option value="">Header & detail</option><option value="header">Header (level 1–3)</option><option value="detail">Detail (level 4–5)</option></select>
         <select v-model="status" class="select" style="width:auto" aria-label="Saring status"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select>
       </div>
+      <div class="toolbar"><DataTools :paged="pg" :search="false" /></div>
       <div class="table-scroll"><table class="table" data-table="accounts">
-        <thead><tr><th>Kode</th><th>Nama Akun</th><th>Level</th><th>Tipe</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>Kode</th><th>Nama Akun</th><th>Level</th><th>Tipe</th><th class="ta-r">Saldo</th><th>Status</th><th v-if="canManage" class="ta-r" data-no-export>Aksi</th></tr></thead>
         <tbody>
           <tr v-for="a in pg.pageRows.value" :key="a.code" :data-account="a.code" :class="{ 'coa-header-row': a.type === 'header', 'is-static': a.type === 'header' || a.isComputed }" @click="openCard(a)">
             <td class="code" :style="`padding-left:${(a.level - 1) * 18 + 12}px`">{{ a.code }}</td>

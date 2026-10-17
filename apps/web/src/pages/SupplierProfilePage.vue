@@ -9,6 +9,7 @@ import { useToast } from '@/stores/toast';
 import ActivityPanel from '@/components/ActivityPanel.vue';
 import BranchTag from '@/components/BranchTag.vue';
 import ContactsPanel from '@/components/ContactsPanel.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -64,6 +65,7 @@ const metrics = computed(() => p.value ? [
       <section class="grid grid-1-1">
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pesanan pembelian</h2></div></div>
+          <div class="toolbar"><DataTools placeholder="Cari PO…" /></div>
           <div class="table-scroll"><table class="table" data-table="supplier-pos"><tbody>
             <tr v-for="o in p.orders" :key="o.id" data-row @click="router.push({ path: '/pesanan-pembelian', query: { id: o.id } })"><td class="code">{{ o.docNo }}</td><td><BranchTag :code="o.branch" /></td><td class="num">{{ F.date(o.date) }}</td><td class="ta-r num">{{ F.rpCompact(o.total) }}</td><td><Pill :status="o.status" /></td></tr>
             <tr v-if="!p.orders.length" class="is-static"><td class="muted">Belum ada PO.</td></tr>
@@ -71,6 +73,7 @@ const metrics = computed(() => p.value ? [
         </article>
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Tagihan & hutang</h2><span class="card-note">Hutang terbuka {{ F.rp(p.kpi.openAp) }}</span></div></div>
+          <div class="toolbar"><DataTools placeholder="Cari tagihan…" /></div>
           <div class="table-scroll"><table class="table"><tbody>
             <tr v-for="i in p.invoices" :key="i.id" data-row @click="router.push({ path: '/tagihan-pemasok', query: { id: i.id } })"><td class="code">{{ i.docNo }}</td><td class="num">{{ F.date(i.dueDate) }}</td><td class="ta-r num">{{ F.rpCompact(i.total) }}</td><td class="ta-r num">{{ i.total - i.paid > 0 && ['belum-dibayar', 'sebagian'].includes(i.status) ? F.rpCompact(i.total - i.paid) : '—' }}</td><td><Pill :status="i.status" /></td></tr>
             <tr v-if="!p.invoices.length" class="is-static"><td class="muted">Belum ada tagihan.</td></tr>
@@ -80,6 +83,7 @@ const metrics = computed(() => p.value ? [
       <section class="grid grid-1-1" style="margin-top:var(--sp-4)">
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pembayaran</h2></div></div>
+          <div class="toolbar"><DataTools placeholder="Cari pembayaran…" /></div>
           <div class="table-scroll"><table class="table"><tbody>
             <tr v-for="x in p.payments" :key="x.id" data-row @click="router.push({ path: '/pembayaran', query: { id: x.id } })"><td class="code">{{ x.docNo }}</td><td class="num">{{ F.date(x.date) }}</td><td class="code muted">{{ x.invoiceNo }}</td><td class="ta-r num">{{ F.rpCompact(x.amount) }}</td><td><Pill :status="x.status" /></td></tr>
             <tr v-if="!p.payments.length" class="is-static"><td class="muted">Belum ada pembayaran.</td></tr>
@@ -87,6 +91,7 @@ const metrics = computed(() => p.value ? [
         </article>
         <article class="card">
           <div class="card-head"><div class="card-head-text"><h2 class="card-title">Riwayat RFQ</h2></div></div>
+          <div class="toolbar"><DataTools placeholder="Cari RFQ…" /></div>
           <div class="table-scroll"><table class="table"><tbody>
             <tr v-for="x in p.quotes" :key="x.id" class="is-static"><td class="code">{{ x.rfqNo }}</td><td>{{ x.title }}</td><td class="ta-r num">{{ x.total === null ? '—' : F.rpCompact(x.total) }}</td><td><Pill v-if="x.won" label="Menang" tone="ok" /><Pill v-else :status="x.status" /></td></tr>
             <tr v-if="!p.quotes.length" class="is-static"><td class="muted">Belum pernah diundang RFQ.</td></tr>
@@ -96,6 +101,7 @@ const metrics = computed(() => p.value ? [
     </template>
     <article v-else-if="tab === 'klaim'" class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Klaim ke pemasok ({{ p.tickets.length }})</h2></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari klaim…" /></div>
       <div class="table-scroll"><table class="table" data-table="supplier-claims"><tbody>
         <tr v-for="x in p.tickets" :key="x.id" data-row @click="router.push({ path: '/tiket', query: { id: x.id } })"><td class="code cell-strong">{{ x.code }}</td><td>{{ x.subject }}</td><td><Pill :label="PRIORITY[x.priority].label" :tone="PRIORITY[x.priority].tone" /></td><td><Pill :label="TICKET_STATUS[x.status].label" :tone="TICKET_STATUS[x.status].tone" /></td></tr>
         <tr v-if="!p.tickets.length" class="is-static"><td class="muted">Belum ada klaim.</td></tr>

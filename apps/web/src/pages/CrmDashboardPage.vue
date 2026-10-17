@@ -6,6 +6,7 @@ import { LEAD_STATUS, PRIORITY, STAGE_LABEL } from '@/lib/crm';
 import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import ReportHead from '@/components/ReportHead.vue';
@@ -47,6 +48,7 @@ const COLORS: Record<string, string> = { prospek: 'var(--cat-1)', kualifikasi: '
           <div class="mini-bars" role="img" :aria-label="data.pipeline.forecast.map((f: any) => monthLabel(f.month) + ' ' + F.rpCompact(f.weighted)).join(', ')">
             <div v-for="f in data.pipeline.forecast" :key="f.month" class="mini-bar" :title="`${monthLabel(f.month)}: ${F.rp(f.weighted)} (${f.count} peluang)`"><i :style="{ height: (f.weighted / maxFc) * 110 + 'px' }"></i><span>{{ monthLabel(f.month) }}</span></div>
           </div>
+          <div class="toolbar"><DataTools placeholder="Cari PIC…" /></div>
           <div class="table-scroll" style="margin-top:var(--sp-2)"><table class="table"><thead><tr><th>PIC penjualan</th><th class="ta-r">Peluang</th><th class="ta-r">Tertimbang</th></tr></thead><tbody>
             <tr v-for="o in data.pipeline.owners.slice(0, 5)" :key="o.owner" class="is-static"><td>{{ o.owner }}</td><td class="ta-r num">{{ o.count }}</td><td class="ta-r num">{{ F.rpCompact(o.weighted) }}</td></tr>
           </tbody></table></div>
@@ -58,6 +60,7 @@ const COLORS: Record<string, string> = { prospek: 'var(--cat-1)', kualifikasi: '
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Lead</h2><span class="card-note">{{ data.leads.total }} lead · {{ data.leads.newThisMonth }} baru bulan ini</span></div><button class="btn btn-sm btn-ghost" @click="router.push('/prospek')">Buka <Icon name="chevron-right" /></button></div>
         <div class="card-body">
           <div class="chips" style="margin-bottom:var(--sp-3)"><span v-for="s in data.leads.byStatus" :key="s.status" class="chip" style="cursor:default">{{ LEAD_STATUS[s.status]?.label }} <span class="chip-count">{{ s.count }}</span></span></div>
+          <div class="toolbar"><DataTools placeholder="Cari sumber…" /></div>
           <div class="table-scroll"><table class="table"><thead><tr><th>Sumber</th><th class="ta-r">Lead</th></tr></thead><tbody>
             <tr v-for="s in data.leads.bySource" :key="s.source" class="is-static"><td>{{ s.source }}</td><td class="ta-r num">{{ s.count }}</td></tr>
           </tbody></table></div>

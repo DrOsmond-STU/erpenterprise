@@ -8,6 +8,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -146,9 +147,11 @@ const branchLabel = (b: string) => (b === 'ALL' ? 'Semua cabang' : b);
         <input v-model="q" class="input" type="search" placeholder="Cari nama atau email…" aria-label="Cari pengguna" data-filter="user">
         <select v-model="roleFilter" class="select" style="width:auto" aria-label="Saring peran"><option value="">Semua peran</option><option v-for="r in roles ?? []" :key="r.code" :value="r.code">{{ r.name }}</option></select>
         <select v-model="status" class="select" style="width:auto" aria-label="Saring status"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option><option value="terkunci">Terkunci</option></select>
+        <div class="toolbar-spacer"></div>
+        <DataTools :paged="pg" :search="false" />
       </div>
       <div class="table-scroll"><table class="table" data-table="users">
-        <thead><tr><th>Pengguna</th><th>Peran · cabang</th><th>Status</th><th>Terakhir masuk</th><th class="ta-r">Aksi</th></tr></thead>
+        <thead><tr><th>Pengguna</th><th>Peran · cabang</th><th>Status</th><th>Terakhir masuk</th><th class="ta-r" data-no-export>Aksi</th></tr></thead>
         <tbody>
           <tr v-for="u in pg.pageRows.value" :key="u.id" class="is-static" :data-user="u.email">
             <td><span class="cell-strong">{{ u.name }}</span> <span v-if="isSelf(u)" class="muted">(Anda)</span><span class="cell-sub">{{ u.email }}</span></td>

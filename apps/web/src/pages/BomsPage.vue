@@ -6,6 +6,7 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Modal from '@/components/Modal.vue';
 import Pill from '@/components/Pill.vue';
@@ -70,7 +71,7 @@ async function save() {
     <button v-if="canManage" class="btn btn-primary" data-action="new-bom" @click="openForm()"><Icon name="plus" /> BOM baru</button>
   </ReportHead>
   <article class="card">
-    <div class="toolbar"><div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari kode, barang…" aria-label="Cari BOM"></div></div>
+    <div class="toolbar"><div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari kode, barang…" aria-label="Cari BOM"></div><div class="toolbar-spacer"></div><DataTools :search="false" /></div>
     <div class="table-scroll"><table class="table" data-table="boms">
       <thead><tr><th>Kode</th><th>Barang hasil</th><th class="ta-r">Per batch</th><th>Bahan</th><th class="ta-r">Biaya bahan / unit</th><th class="ta-r">Perintah kerja</th><th>Status</th></tr></thead>
       <tbody>

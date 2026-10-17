@@ -8,6 +8,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
@@ -61,6 +62,7 @@ const goInvoice = (id: string) => router.push({ path: '/faktur', query: { id } }
       </article>
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Per pelanggan</h2><span class="card-note">Diurutkan dari sisa tagihan terbesar.</span></div></div>
+        <div class="toolbar"><DataTools :paged="pgCust" /></div>
         <div class="table-scroll"><table class="table" data-table="ar-customers">
           <thead><tr><th>Pelanggan</th><th class="ta-r">Faktur</th><th class="ta-r">Sisa</th><th class="ta-r">Jatuh tempo</th><th class="ta-r">Tertua</th></tr></thead>
           <tbody>
@@ -74,6 +76,7 @@ const goInvoice = (id: string) => router.push({ path: '/faktur', query: { id } }
     </section>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Faktur terbuka{{ bucket ? ` — ${data.aging.find((b: any) => b.key === bucket)?.label}` : '' }}</h2><span class="card-note">Klik faktur untuk mencatat penerimaan.</span></div></div>
+      <div class="toolbar"><DataTools :paged="pgInv" /></div>
       <div class="table-scroll"><table class="table" data-table="ar-invoices">
         <thead><tr><th>Faktur</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Pelanggan</th><th>Tanggal</th><th>Jatuh tempo</th><th class="ta-r">Total</th><th class="ta-r">Sisa</th><th>Umur</th></tr></thead>
         <tbody>

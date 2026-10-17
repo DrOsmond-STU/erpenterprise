@@ -8,6 +8,7 @@ import * as F from '@/lib/format';
 import { useLoader } from '@/lib/useLoader';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -51,7 +52,9 @@ async function save() {
   </div>
   <article class="card">
     <div v-if="loading && !data" class="loading">Memuat…</div>
-    <div v-else class="table-scroll"><table class="table" data-table="campaigns">
+    <template v-else>
+    <div class="toolbar"><DataTools placeholder="Cari kampanye…" /></div>
+    <div class="table-scroll"><table class="table" data-table="campaigns">
       <thead><tr><th>Kampanye</th><th>Kanal</th><th>Periode</th><th class="ta-r">Lead</th><th class="ta-r">Dikonversi</th><th class="ta-r">Pipeline</th><th class="ta-r">Menang</th><th>Biaya vs anggaran</th><th class="ta-r">ROI</th><th>Status</th></tr></thead>
       <tbody>
         <tr v-for="x in data ?? []" :key="x.id" data-row :data-campaign="x.code" @click="openId = x.id">
@@ -65,6 +68,7 @@ async function save() {
         <tr v-if="data && !data.length" class="is-static"><td colspan="10" class="muted" style="text-align:center;padding:var(--sp-6)">Belum ada kampanye.</td></tr>
       </tbody>
     </table></div>
+    </template>
   </article>
 
   <Drawer v-if="openId && k" :title="k.name" :subtitle="`${k.channel} · ${F.date(k.startDate)} – ${F.date(k.endDate)} · anggaran ${F.rp(k.budget)}`" @close="openId = null">

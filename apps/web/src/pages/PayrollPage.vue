@@ -9,6 +9,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
@@ -99,6 +100,7 @@ async function pay() {
 
   <article v-if="session.can('hr.read')" class="card" style="margin-bottom:var(--sp-4)">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Daftar gaji</h2></div></div>
+    <div class="toolbar"><DataTools placeholder="Cari nomor, periode, cabang…" /></div>
     <div class="table-scroll"><table class="table" data-table="payroll-runs">
       <thead><tr><th>Nomor</th><th>Periode</th><th>Cabang</th><th class="ta-r">Karyawan</th><th class="ta-r">Bruto</th><th class="ta-r">Neto</th><th>Disusun</th><th>Status</th></tr></thead>
       <tbody>
@@ -114,6 +116,7 @@ async function pay() {
   <article v-if="session.can('payroll.pay|payroll.approve')" class="card" style="margin-bottom:var(--sp-4)">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Slip siap dibayar</h2><span class="card-note">Pilih slip lalu bayar sekaligus dari satu rekening.</span></div>
       <button v-if="session.can('payroll.pay')" class="btn btn-primary" data-action="pay-payroll" :disabled="!picked.size" @click="openPay"><Icon name="send" /> Bayar {{ picked.size ? F.rp(pickedTotal) : '' }}</button></div>
+    <div class="toolbar"><DataTools placeholder="Cari karyawan, slip…" /></div>
     <div class="table-scroll"><table class="table" data-table="payable">
       <thead><tr><th style="width:36px"></th><th>Karyawan</th><th>Periode</th><th>Cabang</th><th class="ta-r">Neto</th></tr></thead>
       <tbody>
@@ -128,6 +131,7 @@ async function pay() {
 
   <article class="card">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Pembayaran gaji</h2></div></div>
+    <div class="toolbar"><DataTools placeholder="Cari pembayaran…" /></div>
     <div class="table-scroll"><table class="table" data-table="payroll-payments"><tbody>
       <tr v-for="p in payments.data.value ?? []" :key="p.id" class="is-static"><td class="code cell-strong">{{ p.docNo }}</td><td class="num">{{ F.date(p.date) }}</td><td>{{ p.bank }} · <BranchTag :code="p.branch" /></td><td>{{ p.branches.join(', ') }}</td><td class="ta-r num">{{ p.count }} slip</td><td class="ta-r num">{{ F.rp(p.total) }}</td></tr>
       <tr v-if="payments.data.value && !payments.data.value.length" class="is-static"><td><span class="muted">Belum ada pembayaran.</span></td></tr>

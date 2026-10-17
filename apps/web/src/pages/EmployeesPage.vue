@@ -11,6 +11,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
 import CostCenterSelect from '@/components/CostCenterSelect.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -89,6 +90,8 @@ async function save() {
     <div class="toolbar">
       <div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari kode, nama, departemen…" aria-label="Cari karyawan"></div>
       <label class="chip" style="cursor:pointer"><input v-model="showOut" type="checkbox" style="margin-right:6px">Tampilkan yang keluar</label>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="employees">
       <thead><tr><th>Karyawan</th><th>Departemen</th><th>Status kerja</th><th>NIK</th><th>Rekening</th><th class="ta-r">Gaji pokok</th><th>Status</th></tr></thead>

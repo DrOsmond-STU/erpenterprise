@@ -7,6 +7,7 @@ import { plRows } from '@/lib/statements';
 import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -53,6 +54,8 @@ const top = computed(() => [...(r.value?.summary ?? [])].filter((x: any) => x.co
           <button class="chip" :aria-pressed="tab === 'laporan'" data-tab="laporan" @click="tab = 'laporan'">Laporan laba rugi</button>
           <button class="chip" :aria-pressed="tab === 'ringkasan'" data-tab="ringkasan" @click="tab = 'ringkasan'">Ringkasan kontribusi</button>
         </div>
+        <div class="toolbar-spacer"></div>
+        <DataTools />
       </div>
       <div v-if="tab === 'laporan'" class="table-scroll" data-report="cc-pl"><StatementTable :columns="columns" :rows="plRows(reports, single)" :pct-header="single ? '% pendapatan' : undefined" /></div>
       <div v-else class="table-scroll"><table class="table" data-table="cc-summary">

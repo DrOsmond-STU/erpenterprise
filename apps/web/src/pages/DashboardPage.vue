@@ -7,6 +7,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import ReportHead from '@/components/ReportHead.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Pager from '@/components/Pager.vue';
 
@@ -60,6 +61,7 @@ const firstName = computed(() => (session.user?.name ?? '').split(' ')[0]);
 
     <article v-if="cons" class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Laba rugi per cabang</h2><span class="card-note">{{ cons.period.label }} · konsolidasi {{ F.rpCompact(cons.incomeStatement.combined.net) }}</span></div><div class="card-tools"><RouterLink class="btn btn-sm" to="/konsolidasi">Konsolidasi</RouterLink></div></div>
+      <div class="toolbar"><DataTools :paged="pgBranch" placeholder="Cari cabang…" /></div>
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba kotor</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th><th class="ta-r">Kas</th></tr></thead>
         <tbody>

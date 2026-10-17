@@ -9,6 +9,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import JournalDrawer from '@/components/JournalDrawer.vue';
@@ -96,6 +97,7 @@ const journalId = ref<string | null>(null);
     <section class="grid grid-1-2">
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Saldo PPN per cabang</h2><span class="card-note">Per akhir masa {{ preview.period.label }} · akun {{ preview.accounts.ppnOut }} / {{ preview.accounts.ppnIn }}.</span></div></div>
+        <div class="toolbar"><DataTools placeholder="Cari cabang…" /></div>
         <div class="table-scroll"><table class="table" data-table="ppn-branches">
           <thead><tr><th>Cabang</th><th class="ta-r">Keluaran</th><th class="ta-r">Masukan</th><th class="ta-r">Selisih</th></tr></thead>
           <tbody>
@@ -113,6 +115,7 @@ const journalId = ref<string | null>(null);
       </article>
       <article class="card">
         <div class="card-head"><div class="card-head-text"><h2 class="card-title">Riwayat setoran</h2><span class="card-note">Seluruh masa.</span></div></div>
+        <div class="toolbar"><DataTools placeholder="Cari setoran…" /></div>
         <div class="table-scroll"><table class="table" data-table="tax-settlements"><tbody>
           <tr v-for="t in list" :key="t.id" data-row :data-tax="t.docNo" @click="openId = t.id">
             <td class="code cell-strong">{{ t.docNo }}</td><td>{{ t.period }}</td><td class="ta-r num">{{ F.rp(t.net) }}</td><td><Pill :status="t.status" :label="t.statusLabel" /></td></tr>

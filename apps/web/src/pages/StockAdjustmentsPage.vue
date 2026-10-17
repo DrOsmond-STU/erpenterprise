@@ -12,6 +12,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -93,6 +94,8 @@ const reasonNote = computed(() => ADJ_REASONS.find((r) => r[0] === form.value.re
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in ADJ_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="adjustments">
       <thead><tr><th>Nomor</th><th>Tanggal</th><th>Gudang</th><th>Alasan</th><th class="ta-r">Barang</th><th class="ta-r">Nilai selisih</th><th>Dicatat</th><th>Status</th></tr></thead>

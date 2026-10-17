@@ -11,6 +11,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
 import CostCenterSelect from '@/components/CostCenterSelect.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -136,6 +137,7 @@ const tone = (v: number) => (v > 0 ? 'neg' : v < 0 ? 'pos' : '');
           <button class="btn btn-sm btn-danger" data-action="return-budget" :disabled="busy" @click="pending = 'return'; pendingError = ''">Kembalikan</button>
         </template>
         <button v-if="b.status === 'disetujui' && canManage" class="btn btn-sm" data-action="revise-budget" :disabled="busy" @click="pending = 'revise'; pendingError = ''">Revisi</button>
+        <DataTools placeholder="Cari akun…" />
       </div>
       <div class="table-scroll"><table v-if="tab === 'akun'" class="table" data-table="budget-lines">
         <thead><tr><th>Akun</th><th class="ta-r">Anggaran</th><th class="ta-r">s.d. {{ MONTHS[Math.max(b.elapsedMonths - 1, 0)] }}</th><th class="ta-r">Realisasi</th><th class="ta-r">Komitmen</th><th class="ta-r">Prakiraan</th><th class="ta-r">Selisih</th><th>Serapan</th></tr></thead>

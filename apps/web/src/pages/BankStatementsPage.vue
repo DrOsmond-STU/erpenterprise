@@ -11,6 +11,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -85,6 +86,7 @@ const go = (id: string) => router.push(`/rekonsiliasi-bank/${id}`);
   <section class="grid grid-1-2">
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Status per rekening</h2><span class="card-note">Rekonsiliasi terakhir yang difinalisasi.</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari rekening…" /></div>
       <div class="table-scroll"><table class="table" data-table="recon-banks"><tbody>
         <tr v-for="b in perBank" :key="b.code" class="is-static" :data-bank="b.code">
           <td><span class="cell-strong">{{ b.name }}</span><span class="cell-sub"><span class="code">{{ b.code }}</span> · {{ b.branchCode }}</span></td>
@@ -97,6 +99,7 @@ const go = (id: string) => router.push(`/rekonsiliasi-bank/${id}`);
     </article>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Rekening koran</h2><span class="card-note">Klik untuk mencocokkan & memfinalisasi.</span></div></div>
+      <div class="toolbar"><DataTools :paged="pg" /></div>
       <div class="table-scroll"><table class="table" data-table="statements">
         <thead><tr><th>Nomor</th><th>Rekening</th><th>Periode</th><th class="ta-r">Saldo akhir</th><th>Baris</th><th>Status</th></tr></thead>
         <tbody>

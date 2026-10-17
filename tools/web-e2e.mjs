@@ -3,7 +3,8 @@
  *   node tools/web-e2e.mjs [dir-tangkapan-layar]
  */
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { strFromU8, unzipSync } from 'fflate';
 const out = process.argv[2] || 'dist/shots-web';
 mkdirSync(out, { recursive: true });
 const PW = process.env.SEED_PASSWORD || 'Rahasia-2026!';
@@ -865,6 +866,48 @@ await page.goto(base + '/kepatuhan'); await page.waitForSelector('[data-chain]')
 ok((await page.locator('[data-chain]').innerText()).includes('Utuh') && await page.locator('[data-table=sod-users] tbody tr').count() >= 6, 'kepatuhan: rantai audit utuh, laporan SoD per pengguna'); await shot('107-kepatuhan');
 await logout(); await login('admin@knm.co.id');
 
+console.log('Cari, saring & ekspor tabel (PDF/XLSX)');
+const ctxDl = await browser.newContext({ viewport: { width: 1440, height: 960 }, acceptDownloads: true });
+const dp = await ctxDl.newPage();
+dp.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
+await dp.setExtraHTTPHeaders({ 'X-Forwarded-For': `10.89.${Date.now() % 200}.9` });
+await dp.goto(base + '/masuk'); await dp.fill('#email', 'andi@knm.co.id'); await dp.fill('#password', PW); await dp.click('button[type=submit]'); await dp.waitForURL((u) => !u.pathname.startsWith('/masuk')); await dp.waitForTimeout(600);
+const xlsxRows = (file) => { const z = unzipSync(readFileSync(file)); const x = strFromU8(z['xl/worksheets/sheet1.xml']); return { rows: (x.match(/<row /g) ?? []).length, xml: x }; };
+const exportFile = async (fmt, name) => {
+  await dp.click('[data-dt-export]'); await dp.waitForSelector('[data-dt-export-menu]');
+  const [dl] = await Promise.all([dp.waitForEvent('download', { timeout: 30000 }), dp.click(fmt === 'xlsx' ? '[data-dt-xlsx]' : '[data-dt-pdf]')]);
+  const f = `${out}/${name}.${fmt}`; await dl.saveAs(f); return { f, name: dl.suggestedFilename() };
+};
+const pagerTotal = async () => Number((await dp.locator('[data-pager-info]').innerText()).match(/dari ([\d.]+)/)[1].replace(/\./g, ''));
+await dp.goto(base + '/faktur'); await dp.waitForSelector('[data-table=invoices] tbody tr[data-row]');
+const invAll = await pagerTotal();
+await dp.click('[data-dt-filter]'); await dp.waitForSelector('[data-dt-filter-panel]');
+ok(await dp.locator('[data-dt-facet=status]').count() === 1 && await dp.locator('[data-dt-facet=branch]').count() === 1 && await dp.locator('[data-dt-from]').count() === 1, 'panel filter: faset status/cabang & rentang tanggal diturunkan dari data');
+await dp.screenshot({ path: `${out}/dt1-filter.png` });
+await dp.selectOption('[data-dt-facet=branch]', 'CKR'); await dp.waitForTimeout(200);
+const invCkr = await pagerTotal();
+ok(invCkr > 0 && invCkr < invAll, 'filter cabang berlaku untuk seluruh baris (bukan hanya halaman)', [invCkr, invAll]);
+await dp.keyboard.press('Escape');
+ok((await dp.locator('[data-dt-filter] .dt-count').innerText()).trim() === '1', 'jumlah saringan aktif ditandai pada tombol Filter');
+const x1 = await exportFile('xlsx', 'dt-faktur');
+const r1 = xlsxRows(x1.f);
+ok(/^faktur-penjualan-all-\d{12}\.xlsx$/.test(x1.name) && r1.rows === 6 + invCkr && r1.xml.includes('INV-'), 'ekspor Excel memuat seluruh baris tersaring (lintas halaman), bukan hanya halaman tampil', [x1.name, r1.rows, invCkr]);
+ok(/<c r="E7" s="[23]"><v>\d+<\/v><\/c>/.test(r1.xml), 'nilai rupiah diekspor sebagai angka penuh (bukan ringkas "jt")');
+ok((await dp.locator('[data-table=invoices] tbody tr[data-row]').count()) <= 10, 'tampilan kembali ke paginasi setelah ekspor');
+const p1 = await exportFile('pdf', 'dt-faktur');
+ok(readFileSync(p1.f).subarray(0, 5).toString() === '%PDF-', 'ekspor PDF menghasilkan berkas PDF');
+await dp.goto(base + '/jurnal'); await dp.waitForSelector('tbody tr[data-row]');
+const jTotal = Number((await dp.locator('.toolbar .pager-info').innerText()).match(/^([\d.]+)/)[1].replace(/\./g, ''));
+const xj = xlsxRows((await exportFile('xlsx', 'dt-jurnal')).f);
+ok(jTotal > 25 && xj.rows === 6 + jTotal, 'ekspor jurnal (paginasi peladen) memuat seluruh jurnal tersaring', [xj.rows, jTotal]);
+await dp.goto(base + '/laba-rugi'); await dp.waitForSelector('.report-stmt');
+await dp.fill('[data-dt-search]', 'beban'); await dp.waitForTimeout(300);
+ok(/^\d+ dari \d+$/.test((await dp.locator('[data-dt-shown]').innerText()).trim()), 'pencarian tabel laporan menyaring baris dan menampilkan jumlahnya');
+await dp.goto(base + '/jejak-audit'); await dp.waitForSelector('[data-table=audit] tbody tr');
+await dp.selectOption('.toolbar select', 'export'); await dp.waitForTimeout(800);
+ok((await dp.locator('[data-table=audit] tbody').innerText()).includes('data.exported'), 'setiap ekspor tercatat di jejak audit (data.exported)'); await dp.screenshot({ path: `${out}/dt2-jejak-ekspor.png` });
+await ctxDl.close();
+
 console.log('Pembatasan hak: staf gudang Surabaya');
 await page.click('.topbar-user button'); await page.click('.user-menu .menu-item:has-text("Keluar")'); await page.waitForURL(/masuk/);
 await page.goto(base + '/masuk'); await page.fill('#email', 'fitri@knm.co.id'); await page.fill('#password', PW); await page.click('button[type=submit]'); await page.waitForTimeout(1200);
@@ -873,6 +916,8 @@ ok(!nav.includes('Neraca') && !nav.includes('Jurnal Umum') && !nav.includes('Asi
 ok(!nav.includes('Prospek & Lead') && nav.includes('Tiket Layanan'), 'staf gudang hanya melihat tiket layanan dari menu CRM (klaim pemasok)', nav);
 ok(!(await page.locator('.contextbar').innerText()).includes('Semua cabang'), 'staf gudang tidak mendapat konteks semua cabang');
 await shot('17-gudang');
+await page.goto(base + '/stok'); await page.waitForSelector('[data-table-tools]'); await page.waitForTimeout(500);
+ok(await page.locator('[data-dt-export]').count() === 0 && await page.locator('[data-dt-search], [data-dt-filter], .toolbar input[type=search]').count() > 0, 'staf gudang tanpa izin ekspor: cari & saring tersedia, tombol ekspor tidak tampil');
 
 const mob = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const mp = await mob.newPage();

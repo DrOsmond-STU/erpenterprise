@@ -8,6 +8,7 @@ import { useLoader } from '@/lib/useLoader';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -88,6 +89,7 @@ async function confirm(reason: string) {
       <label style="display:flex;gap:6px;align-items:center" class="muted"><input v-model="showInactive" type="checkbox"> tampilkan nonaktif</label>
       <div class="toolbar-spacer"></div>
       <span class="muted">{{ rows.length }} pusat biaya</span>
+      <DataTools :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="cost-centers">
       <thead><tr><th>Pusat biaya</th><th>Jenis</th><th>Manajer</th><th class="ta-r">Karyawan</th><th class="ta-r">Pendapatan {{ data?.year }}</th><th class="ta-r">Beban {{ data?.year }}</th><th class="ta-r">Laba (rugi)</th><th>Status</th></tr></thead>

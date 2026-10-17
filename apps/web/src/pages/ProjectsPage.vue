@@ -9,6 +9,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pill from '@/components/Pill.vue';
@@ -58,6 +59,8 @@ watch(() => route.query.id, (v) => { if (v) openId.value = String(v); });
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in PROJECT_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : all.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="projects">
       <thead><tr><th>Kode</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Proyek</th><th>Periode</th><th class="ta-r">Anggaran</th><th class="ta-r">Aktual</th><th>Kemajuan</th><th>Kesehatan</th><th>Status</th></tr></thead>

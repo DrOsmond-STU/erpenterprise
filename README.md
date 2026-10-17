@@ -400,6 +400,26 @@ pembelian, dan buku besar:
   (dimensi `journal_lines.project_id`, RLS per cabang) mengisi anggaran CKR tahun berjalan
   dan dua proyek contoh.
 
+## Cari, saring & ekspor tabel (PDF/Excel) sesuai RBAC
+
+Setiap tabel data di halaman memiliki bilah **DataTools** (`apps/web/src/components/DataTools.vue`):
+
+- **Cari** di semua kolom (atau kotak cari halaman yang sudah ada), **Filter** berupa faset yang
+  diturunkan otomatis dari data (status, cabang, jenis, kategori, departemen, pembuat, …) dan
+  **rentang tanggal** pada kolom tanggal yang dipilih. Pada tabel berpaginasi, saringan berlaku untuk
+  seluruh baris sebelum dipotong per halaman; jurnal & jejak audit (paginasi peladen) disaring di API
+  (cari, status, sumber jurnal; cari & rentang tanggal jejak audit).
+- **Ekspor** ke **Excel (.xlsx)** atau **PDF**: memuat seluruh baris tersaring (bukan hanya halaman
+  tampil), kolom & format sesuai tampilan (rupiah penuh sebagai angka di Excel), kepala berkas berisi
+  perusahaan, cabang, periode, pengekspor, waktu, dan saringan, serta label klasifikasi *RAHASIA* dan
+  nomor referensi audit.
+- **RBAC**: yang dapat dicari, disaring, dan diekspor hanya data yang sudah dikirim API kepada pengguna
+  itu (izin modul, cakupan cabang lewat RLS, kolom rahasia tetap tersamar). Ekspor memerlukan izin
+  `report.export`; tombol Ekspor tidak tampil tanpa izin dan API `POST /api/v1/exports` menolak (403)
+  sekaligus mencatat setiap ekspor di jejak audit (`data.exported`: halaman, judul, format, jumlah
+  baris, saringan, cabang, periode, IP). Migrasi `0022_table_export.sql` memberi `report.export` ke
+  akuntan senior, staf keuangan, dan manajer operasional; peran lain dapat diberi lewat Peran & Izin.
+
 ## Pusat biaya (`/pusat-biaya`, `/laba-rugi-pusat-biaya`, `/anggaran-pusat-biaya`)
 
 - **Master pusat biaya** tingkat perusahaan (berlaku lintas cabang): kode, nama, jenis *pusat

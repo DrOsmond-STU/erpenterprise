@@ -11,6 +11,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -96,6 +97,7 @@ async function saveNew() {
       <div class="toolbar-spacer"></div>
       <select v-model="kind" class="select" style="max-width:180px" aria-label="Saring jenis"><option value="">Semua jenis</option><option v-for="(l, k) in KIND_LABEL" :key="k" :value="k">{{ l }}</option></select>
     </div>
+    <div class="toolbar"><DataTools :paged="pg" placeholder="Cari aktivitas…" /></div>
     <div v-if="loading && !data" class="loading">Memuat…</div>
     <div v-else class="table-scroll"><table class="table" data-table="activities">
       <thead><tr><th>Jenis</th><th>Aktivitas</th><th>Tertaut ke</th><th>{{ view === 'done' ? 'Selesai' : 'Tenggat' }}</th><th>Penanggung jawab</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th></th></tr></thead>
@@ -116,6 +118,7 @@ async function saveNew() {
   </article>
   <article v-if="view !== 'done' && data?.opportunities?.length" class="card" style="margin-top:var(--sp-4)">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Tindak lanjut peluang</h2><span class="card-note">Dari kolom “tindak lanjut” pada peluang terbuka.</span></div></div>
+    <div class="toolbar"><DataTools placeholder="Cari peluang…" /></div>
     <div class="table-scroll"><table class="table" data-table="opp-followups"><tbody>
       <tr v-for="o in data.opportunities" :key="o.id" data-row @click="router.push({ path: '/lead', query: { id: o.id } })">
         <td class="code cell-strong">{{ o.code }}</td><td>{{ o.title }}<span class="cell-sub">{{ o.companyName }}</span></td><td class="num" :class="{ neg: o.overdue }">{{ F.date(o.date) }}</td><td>{{ o.ownerName }}</td>

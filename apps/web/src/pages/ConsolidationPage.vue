@@ -7,6 +7,7 @@ import { useLoader } from '@/lib/useLoader';
 import { usePaged } from '@/lib/usePaged';
 import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Pager from '@/components/Pager.vue';
@@ -34,6 +35,7 @@ const totals = computed(() => data.value.kpis.reduce((t: any, k: any) => ({ reve
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">Kontribusi per cabang</h2><span class="card-note">Periode {{ data.period.label }} · klik cabang untuk membatasi seluruh aplikasi ke cabang tersebut</span></div></div>
+      <div class="toolbar"><DataTools :paged="pgKpi" placeholder="Cari cabang…" /></div>
       <div class="table-scroll"><table class="table">
         <thead><tr><th>Cabang</th><th class="ta-r">Pendapatan</th><th class="ta-r">Laba kotor</th><th class="ta-r">Laba bersih</th><th class="ta-r">Margin</th><th class="ta-r">Kas</th><th class="ta-r">Total aset</th></tr></thead>
         <tbody>
@@ -51,6 +53,7 @@ const totals = computed(() => data.value.kpis.reduce((t: any, k: any) => ({ reve
     </div>
     <article class="card">
       <div class="card-head"><div class="card-head-text"><h2 class="card-title">{{ tab === 'pl' ? `Laba rugi konsolidasi — ${data.period.label}` : `Neraca konsolidasi — per ${F.date(data.period.to)}` }}</h2><span class="card-note">Kolom per cabang{{ tab === 'bs' ? ', eliminasi RK antar kantor,' : '' }} dan hasil konsolidasi · dalam rupiah</span></div></div>
+      <div class="toolbar"><DataTools placeholder="Cari akun…" /></div>
       <div class="table-scroll">
         <StatementTable v-if="tab === 'pl'" :columns="[...data.incomeStatement.columns.map((c: any) => c.label), 'Konsolidasi']" :rows="plRows([...data.incomeStatement.columns.map((c: any) => c.report), data.incomeStatement.combined], false)" />
         <StatementTable v-else :columns="[...data.balanceSheet.columns.map((c: any) => c.label), 'Eliminasi', 'Konsolidasi']" :rows="bsRows(data.balanceSheet.columns.map((c: any) => c.report), data.balanceSheet.combined, data.balanceSheet.eliminations)" />

@@ -11,6 +11,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
 import Modal from '@/components/Modal.vue';
@@ -79,6 +80,8 @@ async function toggleWh(w: any) {
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in STOCK_CHIPS" :key="k" class="chip" :aria-pressed="status === k" :data-chip="k || 'all'" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : items.length }}</span></button>
       </div>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="stock">
       <thead><tr><th>Barang</th><th>Gudang</th><th class="ta-r">Stok</th><th class="ta-r">Min / maks</th><th class="ta-r">HPP rata-rata</th><th class="ta-r">Nilai</th><th>Mutasi terakhir</th><th>Status</th></tr></thead>
@@ -101,6 +104,7 @@ async function toggleWh(w: any) {
   <article class="card" style="margin-top:var(--sp-4)">
     <div class="card-head"><div class="card-head-text"><h2 class="card-title">Gudang</h2><span class="card-note">Lokasi penyimpanan per cabang. Gudang yang masih berisi stok atau punya transfer terbuka tidak dapat dinonaktifkan.</span></div>
       <button v-if="canManage" class="btn" data-action="new-warehouse" @click="openWh"><Icon name="plus" /> Tambah gudang</button></div>
+    <div class="toolbar"><DataTools placeholder="Cari gudang…" /></div>
     <div class="table-scroll"><table class="table" data-table="warehouses">
       <thead><tr><th>Kode</th><th>Nama</th><th>Cabang</th><th class="ta-r">Jenis barang</th><th>Status</th><th v-if="canManage"></th></tr></thead>
       <tbody>

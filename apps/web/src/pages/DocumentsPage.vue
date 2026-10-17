@@ -8,6 +8,7 @@ import { usePaged } from '@/lib/usePaged';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -84,6 +85,8 @@ async function save() {
     <div class="toolbar">
       <div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari nomor, nama, jenis, pemilik…" aria-label="Cari dokumen"></div>
       <select v-model="folder" class="select" style="max-width:260px" aria-label="Folder"><option value="">Semua folder</option><option v-for="f in folders" :key="f" :value="f">{{ f }}</option></select>
+      <div class="toolbar-spacer"></div>
+      <DataTools :paged="pg" :search="false" />
     </div>
     <div class="table-scroll"><table class="table" data-table="documents">
       <thead><tr><th>Dokumen</th><th>Folder</th><th>Pemilik</th><th class="ta-r">Versi</th><th>Berlaku s.d.</th><th>Status</th></tr></thead>

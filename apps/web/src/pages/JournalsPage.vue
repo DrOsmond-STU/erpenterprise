@@ -9,6 +9,7 @@ import { useContext } from '@/stores/context';
 import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Icon from '@/components/Icon.vue';
 import Pager from '@/components/Pager.vue';
 import Pill from '@/components/Pill.vue';
@@ -26,11 +27,27 @@ const page = ref(1);
 const size = ref(25);
 const openId = ref<string | null>(null);
 const showNew = ref(false);
-const { data, loading, reload } = useLoader(() => get(`/ledger/journals?page=${page.value}&size=${size.value}${status.value ? `&status=${status.value}` : ''}${q.value ? `&q=${encodeURIComponent(q.value)}` : ''}`), [page, size, status]);
+/* Cari, status & sumber disaring di peladen (seluruh jurnal periode/cabang, bukan hanya halaman tampil). */
+const source = ref('');
+const qs = (p: number, n: number) => `/ledger/journals?page=${p}&size=${n}${status.value ? `&status=${status.value}` : ''}${source.value ? `&source=${source.value}` : ''}${q.value ? `&q=${encodeURIComponent(q.value)}` : ''}`;
+const { data, loading, reload } = useLoader(() => get(qs(page.value, size.value)), [page, size, status, source]);
+/* Ekspor: muat seluruh jurnal tersaring (per 200) lalu kembalikan tampilan halaman. */
+const exportRows = ref<any[] | null>(null);
+const rows = computed(() => exportRows.value ?? data.value?.data ?? []);
+async function loadAll() {
+  const all: any[] = [];
+  for (let p = 1; p <= 100; p++) {
+    const r = await get(qs(p, 200));
+    all.push(...r.data);
+    if (all.length >= r.meta.total || !r.data.length) break;
+  }
+  exportRows.value = all;
+  return () => { exportRows.value = null; };
+}
 let t: ReturnType<typeof setTimeout>;
 watch(q, () => { clearTimeout(t); t = setTimeout(() => { page.value = 1; reload(); }, 250); });
 watch(status, () => { page.value = 1; router.replace({ query: status.value ? { status: status.value } : {} }); });
-watch(size, () => { page.value = 1; });
+watch([size, source], () => { page.value = 1; });
 const counts = computed(() => data.value?.meta.statusCounts ?? {});
 const total = computed(() => Object.values(counts.value as Record<string, number>).reduce((a, b) => a + b, 0));
 const chips = [['', 'Semua'], ['posted', 'Diposting'], ['pending', 'Menunggu persetujuan'], ['rejected', 'Ditolak'], ['reversed', 'Dibalik']];
@@ -54,14 +71,16 @@ void post;
       <div class="chips" role="group" aria-label="Saring status">
         <button v-for="[k, label] in chips" :key="k" class="chip" :aria-pressed="status === k" @click="status = k">{{ label }} <span class="chip-count">{{ k ? counts[k] ?? 0 : total }}</span></button>
       </div>
+      <select v-model="source" class="select" style="width:auto" aria-label="Saring sumber" data-filter="journal-source"><option value="">Semua sumber</option><option v-for="(l, k) in SOURCE_LABEL" :key="k" :value="k">{{ l }}</option></select>
       <div class="toolbar-spacer"></div>
       <span class="pager-info">{{ F.int(data?.meta.total ?? 0) }} baris · {{ ctx.branchShort }} · {{ data?.meta.period?.label ?? ctx.periodLabel }}</span>
+      <DataTools :search="false" :filter="false" :prepare="loadAll" />
     </div>
     <div class="table-scroll"><table class="table">
       <thead><tr><th>Nomor</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Tanggal</th><th>Keterangan</th><th class="ta-r">Debit</th><th class="ta-r">Kredit</th><th>Dibuat oleh</th><th>Status</th></tr></thead>
       <tbody>
         <tr v-if="loading && !data"><td colspan="8"><div class="loading">Memuat…</div></td></tr>
-        <tr v-for="j in data?.data ?? []" :key="j.id" data-row @click="openId = j.id">
+        <tr v-for="j in rows" :key="j.id" data-row @click="openId = j.id">
           <td class="code cell-strong">{{ j.journalNo }}</td>
           <td v-if="ctx.branch === 'ALL'"><BranchTag :code="j.branch" /></td>
           <td class="num">{{ F.date(j.date) }}</td>

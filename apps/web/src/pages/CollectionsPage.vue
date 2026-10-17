@@ -12,6 +12,7 @@ import { useSession } from '@/stores/session';
 import { useToast } from '@/stores/toast';
 import ActivityPanel from '@/components/ActivityPanel.vue';
 import BranchTag from '@/components/BranchTag.vue';
+import DataTools from '@/components/DataTools.vue';
 import Drawer from '@/components/Drawer.vue';
 import Icon from '@/components/Icon.vue';
 import KpiTile from '@/components/KpiTile.vue';
@@ -113,6 +114,7 @@ async function saveHold() {
         <select v-model="promiseFilter" class="select" style="max-width:200px" aria-label="Saring janji"><option value="">Semua janji</option><option value="none">Tanpa janji</option><option v-for="(p, k) in PROMISE" :key="k" :value="k">{{ p.label }}</option></select>
         <div class="search-wrap toolbar-search"><Icon name="search" /><input v-model="q" class="input" type="search" placeholder="Cari faktur / pelanggan…" aria-label="Cari"></div>
       </div>
+      <div class="toolbar"><DataTools :paged="pg" :search="false" /></div>
       <div class="table-scroll"><table class="table" data-table="collections">
         <thead><tr><th>Faktur</th><th v-if="ctx.branch === 'ALL'">Cabang</th><th>Pelanggan</th><th>Jatuh tempo</th><th class="ta-r">Sisa</th><th>Tingkat</th><th>Kontak terakhir</th><th>Janji bayar</th></tr></thead>
         <tbody>
